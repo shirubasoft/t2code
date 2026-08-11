@@ -3,42 +3,19 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as HttpServer from "effect/unstable/http/HttpServer";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 import * as ServerConfig from "../config.ts";
-import { getTelemetryIdentifier } from "./Identify.ts";
 import * as AnalyticsService from "./AnalyticsService.ts";
 
-interface RecordedBatchRequest {
-  readonly path: string;
-  readonly body: {
-    readonly batch?: ReadonlyArray<{
-      readonly event?: string;
-      readonly properties?: {
-        readonly index?: number;
-        readonly clientType?: string;
-      };
-    }>;
-  } | null;
-}
-
-interface RecordedBatchBody {
-  readonly batch: ReadonlyArray<{
-    readonly event?: string;
-    readonly properties?: {
-      readonly index?: number;
-      readonly clientType?: string;
-    };
-  }>;
-}
-
 it.layer(NodeServices.layer)("AnalyticsService test", (it) => {
-  it.effect("flush drains all buffered events across multiple batches", () =>
+  it.effect("production telemetry stays disabled when export is explicitly configured", () =>
     Effect.gen(function* () {
-      const capturedRequests: Array<RecordedBatchRequest> = [];
+      const capturedRequests: Array<string> = [];
       const serverConfigLayer = ServerConfig.ServerConfig.layerTest(process.cwd(), {
         prefix: "t3-telemetry-base-",
       });
@@ -55,18 +32,8 @@ it.layer(NodeServices.layer)("AnalyticsService test", (it) => {
       const batchServerLayer = HttpServer.serve(
         Effect.gen(function* () {
           const request = yield* HttpServerRequest.HttpServerRequest;
-          if (request.method !== "POST") {
-            return HttpServerResponse.empty({ status: 404 });
-          }
-
-          const payload = yield* request.json.pipe(
-            Effect.map((body) => body as RecordedBatchRequest["body"]),
-            Effect.orElseSucceed(() => null),
-          );
-
-          capturedRequests.push({ path: request.url, body: payload });
-
-          return HttpServerResponse.jsonUnsafe({});
+          capturedRequests.push(request.url);
+          return HttpServerResponse.empty({ status: 204 });
         }),
       );
       const runtimeLayer = telemetryLayer.pipe(
@@ -76,8 +43,8 @@ it.layer(NodeServices.layer)("AnalyticsService test", (it) => {
 
       yield* Effect.gen(function* () {
         yield* Layer.launch(batchServerLayer).pipe(Effect.forkScoped);
-        const telemetryIdentifier = yield* getTelemetryIdentifier;
-        assert.equal(telemetryIdentifier !== null, true);
+        const config = yield* ServerConfig.ServerConfig;
+        const fileSystem = yield* FileSystem.FileSystem;
         const analytics = yield* AnalyticsService.AnalyticsService;
 
         for (let index = 0; index < 45; index += 1) {
@@ -85,38 +52,10 @@ it.layer(NodeServices.layer)("AnalyticsService test", (it) => {
         }
 
         yield* analytics.flush;
+        assert.isFalse(yield* fileSystem.exists(config.anonymousIdPath));
       }).pipe(Effect.provide(runtimeLayer));
 
-      const batchRequests = capturedRequests.filter(
-        (request): request is RecordedBatchRequest & { readonly body: RecordedBatchBody } =>
-          Array.isArray(request.body?.batch),
-      );
-      assert.equal(batchRequests.length, 3);
-      assert.equal(
-        batchRequests.every(
-          (request) => request.path.endsWith("/batch/") || request.path.endsWith("/batch"),
-        ),
-        true,
-      );
-      const deliveredIndexes = batchRequests.flatMap((request) =>
-        request.body.batch
-          .filter((event) => event.event === "test.flush.drain")
-          .map((event) => event.properties?.index)
-          .filter((index): index is number => typeof index === "number"),
-      );
-
-      const sorted = deliveredIndexes.toSorted((a, b) => a - b);
-      assert.equal(sorted.length, 45);
-      assert.deepEqual(
-        sorted,
-        Array.from({ length: 45 }, (_, index) => index),
-      );
-      assert.equal(
-        batchRequests.every((request) =>
-          request.body.batch.every((event) => event.properties?.clientType === "cli-web-client"),
-        ),
-        true,
-      );
+      assert.deepEqual(capturedRequests, []);
     }),
   );
 });

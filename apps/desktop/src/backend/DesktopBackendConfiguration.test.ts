@@ -313,7 +313,7 @@ describe("DesktopBackendConfiguration", () => {
     ),
   );
 
-  it.effect("resolvePrimary surfaces persisted backend observability endpoints", () =>
+  it.effect("resolvePrimary ignores persisted backend observability endpoints", () =>
     withHarness(
       Effect.gen(function* () {
         const fileSystem = yield* FileSystem.FileSystem;
@@ -334,8 +334,8 @@ describe("DesktopBackendConfiguration", () => {
         );
 
         const config = yield* configuration.resolvePrimary;
-        assert.equal(config.bootstrap.otlpTracesUrl, "http://127.0.0.1:4318/v1/traces");
-        assert.equal(config.bootstrap.otlpMetricsUrl, "http://127.0.0.1:4318/v1/metrics");
+        assert.equal(config.bootstrap.otlpTracesUrl, undefined);
+        assert.equal(config.bootstrap.otlpMetricsUrl, undefined);
       }),
     ),
   );

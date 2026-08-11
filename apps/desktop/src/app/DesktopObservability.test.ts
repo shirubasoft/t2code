@@ -23,19 +23,6 @@ const decodeDesktopBackendChildLogRecord = Schema.decodeEffect(
   Schema.fromJsonString(DesktopBackendChildLogRecord),
 );
 
-const TraceRecordLine = Schema.Struct({
-  name: Schema.String,
-  attributes: Schema.Record(Schema.String, Schema.Unknown),
-  events: Schema.Array(
-    Schema.Struct({
-      name: Schema.String,
-      attributes: Schema.Record(Schema.String, Schema.Unknown),
-    }),
-  ),
-});
-
-const decodeTraceRecordLine = Schema.decodeUnknownSync(Schema.fromJsonString(TraceRecordLine));
-
 const environmentInput = (baseDir: string) =>
   ({
     dirname: "/repo/apps/desktop/dist-electron",
@@ -84,7 +71,7 @@ describe("DesktopObservability", () => {
     assert.equal(next.byteLength, maxBufferedBytes);
   });
 
-  it.effect("persists desktop Effect logs as span events in desktop.trace.ndjson", () =>
+  it.effect("does not persist desktop Effect spans", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const baseDir = yield* fileSystem.makeTempDirectoryScoped({
@@ -110,22 +97,7 @@ describe("DesktopObservability", () => {
         ),
       );
 
-      const records = (yield* fileSystem.readFileString(tracePath))
-        .trim()
-        .split("\n")
-        .filter((line) => line.length > 0)
-        .map((line) => decodeTraceRecordLine(line));
-      const record = records.find((entry) => entry.name === "desktop-observability-test");
-
-      assert.notEqual(record, undefined);
-      if (!record) {
-        return;
-      }
-      assert.equal(record.attributes["desktop.test"], true);
-      assert.equal(
-        record.events.some((event) => event.name === "desktop trace event"),
-        true,
-      );
+      assert.isFalse(yield* fileSystem.exists(tracePath));
       assert.isFalse(yield* fileSystem.exists(logPath));
     }).pipe(
       Effect.scoped,
@@ -195,16 +167,7 @@ describe("DesktopObservability", () => {
       assert.equal(end.annotations.phase, "END");
       assert.equal(end.annotations.details, "code=1");
 
-      const traceRecords = (yield* fileSystem.readFileString(tracePath))
-        .trim()
-        .split("\n")
-        .filter((line) => line.length > 0)
-        .map((line) => decodeTraceRecordLine(line));
-      assert.isFalse(
-        traceRecords.some(
-          (record) => record.name === "desktop.observability.backendOutput.writeOutputChunk",
-        ),
-      );
+      assert.isFalse(yield* fileSystem.exists(tracePath));
     }).pipe(
       Effect.scoped,
       Effect.provide(Layer.mergeAll(NodeServices.layer, NodeHttpClient.layerUndici)),
