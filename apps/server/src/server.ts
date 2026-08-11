@@ -102,7 +102,6 @@ import * as TraceDiagnostics from "./diagnostics/TraceDiagnostics.ts";
 import * as DesktopTelemetryReceiver from "./resourceTelemetry/DesktopTelemetryReceiver.ts";
 import * as NativeTelemetryClient from "./resourceTelemetry/NativeTelemetryClient.ts";
 import * as ResourceAttribution from "./resourceTelemetry/ResourceAttribution.ts";
-import * as ResourceMonitorBinary from "./resourceTelemetry/ResourceMonitorBinary.ts";
 import * as ResourceTelemetry from "./resourceTelemetry/ResourceTelemetry.ts";
 import * as UsageService from "./usage/UsageService.ts";
 import { OrchestrationLayerLive } from "./orchestration/runtimeLayer.ts";
@@ -122,7 +121,7 @@ import { forkParked, ServerActivation } from "./serverActivation.ts";
 // already closes the websocket gracefully. Do not add an artificial drain before
 // those finalizers get a chance to run.
 const HTTP_PREEMPTIVE_SHUTDOWN_GRACE_MS = 0;
-const ResourceAttributionLayerLive = ResourceAttribution.layer;
+const ResourceAttributionLayerLive = ResourceAttribution.layerDisabled;
 const ApplicationObservabilityLive = ObservabilityLive.pipe(
   Layer.provideMerge(ResourceAttributionLayerLive),
 );
@@ -141,12 +140,8 @@ const PtyAdapterLive = Layer.unwrap(
 
 const ServerSettingsLayerLive = ServerSettings.layer.pipe(Layer.provide(ServerSecretStore.layer));
 
-const NativeTelemetryLayerLive = NativeTelemetryClient.layer.pipe(
-  Layer.provide(ResourceMonitorBinary.layer),
-);
-const DesktopTelemetryReceiverLayerLive = DesktopTelemetryReceiver.layer.pipe(
-  Layer.provideMerge(ServerSettingsLayerLive),
-);
+const NativeTelemetryLayerLive = NativeTelemetryClient.layerDisabled;
+const DesktopTelemetryReceiverLayerLive = DesktopTelemetryReceiver.layerDisabled;
 
 const ResourceTelemetryLayerLive = ResourceTelemetry.layer.pipe(
   Layer.provideMerge(NativeTelemetryLayerLive),

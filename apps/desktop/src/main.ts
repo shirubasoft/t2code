@@ -165,7 +165,7 @@ const desktopBackendLayer = DesktopBackendPool.layer.pipe(
   Layer.provideMerge(DesktopAppIdentity.layer),
   Layer.provideMerge(DesktopBackendConfiguration.layer),
   Layer.provideMerge(DesktopWslEnvironment.layer),
-  Layer.provideMerge(DesktopTelemetryPublisher.layer),
+  Layer.provideMerge(DesktopTelemetryPublisher.layerDisabled),
   Layer.provideMerge(desktopWindowLayer),
 );
 

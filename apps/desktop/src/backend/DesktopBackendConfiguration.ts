@@ -1,6 +1,7 @@
 import * as NodeOS from "node:os";
 
 import { parsePersistedServerObservabilitySettings } from "@t3tools/shared/serverSettings";
+import { TELEMETRY_ENABLED } from "@t3tools/shared/telemetryPolicy";
 import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
@@ -351,16 +352,19 @@ const isLocalHostIpv4 = (ip: string): boolean => {
   return false;
 };
 
-const buildObservabilityFragment = (observabilitySettings: BackendObservabilitySettings) => ({
-  ...Option.match(observabilitySettings.otlpTracesUrl, {
-    onNone: () => ({}),
-    onSome: (otlpTracesUrl) => ({ otlpTracesUrl }),
-  }),
-  ...Option.match(observabilitySettings.otlpMetricsUrl, {
-    onNone: () => ({}),
-    onSome: (otlpMetricsUrl) => ({ otlpMetricsUrl }),
-  }),
-});
+const buildObservabilityFragment = (observabilitySettings: BackendObservabilitySettings) =>
+  TELEMETRY_ENABLED
+    ? {
+        ...Option.match(observabilitySettings.otlpTracesUrl, {
+          onNone: () => ({}),
+          onSome: (otlpTracesUrl) => ({ otlpTracesUrl }),
+        }),
+        ...Option.match(observabilitySettings.otlpMetricsUrl, {
+          onNone: () => ({}),
+          onSome: (otlpMetricsUrl) => ({ otlpMetricsUrl }),
+        }),
+      }
+    : {};
 
 const resolvePrimaryStartConfig = Effect.fn("desktop.backendConfiguration.resolvePrimary")(
   function* (

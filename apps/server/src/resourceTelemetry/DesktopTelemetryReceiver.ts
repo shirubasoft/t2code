@@ -660,3 +660,11 @@ export const layerTest = (
     }),
   );
 };
+
+export const layerDisabled = layerTest({
+  health: Effect.succeed({
+    status: "unavailable",
+    lastSampleAt: Option.none<DateTime.Utc>(),
+    lastError: Option.some("Desktop resource telemetry is disabled by this build."),
+  }),
+});

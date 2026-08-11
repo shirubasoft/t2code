@@ -10,14 +10,10 @@ export class BrowserTraceCollector extends Context.Service<
   }
 >()("t3/observability/BrowserTraceCollector") {}
 
-export const make = (sink: TraceSink): BrowserTraceCollector["Service"] =>
-  BrowserTraceCollector.of({
-    record: (records) =>
-      Effect.sync(() => {
-        for (const record of records) {
-          sink.push(record);
-        }
-      }),
-  });
+const disabledService = BrowserTraceCollector.of({ record: () => Effect.void });
+
+export const make = (_sink: TraceSink): BrowserTraceCollector["Service"] => disabledService;
 
 export const layer = (sink: TraceSink) => Layer.succeed(BrowserTraceCollector, make(sink));
+
+export const layerDisabled = Layer.succeed(BrowserTraceCollector, disabledService);

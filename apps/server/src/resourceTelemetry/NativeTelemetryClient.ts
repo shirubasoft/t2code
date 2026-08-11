@@ -1022,3 +1022,14 @@ export const layerTest = (
     }),
   );
 };
+
+export const layerDisabled = layerTest({
+  health: Effect.succeed({
+    status: "unavailable",
+    hello: Option.none<ResourceMonitorHelloEvent>(),
+    lastSampleAt: Option.none<DateTime.Utc>(),
+    lastError: Option.some("Resource telemetry is disabled by this build."),
+    restartCount: 0,
+    sampleIntervalMs: UNKNOWN_BACKGROUND_SAMPLE_INTERVAL_MS,
+  }),
+});

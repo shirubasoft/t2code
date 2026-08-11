@@ -377,3 +377,15 @@ export const make = Effect.fn("desktop.telemetryPublisher.make")(function* () {
 });
 
 export const layer = Layer.effect(DesktopTelemetryPublisher, make());
+
+export const layerDisabled = Layer.succeed(
+  DesktopTelemetryPublisher,
+  DesktopTelemetryPublisher.of({
+    latest: Effect.succeedNone,
+    changes: Stream.empty,
+    encoded: Stream.empty,
+    handleControl: () => Effect.void,
+    handleControlForSource: () => Effect.void,
+    removeControlSource: () => Effect.void,
+  }),
+);

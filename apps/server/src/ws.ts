@@ -59,6 +59,7 @@ import {
   WsRpcGroup,
 } from "@t3tools/contracts";
 import { resolveServerBackgroundActivitySettings } from "@t3tools/shared/backgroundActivitySettings";
+import { TELEMETRY_ENABLED } from "@t3tools/shared/telemetryPolicy";
 import { HttpRouter, HttpServerRequest, HttpServerRespondable } from "effect/unstable/http";
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 
@@ -1012,13 +1013,15 @@ const makeWsRpcLayer = (
           ),
           observability: {
             logsDirectoryPath: config.logsDir,
-            localTracingEnabled: true,
-            ...(config.otlpTracesUrl !== undefined ? { otlpTracesUrl: config.otlpTracesUrl } : {}),
-            otlpTracesEnabled: config.otlpTracesUrl !== undefined,
-            ...(config.otlpMetricsUrl !== undefined
+            localTracingEnabled: TELEMETRY_ENABLED,
+            ...(TELEMETRY_ENABLED && config.otlpTracesUrl !== undefined
+              ? { otlpTracesUrl: config.otlpTracesUrl }
+              : {}),
+            otlpTracesEnabled: TELEMETRY_ENABLED && config.otlpTracesUrl !== undefined,
+            ...(TELEMETRY_ENABLED && config.otlpMetricsUrl !== undefined
               ? { otlpMetricsUrl: config.otlpMetricsUrl }
               : {}),
-            otlpMetricsEnabled: config.otlpMetricsUrl !== undefined,
+            otlpMetricsEnabled: TELEMETRY_ENABLED && config.otlpMetricsUrl !== undefined,
           },
           settings,
           shellResumeCompletionMarker: true,

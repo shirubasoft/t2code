@@ -1,5 +1,6 @@
 import * as NetService from "@t3tools/shared/Net";
 import { parsePersistedServerObservabilitySettings } from "@t3tools/shared/serverSettings";
+import { TELEMETRY_ENABLED } from "@t3tools/shared/telemetryPolicy";
 import { DesktopBackendBootstrap, PortSchema } from "@t3tools/contracts";
 import * as Config from "effect/Config";
 import * as Duration from "effect/Duration";
@@ -356,14 +357,16 @@ export const resolveServerConfig = (
       traceBatchWindowMs: env.traceBatchWindowMs,
       traceMaxBytes: env.traceMaxBytes,
       traceMaxFiles: env.traceMaxFiles,
-      otlpTracesUrl:
-        env.otlpTracesUrl ??
-        bootstrap?.otlpTracesUrl ??
-        persistedObservabilitySettings.otlpTracesUrl,
-      otlpMetricsUrl:
-        env.otlpMetricsUrl ??
-        bootstrap?.otlpMetricsUrl ??
-        persistedObservabilitySettings.otlpMetricsUrl,
+      otlpTracesUrl: TELEMETRY_ENABLED
+        ? (env.otlpTracesUrl ??
+          bootstrap?.otlpTracesUrl ??
+          persistedObservabilitySettings.otlpTracesUrl)
+        : undefined,
+      otlpMetricsUrl: TELEMETRY_ENABLED
+        ? (env.otlpMetricsUrl ??
+          bootstrap?.otlpMetricsUrl ??
+          persistedObservabilitySettings.otlpMetricsUrl)
+        : undefined,
       otlpExportIntervalMs: env.otlpExportIntervalMs,
       otlpServiceName: env.otlpServiceName,
       mode,

@@ -31,6 +31,7 @@ policy in [CONTRIBUTING.md](../CONTRIBUTING.md); agent rules in [AGENTS.md](../A
 - [Providers](./internals/providers.md)
 - [Remote environments](./internals/remote.md)
 - [Server updates](./internals/server-updates.md)
+- [Telemetry-free distribution](./internals/telemetry-free-distribution.md)
 - [Resource telemetry](./internals/resource-telemetry.md)
 - [Environment auth](./internals/environment-auth.md)
 - [T3 Connect](./internals/t3-connect.md)
