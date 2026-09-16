@@ -87,7 +87,7 @@ export function inventory(source, paths = sourceFiles(source)) {
     const buildInput =
       path.startsWith("scripts/") ||
       path.startsWith("native/") ||
-      /^([^/]+\.(?:json|ya?ml|[cm]?js|ts)|\.npmrc|\.pnpmfile\.[cm]?js)$/.test(path) ||
+      /^([^/]+\.(?:json|ya?ml|[cm]?js|ts)|\.gitmodules|\.npmrc|\.pnpmfile\.[cm]?js)$/.test(path) ||
       (/^(?:apps|packages)\//.test(path) &&
         !path.includes("/src/") &&
         /\.(?:[cm]?[jt]sx?|json|ya?ml|rs|toml|lock|sh|ps1)$/.test(path));

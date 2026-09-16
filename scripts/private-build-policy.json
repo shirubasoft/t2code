@@ -3,6 +3,7 @@
   "description": "Maintainer-reviewed local edition. Automatic migration cannot revise this baseline.",
   "capabilities": {
     ".coderabbit.yaml": "283451ddd641d8d8260928a01104e859c94ecec0605eafe0be9d30035cd6530e",
+    ".gitmodules": "539b696e119023cfb0c5224d1935481ffeaf149d1da4560dbf8db7471c64d79e",
     ".mcp.json": "5e90d85d708afc54bcfa9070303ba7ba7ed1b1f71022ab48b7db0576f002173d",
     "apps/desktop/gnome-extension/bundle.json": "7b4655ad26feed2f8295fbed19e68f1282dceb61359ca3e3320d35b99c795aef",
     "apps/desktop/gnome-extension/captureFeedback.js": "9a56ae4aafef9ecd1077e22d72b4255def45243ee56fc9bcd8f8b98ad59d3513",
@@ -819,7 +820,7 @@
     "scripts/sync-third-party-license-notices.ts": "7da1f5380d121dd04bf632dfa4e0de3994dc05c774d9f868ecad3e2cd57cf580",
     "scripts/tsconfig.json": "8fb473f1832cee5c2d6731fe421bafa5371b9993771a6757a0d8d67324d071f2",
     "scripts/update-release-package-versions.ts": "58ff8451ca40220e1d36c052521b1ed0e10313fe6d191dff06c1f915d9b59938",
-    "scripts/verify-private-build.mjs": "13b499a9d77628276ecdfbfc53098a6e59025f35248ad2b94e76cf91194f9b30",
+    "scripts/verify-private-build.mjs": "0e19f89fb5272ad879c6639dfd6452c736d951dc0f59f6b04ba8b2c755be800b",
     "t3.json": "2d8f44f6a1c37f8f5102af01ebbd31c9fe4bd541fb653b739d50c004b68c0809",
     "third-party-licenses.config.json": "0a1b41a7a0bc7952431ed8632dee6337f3b3ea8abb0fbb3c342e8d86c02fe4ea",
     "tsconfig.base.json": "230d669e7dd60016efc4115c0e6de91f4b88c64bd2bc28d2104401303438ccdb",
@@ -1027,6 +1028,7 @@
     ]
   },
   "boundaries": {
+    ".gitmodules": "539b696e119023cfb0c5224d1935481ffeaf149d1da4560dbf8db7471c64d79e",
     "apps/desktop/src/app/DesktopHttpClient.test.ts": "a8ea4164e582309fd8343fe045ce795bf6a0a0a171c8c3d788ff0294324d8a7d",
     "apps/desktop/src/app/DesktopHttpClient.ts": "89b6896be2e2ff6368798624690ff5feb38cd958e57a59e2084660450a6da7ad",
     "apps/desktop/src/app/DesktopObservability.ts": "5a81ffeb0c1b30bc9678a7f3267f54b1917c413eaf4ba31e2c6e7e11a01e7fb0",

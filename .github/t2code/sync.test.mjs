@@ -44,6 +44,7 @@ test("agent edits cannot modify trust controls or escape the checkout", () => {
     "/absolute",
     ".git/config",
     ".GIT/hooks/pre-commit",
+    ".gitmodules",
     ".github/workflows/ci.yml",
     "scripts/verify-private-build.mjs",
     "apps/../../outside",

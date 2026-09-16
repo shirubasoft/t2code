@@ -6,3 +6,4 @@
 /scripts/build-desktop-artifact.ts @danspark
 /scripts/build-desktop-artifact.test.ts @danspark
 /scripts/lib/update-manifest.ts @danspark
+/.gitmodules @danspark
