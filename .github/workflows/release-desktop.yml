@@ -1,4 +1,4 @@
-name: Release desktop build
+name: T2 desktop build
 
 # One desktop platform/arch build, called once per target from release.yml so
 # each target is its own job with its own `needs`. The JS bundle (server, web
@@ -8,33 +8,6 @@ name: Release desktop build
 
 on:
   workflow_call:
-    secrets:
-      CSC_LINK:
-        required: false
-      CSC_KEY_PASSWORD:
-        required: false
-      APPLE_API_KEY:
-        required: false
-      APPLE_API_KEY_ID:
-        required: false
-      APPLE_API_ISSUER:
-        required: false
-      MACOS_PROVISIONING_PROFILE:
-        required: false
-      AZURE_TENANT_ID:
-        required: false
-      AZURE_CLIENT_ID:
-        required: false
-      AZURE_CLIENT_SECRET:
-        required: false
-      AZURE_TRUSTED_SIGNING_ENDPOINT:
-        required: false
-      AZURE_TRUSTED_SIGNING_ACCOUNT_NAME:
-        required: false
-      AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME:
-        required: false
-      AZURE_TRUSTED_SIGNING_PUBLISHER_NAME:
-        required: false
     inputs:
       label:
         required: true
@@ -73,24 +46,6 @@ on:
       release_channel:
         required: true
         type: string
-      # Whether a `relay-client-tracing-config` artifact from the production
-      # relay state is expected. PR previews carry no tracing config.
-      relay_client_tracing:
-        required: false
-        default: true
-        type: boolean
-      clerk_publishable_key:
-        required: true
-        type: string
-      clerk_jwt_template:
-        required: true
-        type: string
-      clerk_cli_oauth_client_id:
-        required: true
-        type: string
-      relay_url:
-        required: true
-        type: string
 
 permissions:
   contents: read
@@ -99,12 +54,7 @@ jobs:
   build:
     name: Build ${{ inputs.label }}
     runs-on: ${{ inputs.runner }}
-    timeout-minutes: 30
-    env:
-      T3CODE_CLERK_PUBLISHABLE_KEY: ${{ inputs.clerk_publishable_key }}
-      T3CODE_CLERK_JWT_TEMPLATE: ${{ inputs.clerk_jwt_template }}
-      T3CODE_CLERK_CLI_OAUTH_CLIENT_ID: ${{ inputs.clerk_cli_oauth_client_id }}
-      T3CODE_RELAY_URL: ${{ inputs.relay_url }}
+    timeout-minutes: 60
     steps:
       # This repository is public, so Git needs no credentials. checkout's
       # credential cleanup runs submodule foreach even with submodules disabled,
@@ -142,15 +92,6 @@ jobs:
           path: ${{ steps.package_cache_path.outputs.path }}
           key: windows-release-packages-v1-${{ inputs.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
 
-      # pnpm checks the lockfile and policy before reusing this result. A missing
-      # artifact leaves the cache empty, so installation runs the checks again.
-      - name: Download dependency verification
-        continue-on-error: true
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: release-dependency-verification
-          path: ${{ runner.temp }}/pnpm-metadata
-
       - name: Install desktop dependencies
         env:
           pnpm_config_cache_dir: ${{ runner.temp }}/pnpm-metadata
@@ -180,21 +121,9 @@ jobs:
           toolchain: stable
           targets: ${{ inputs.rust_target }}
 
-      - name: Download relay client tracing config
-        if: inputs.relay_client_tracing
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: relay-client-tracing-config
-          path: ${{ runner.temp }}/relay-client-tracing
-
-      - name: Load relay client tracing config
-        if: inputs.relay_client_tracing
+      - name: Verify source privacy policy
         shell: bash
-        run: |
-          config_path="$RUNNER_TEMP/relay-client-tracing/relay-client-tracing.env"
-          tracing_token="$(sed -n 's/^T3CODE_RELAY_CLIENT_OTLP_TRACES_TOKEN=//p' "$config_path")"
-          echo "::add-mask::$tracing_token"
-          cat "$config_path" >> "$GITHUB_ENV"
+        run: node scripts/verify-private-build.mjs --source .
 
       - name: Align package versions to release version
         run: node scripts/update-release-package-versions.ts "${{ inputs.version }}"
@@ -234,15 +163,12 @@ jobs:
             exit $code
           }
 
-      - uses: ./.github/actions/setup-apt-mirrors
-        if: inputs.platform == 'linux'
-
       - name: Install Linux desktop build libraries
         if: inputs.platform == 'linux'
         shell: bash
         run: |
           sudo apt-get update
-          sudo apt-get install -y libsecret-1-dev pkg-config
+          sudo apt-get install -y libsecret-1-dev pkg-config strace iproute2
           if ! command -v magick >/dev/null 2>&1 && ! command -v convert >/dev/null 2>&1; then
               sudo apt-get install -y imagemagick
           fi
@@ -253,89 +179,13 @@ jobs:
               convert -version
           fi
 
-      - name: Prepare Azure Trusted Signing
-        if: inputs.platform == 'win'
-        shell: pwsh
-        env:
-          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-          AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
-          AZURE_TRUSTED_SIGNING_ACCOUNT_NAME: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
-          AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME: ${{ secrets.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME }}
-          AZURE_TRUSTED_SIGNING_PUBLISHER_NAME: ${{ secrets.AZURE_TRUSTED_SIGNING_PUBLISHER_NAME }}
-        run: |
-          $ErrorActionPreference = "Stop"
-
-          $requiredSecrets = @(
-            $env:AZURE_TENANT_ID,
-            $env:AZURE_CLIENT_ID,
-            $env:AZURE_CLIENT_SECRET,
-            $env:AZURE_TRUSTED_SIGNING_ENDPOINT,
-            $env:AZURE_TRUSTED_SIGNING_ACCOUNT_NAME,
-            $env:AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME,
-            $env:AZURE_TRUSTED_SIGNING_PUBLISHER_NAME
-          )
-          if ($requiredSecrets | Where-Object { [string]::IsNullOrWhiteSpace($_) }) {
-            Write-Host "Azure Trusted Signing disabled; skipping TrustedSigning module preparation."
-            exit 0
-          }
-
-          try {
-            Install-PackageProvider `
-              -Name NuGet `
-              -MinimumVersion 2.8.5.201 `
-              -Force `
-              -Scope CurrentUser `
-              -ErrorAction Stop
-          } catch {
-            Write-Warning "Could not bootstrap NuGet package provider. Continuing because the runner may already have a usable provider. $($_.Exception.Message)"
-          }
-
-          Install-Module `
-            -Name TrustedSigning `
-            -MinimumVersion 0.5.0 `
-            -Force `
-            -AllowClobber `
-            -Repository PSGallery `
-            -Scope CurrentUser `
-            -ErrorAction Stop
-
-          Import-Module TrustedSigning -MinimumVersion 0.5.0 -Force
-          Get-Command Invoke-TrustedSigning -ErrorAction Stop
-
-          $moduleRoots = @(
-            [System.IO.Path]::Combine([Environment]::GetFolderPath("MyDocuments"), "PowerShell", "Modules"),
-            [System.IO.Path]::Combine([Environment]::GetFolderPath("MyDocuments"), "WindowsPowerShell", "Modules"),
-            [System.IO.Path]::Combine($env:ProgramFiles, "PowerShell", "Modules"),
-            [System.IO.Path]::Combine($env:ProgramFiles, "WindowsPowerShell", "Modules")
-          )
-          $modulePathEntries = @($moduleRoots + ($env:PSModulePath -split ";")) |
-            Where-Object { $_ -and (Test-Path $_) } |
-            Select-Object -Unique
-          "PSModulePath=$($modulePathEntries -join ';')" >> $env:GITHUB_ENV
-
       - name: Build desktop artifact
         shell: bash
         env:
           pnpm_config_cache_dir: ${{ runner.temp }}/pnpm-metadata
+          T3CODE_DESKTOP_UPDATE_REPOSITORY: shirubasoft/t2code
           T3CODE_DESKTOP_REUSE_RESOURCE_MONITOR: ${{ steps.resource_monitor_cache.outputs.cache-hit == 'true' }}
           T3CODE_DESKTOP_REUSE_LINUX_CAPTURE_HELPERS: ${{ steps.capture_helper_cache.outputs.cache-hit == 'true' }}
-          CSC_LINK: ${{ secrets.CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
-          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
-          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
-          MACOS_PROVISIONING_PROFILE: ${{ secrets.MACOS_PROVISIONING_PROFILE }}
-          T3CODE_CLERK_PASSKEY_RP_DOMAINS: ${{ vars.CLERK_PASSKEY_RP_DOMAINS }}
-          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-          AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
-          AZURE_TRUSTED_SIGNING_ACCOUNT_NAME: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
-          AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME: ${{ secrets.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME }}
-          AZURE_TRUSTED_SIGNING_PUBLISHER_NAME: ${{ secrets.AZURE_TRUSTED_SIGNING_PUBLISHER_NAME }}
         run: |
           args=(
             --platform "${{ inputs.platform }}"
@@ -346,56 +196,8 @@ jobs:
             --verbose
           )
 
-          has_all() {
-            for value in "$@"; do
-              if [[ -z "$value" ]]; then
-                return 1
-              fi
-            done
-            return 0
-          }
-
-          if [[ "${{ inputs.platform }}" == "mac" ]]; then
-            if has_all "$CSC_LINK" "$CSC_KEY_PASSWORD" "$APPLE_API_KEY" "$APPLE_API_KEY_ID" "$APPLE_API_ISSUER"; then
-              if ! has_all "$APPLE_TEAM_ID" "$MACOS_PROVISIONING_PROFILE"; then
-                echo "macOS signing is configured, but APPLE_TEAM_ID or MACOS_PROVISIONING_PROFILE is missing." >&2
-                exit 1
-              fi
-
-              key_path="$RUNNER_TEMP/AuthKey_${APPLE_API_KEY_ID}.p8"
-              printf '%s' "$APPLE_API_KEY" > "$key_path"
-              export APPLE_API_KEY="$key_path"
-
-              profile_path="$RUNNER_TEMP/t3code.provisionprofile"
-              printf '%s' "$MACOS_PROVISIONING_PROFILE" | base64 -D > "$profile_path"
-              security cms -D -i "$profile_path" >/dev/null
-              export T3CODE_APPLE_TEAM_ID="$APPLE_TEAM_ID"
-              export T3CODE_MACOS_PROVISIONING_PROFILE="$profile_path"
-
-              echo "macOS signing enabled."
-              args+=(--signed)
-            else
-              echo "macOS signing disabled (missing one or more Apple signing secrets)."
-            fi
-          elif [[ "${{ inputs.platform }}" == "win" ]]; then
-            # Embed the Linux CLI archive built by the same-arch Linux job as
-            # the WSL runtime. Required for a working WSL backend on Windows.
+          if [[ "${{ inputs.platform }}" == "win" ]]; then
             args+=(--wsl-runtime "$GITHUB_WORKSPACE"/wsl-runtime/t3-*-linux-${{ inputs.arch }}.tar.gz)
-            if has_all \
-              "$AZURE_TENANT_ID" \
-              "$AZURE_CLIENT_ID" \
-              "$AZURE_CLIENT_SECRET" \
-              "$AZURE_TRUSTED_SIGNING_ENDPOINT" \
-              "$AZURE_TRUSTED_SIGNING_ACCOUNT_NAME" \
-              "$AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME" \
-              "$AZURE_TRUSTED_SIGNING_PUBLISHER_NAME"; then
-              echo "Windows signing enabled (Azure Trusted Signing)."
-              args+=(--signed)
-            else
-              echo "Windows signing disabled (missing one or more Azure Trusted Signing secrets)."
-            fi
-          else
-            echo "Signing disabled for ${{ inputs.platform }}."
           fi
 
           vp run dist:desktop:artifact "${args[@]}"
@@ -415,37 +217,6 @@ jobs:
           VP_NODE_VERSION: "26.8.2"
         run: node apps/server/scripts/cli.ts build-exe --verbose
 
-      - name: Import macOS signing certificate for the CLI archive
-        if: inputs.cli_archive && inputs.platform == 'mac'
-        shell: bash
-        env:
-          CSC_LINK: ${{ secrets.CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-        run: |
-          set -euo pipefail
-          if [[ -z "$CSC_LINK" || -z "$CSC_KEY_PASSWORD" ]]; then
-            echo "macOS CLI signing disabled (missing CSC_LINK); the archive is signed ad hoc."
-            exit 0
-          fi
-          keychain="$RUNNER_TEMP/t3-cli-signing.keychain-db"
-          keychain_password="$(openssl rand -hex 16)"
-          cert_path="$RUNNER_TEMP/t3-cli-signing.p12"
-          printf '%s' "$CSC_LINK" | base64 --decode > "$cert_path"
-          security create-keychain -p "$keychain_password" "$keychain"
-          security set-keychain-settings -lut 21600 "$keychain"
-          security unlock-keychain -p "$keychain_password" "$keychain"
-          security import "$cert_path" -k "$keychain" -P "$CSC_KEY_PASSWORD" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple: -s -k "$keychain_password" "$keychain" >/dev/null
-          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
-          identity="$(security find-identity -v -p codesigning "$keychain" | sed -n 's/.*"\(Developer ID Application: [^"]*\)".*/\1/p' | head -n 1)"
-          if [[ -z "$identity" ]]; then
-            echo "No Developer ID Application identity found in CSC_LINK." >&2
-            exit 1
-          fi
-          echo "::add-mask::$keychain_password"
-          echo "T3CODE_CLI_MAC_SIGN_IDENTITY=$identity" >> "$GITHUB_ENV"
-          echo "macOS CLI signing enabled."
-
       - name: Stage resource monitor for the CLI archive
         if: inputs.cli_archive
         shell: bash
@@ -462,23 +233,8 @@ jobs:
       - name: Build CLI archive
         if: inputs.cli_archive
         shell: bash
-        env:
-          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
-          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
-          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-          AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
-          AZURE_TRUSTED_SIGNING_ACCOUNT_NAME: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
-          AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME: ${{ secrets.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME }}
         run: |
           set -euo pipefail
-          if [[ "${{ inputs.platform }}" == "mac" && -n "${APPLE_API_KEY:-}" ]]; then
-            key_path="$RUNNER_TEMP/AuthKey_cli_${APPLE_API_KEY_ID}.p8"
-            printf '%s' "$APPLE_API_KEY" > "$key_path"
-            export APPLE_API_KEY="$key_path"
-          fi
           node scripts/build-cli-archive.ts \
             --platform "${{ inputs.platform }}" \
             --arch "${{ inputs.arch }}" \
@@ -489,7 +245,12 @@ jobs:
       - name: Smoke-test CLI archive
         if: inputs.cli_archive
         shell: bash
-        run: node scripts/smoke-cli-archive.ts --archive release-cli/* --expect-version "${{ inputs.version }}"
+        run: |
+          if [[ "${{ inputs.platform }}" == "linux" ]]; then
+            bash .github/t2code/network-smoke.sh release-cli/* "${{ inputs.version }}"
+          else
+            node scripts/smoke-cli-archive.ts --archive release-cli/* --expect-version "${{ inputs.version }}"
+          fi
 
       - name: Upload CLI archive
         if: inputs.cli_archive
@@ -498,6 +259,12 @@ jobs:
           name: cli-${{ inputs.platform }}-${{ inputs.arch }}
           path: release-cli/*
           if-no-files-found: error
+
+      - name: Verify shipped bundles
+        shell: bash
+        run: |
+          node scripts/verify-private-build.mjs --source . --artifacts apps/server/dist
+          node scripts/verify-private-build.mjs --source . --artifacts apps/desktop/dist-electron
 
       - name: Collect release assets
         shell: bash

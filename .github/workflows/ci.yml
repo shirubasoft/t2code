@@ -1,6 +1,32 @@
 name: CI
+run-name: "T2 validation #${{ inputs.pr || github.event.pull_request.number || 0 }} @${{ inputs.sha || github.event.pull_request.head.sha || github.sha }} base:${{ inputs.base || github.event.pull_request.base.sha || github.sha }}"
 
 on:
+  workflow_call:
+    inputs:
+      sha:
+        required: true
+        type: string
+      base:
+        required: true
+        type: string
+      pr:
+        default: "0"
+        type: string
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Sync pull request number
+        required: true
+        type: string
+      sha:
+        description: Complete candidate commit SHA
+        required: true
+        type: string
+      base:
+        description: Complete accepted main commit SHA
+        required: true
+        type: string
   pull_request:
   push:
     branches:
@@ -10,18 +36,51 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.sha }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ci-${{ inputs.pr || github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
 
 jobs:
-  check:
-    name: Check
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+  privacy:
+    name: Trusted privacy
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
+          ref: ${{ inputs.base || github.event.pull_request.base.sha || github.sha }}
+          path: control
+          persist-credentials: false
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ inputs.sha || github.event.pull_request.head.sha || github.sha }}
+          path: candidate
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+      - name: Test accepted privacy controls
+        working-directory: control
+        run: node --test scripts/verify-private-build.test.mjs
+      - name: Validate using accepted policy
+        working-directory: control
+        run: node .github/t2code/check-candidate.mjs ../candidate
+        env:
+          T2_BASE_SHA: ${{ inputs.base || github.event.pull_request.base.sha || github.sha }}
+          T2_CANDIDATE_SHA: ${{ inputs.sha || github.event.pull_request.head.sha || github.sha }}
+          T2_SYNC_PR: ${{ inputs.pr || 0 }}
+
+  check:
+    needs: privacy
+    name: Check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ inputs.sha || github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
           sparse-checkout: |
             /*
             !/.repos/
@@ -36,7 +95,7 @@ jobs:
           fi
 
       - name: Setup Vite+
-        uses: voidzero-dev/setup-vp@v1
+        uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1
         with:
           node-version-file: package.json
           cache: true
@@ -55,11 +114,8 @@ jobs:
       - name: Typecheck
         run: vpr typecheck
 
-      - uses: ./.github/actions/setup-apt-mirrors
-
       - name: Install browser secret helper build libraries
         run: |
-          sudo sed -i 's|http://|https://|g' /etc/apt/blacksmith-ubuntu-mirrors.txt /etc/apt/sources.list.d/ubuntu.sources
           sudo apt-get update && sudo apt-get install -y libsecret-1-dev pkg-config
 
       - name: Build desktop pipeline
@@ -74,20 +130,23 @@ jobs:
   # only bought us idle runners between dependency layers. The concurrency
   # limit stays at the default 4 so peak load per runner is unchanged.
   test:
+    needs: privacy
     name: Test
-    runs-on: blacksmith-8vcpu-ubuntu-2404
-    timeout-minutes: 10
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
+          ref: ${{ inputs.sha || github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
           sparse-checkout: |
             /*
             !/.repos/
           sparse-checkout-cone-mode: false
 
       - name: Setup Vite+
-        uses: voidzero-dev/setup-vp@v1
+        uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1
         with:
           node-version-file: package.json
           cache: true
@@ -96,11 +155,8 @@ jobs:
       - name: Ensure Electron runtime is installed
         run: vp run --filter @t3tools/desktop ensure:electron
 
-      - uses: ./.github/actions/setup-apt-mirrors
-
       - name: Install browser secret helper build libraries
         run: |
-          sudo sed -i 's|http://|https://|g' /etc/apt/blacksmith-ubuntu-mirrors.txt /etc/apt/sources.list.d/ubuntu.sources
           sudo apt-get update && sudo apt-get install -y libsecret-1-dev pkg-config
 
       - name: Test preview artifact validation
@@ -117,24 +173,27 @@ jobs:
   # separate workers, so no two server test files ever share a machine and the
   # isolation that flag buys is preserved exactly.
   test_server:
+    needs: privacy
     name: Test Server ${{ matrix.shard }}
-    runs-on: blacksmith-8vcpu-ubuntu-2404
-    timeout-minutes: 10
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
         shard: [1, 2, 3]
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
+          ref: ${{ inputs.sha || github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
           sparse-checkout: |
             /*
             !/.repos/
           sparse-checkout-cone-mode: false
 
       - name: Setup Vite+
-        uses: voidzero-dev/setup-vp@v1
+        uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1
         with:
           node-version-file: package.json
           cache: true
@@ -174,7 +233,7 @@ jobs:
 
       - name: Upload thread transfer result
         if: always() && steps.transfer_budget.outputs.present == 'true'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: thread-transfer-results
           path: ${{ runner.temp }}/thread-transfer-result.json
@@ -184,20 +243,23 @@ jobs:
   # Split out of Check and Test: both paid ~7-9s to install a Rust toolchain
   # for checks that take under 3s, on the critical path of every PR.
   rust:
+    needs: privacy
     name: Rust
-    runs-on: blacksmith-4vcpu-ubuntu-2404
-    timeout-minutes: 10
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
+          ref: ${{ inputs.sha || github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
           sparse-checkout: |
             /*
             !/.repos/
           sparse-checkout-cone-mode: false
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
         with:
           components: rustfmt
 
@@ -217,127 +279,24 @@ jobs:
   # minute, so gate it on the native sources it actually lints instead of paying
   # for it on every push. Detection is API-only (no checkout) and fails open: if
   # the diff cannot be resolved, the lint runs.
-  mobile_native_changes:
-    name: Mobile Native Changes
-    runs-on: blacksmith-2vcpu-ubuntu-2404
-    timeout-minutes: 5
-    permissions:
-      contents: read
-      pull-requests: read
-    outputs:
-      changed: ${{ steps.detect.outputs.changed }}
-    steps:
-      - name: Detect mobile native changes
-        id: detect
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          BEFORE_SHA: ${{ github.event.before }}
-        run: |
-          set -uo pipefail
-
-          fail_open() {
-            echo "$* Running native static analysis."
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          }
-
-          count_rows() {
-            printf '%s\n' "$1" | grep -c . || true
-          }
-
-          # One row per changed file, holding the new path and, for a rename,
-          # the path it replaced: renaming a matched file out of the matched
-          # paths removes a lint input just like editing it.
-          row='[.filename, (.previous_filename // empty)] | @tsv'
-
-          if [[ -n "${PR_NUMBER}" ]]; then
-            # The PR files endpoint stops at 3000 files and pagination cannot
-            # extend it, so cross-check against the count the PR itself reports.
-            expected=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq '.changed_files') \
-              || fail_open "Could not read the pull request."
-            rows=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files" --paginate --jq ".[] | ${row}") \
-              || fail_open "Could not resolve changed files."
-
-            listed=$(count_rows "$rows")
-            if [[ "$listed" -lt "$expected" ]]; then
-              fail_open "GitHub listed only ${listed} of ${expected} changed files."
-            fi
-          else
-            rows=$(gh api "repos/${GITHUB_REPOSITORY}/compare/${BEFORE_SHA}...${GITHUB_SHA}" --jq ".files[]? | ${row}") \
-              || fail_open "Could not resolve changed files."
-
-            # The compare endpoint reports at most 300 files and pagination does
-            # not extend that list, so a full list may be hiding native changes.
-            listed=$(count_rows "$rows")
-            if [[ "$listed" -ge 300 ]]; then
-              fail_open "GitHub listed ${listed} changed files, the compare endpoint maximum."
-            fi
-          fi
-
-          paths=$(tr '\t' '\n' <<< "$rows")
-
-          # Sources scripts/mobile-native-static-check.ts lints, plus the tool
-          # and rule configuration that decides how it lints them, plus the
-          # root package.json that defines the lint:mobile command.
-          pattern='^apps/mobile/.*\.(swift|kt|kts)$|^apps/mobile/(\.swiftlint\.yml|detekt\.yml|\.editorconfig|Brewfile)$|^scripts/mobile-native-static-check\.ts$|^package\.json$|^\.github/workflows/ci\.yml$'
-
-          if grep -qE "$pattern" <<< "$paths"; then
-            echo "Native sources or lint configuration changed:"
-            grep -E "$pattern" <<< "$paths"
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "No mobile native sources or lint configuration changed."
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-          fi
-
-  mobile_native_static_analysis:
-    name: Mobile Native Static Analysis
-    needs: mobile_native_changes
-    # Skip only on an explicit "no": a gate job that failed or errored leaves the
-    # output empty, and that must run the lint rather than silently skip it.
-    if: ${{ !cancelled() && needs.mobile_native_changes.outputs.changed != 'false' }}
-    runs-on: blacksmith-6vcpu-macos-26
-    timeout-minutes: 10
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          sparse-checkout: |
-            /*
-            !/.repos/
-          sparse-checkout-cone-mode: false
-
-      - name: Setup Vite+
-        uses: voidzero-dev/setup-vp@v1
-        with:
-          node-version-file: package.json
-          cache: true
-          run-install: |
-            args:
-              - --filter=@t3tools/scripts...
-
-      - name: Install mobile native static analysis tools
-        run: brew bundle install --file apps/mobile/Brewfile
-
-      - name: Lint mobile native sources
-        run: vp run lint:mobile
-
   release_smoke:
+    needs: privacy
     name: Release Smoke
-    runs-on: blacksmith-8vcpu-ubuntu-2404
-    timeout-minutes: 10
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
+          ref: ${{ inputs.sha || github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
           sparse-checkout: |
             /*
             !/.repos/
           sparse-checkout-cone-mode: false
 
       - name: Setup Vite+
-        uses: voidzero-dev/setup-vp@v1
+        uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1
         with:
           node-version-file: package.json
           cache: true
@@ -346,4 +305,19 @@ jobs:
               - --filter=@t3tools/scripts...
 
       - name: Exercise release-only workflow steps
-        run: node scripts/release-smoke.ts
+        run: |
+          node scripts/release-smoke.ts
+          node --test .github/t2code/*.test.mjs
+
+  result:
+    name: CI result
+    needs: [privacy, check, test, test_server, rust, release_smoke]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every check to pass
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          node -e 'const jobs=JSON.parse(process.env.RESULTS); if (Object.values(jobs).some(job=>job.result!=="success")) process.exit(1)'

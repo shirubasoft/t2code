@@ -1,0 +1,264 @@
+import * as NodeAssert from "node:assert/strict";
+const assert = NodeAssert;
+import * as NodeChildProcess from "node:child_process";
+const { spawnSync } = NodeChildProcess;
+import * as NodeFS from "node:fs";
+const { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } = NodeFS;
+import * as NodeOS from "node:os";
+const { tmpdir } = NodeOS;
+import * as NodePath from "node:path";
+const { join } = NodePath;
+import * as NodeTest from "node:test";
+const { afterEach, test } = NodeTest;
+import {
+  applyEdits,
+  assertEditable,
+  finishValidation,
+  plan,
+  recordBlocked,
+  validationTitle,
+} from "./sync.mjs";
+import { unexpectedConnections } from "./verify-network-trace.mjs";
+
+const directories = [];
+const originalFetch = globalThis.fetch;
+const originalEnv = { ...process.env };
+afterEach(() => {
+  globalThis.fetch = originalFetch;
+  process.env = { ...originalEnv };
+  for (const directory of directories.splice(0))
+    rmSync(directory, { recursive: true, force: true });
+});
+
+function repository() {
+  const directory = mkdtempSync(join(tmpdir(), "t2-sync-test-"));
+  directories.push(directory);
+  const result = spawnSync("git", ["init", directory], { encoding: "utf8" });
+  assert.equal(result.status, 0);
+  return directory;
+}
+
+test("agent edits cannot modify trust controls or escape the checkout", () => {
+  for (const path of [
+    "../outside",
+    "/absolute",
+    ".git/config",
+    ".GIT/hooks/pre-commit",
+    ".github/workflows/ci.yml",
+    "scripts/verify-private-build.mjs",
+    "apps/../../outside",
+    "apps\\outside",
+    "bad\npath",
+  ]) {
+    assert.throws(() => assertEditable(path));
+  }
+  assert.doesNotThrow(() => assertEditable("apps/server/src/example.ts"));
+});
+
+test("all edits are checked before any file is written", () => {
+  const directory = repository();
+  writeFileSync(join(directory, "source.ts"), "old\n");
+  assert.throws(() =>
+    applyEdits(
+      {
+        decision: "ready",
+        edits: [
+          { path: "source.ts", content: "new\n" },
+          { path: "../escape", content: "bad" },
+        ],
+      },
+      directory,
+    ),
+  );
+  assert.equal(readFileSync(join(directory, "source.ts"), "utf8"), "old\n");
+});
+
+test("edits reject both existing and dangling symlinks", () => {
+  const directory = repository();
+  for (const [name, destination] of [
+    ["existing", tmpdir()],
+    ["dangling", join(directory, "absent")],
+  ]) {
+    symlinkSync(destination, join(directory, name));
+    assert.throws(
+      () =>
+        applyEdits(
+          { decision: "ready", edits: [{ path: `${name}/file`, content: "bad" }] },
+          directory,
+        ),
+      /symlink/,
+    );
+  }
+});
+
+test("ready edits stage real file replacements and blocked decisions leave files alone", () => {
+  const directory = repository();
+  writeFileSync(join(directory, "source.ts"), "old\n");
+  assert.throws(
+    () =>
+      applyEdits(
+        {
+          decision: "blocked",
+          summary: "policy conflict",
+          edits: [{ path: "source.ts", content: "bad" }],
+        },
+        directory,
+      ),
+    /blocked/,
+  );
+  applyEdits({ decision: "ready", edits: [{ path: "source.ts", content: "new\n" }] }, directory);
+  assert.equal(
+    spawnSync("git", ["show", ":source.ts"], { cwd: directory, encoding: "utf8" }).stdout,
+    "new\n",
+  );
+});
+
+function validationFixture(overrides = {}) {
+  const directory = repository();
+  const base = "a".repeat(40);
+  const sha = "b".repeat(40);
+  const upstream = "c".repeat(40);
+  const repo = "shirubasoft/t2code";
+  const run = {
+    id: 7,
+    event: "workflow_dispatch",
+    conclusion: "success",
+    head_branch: "main",
+    head_sha: base,
+    head_repository: { full_name: repo },
+    path: ".github/workflows/ci.yml",
+    display_title: validationTitle(1, sha, base),
+    html_url: "https://github.com/test/actions/runs/7",
+    ...overrides,
+  };
+  process.env.GITHUB_REPOSITORY = repo;
+  process.env.GITHUB_EVENT_PATH = join(directory, "event.json");
+  writeFileSync(process.env.GITHUB_EVENT_PATH, JSON.stringify({ workflow_run: run }));
+  const pr = {
+    number: 1,
+    state: "open",
+    draft: false,
+    head: { sha, ref: "codex/upstream-sync", repo: { full_name: repo } },
+    base: { sha: base, ref: "main" },
+    body: `<!-- t2-sync ${JSON.stringify({ base, upstream, attempt: 1 })} -->`,
+  };
+  const calls = [];
+  globalThis.fetch = async (url, options) => {
+    calls.push({ url, ...options });
+    let data;
+    if (url.endsWith("/jobs?per_page=100"))
+      data = {
+        jobs: [
+          "Trusted privacy",
+          "Check",
+          "Test",
+          "Test Server 1",
+          "Test Server 2",
+          "Test Server 3",
+          "Rust",
+          "Release Smoke",
+          "CI result",
+        ].map((name) => ({ name, conclusion: "success" })),
+      };
+    else if (url.endsWith("/pulls/1")) data = pr;
+    else if (url.endsWith("/commits/main")) data = { sha: base };
+    else if (url.endsWith("/merge")) data = { merged: true, sha: "d".repeat(40) };
+    else if (url.endsWith("/dispatches")) return new Response(null, { status: 204 });
+    else data = {};
+    return Response.json(data);
+  };
+  return { pr, calls, base, sha };
+}
+
+test("trusted merger rejects candidate-defined workflow runs before making API calls", async () => {
+  const { calls } = validationFixture({ head_branch: "codex/upstream-sync" });
+  await assert.rejects(finishValidation(), /accepted trusted/);
+  assert.equal(calls.length, 0);
+});
+
+test("trusted merger rejects a changed head before writing status or merging", async () => {
+  const { pr, calls } = validationFixture();
+  pr.head.sha = "e".repeat(40);
+  await assert.rejects(finishValidation(), /changed after validation/);
+  assert.equal(
+    calls.some((call) => call.method === "PUT" || call.method === "POST"),
+    false,
+  );
+});
+
+test("trusted merger pins the head SHA, preserves ancestry, and releases the returned merge SHA", async () => {
+  const { calls, sha } = validationFixture();
+  await finishValidation();
+  const merge = calls.find((call) => call.url.endsWith("/merge"));
+  assert.deepEqual(JSON.parse(merge.body), { sha, merge_method: "merge" });
+  const release = calls.find((call) => call.url.endsWith("release.yml/dispatches"));
+  assert.equal(JSON.parse(release.body).inputs.sha, "d".repeat(40));
+});
+
+test("blocked migrations create one durable report for an exact input", async () => {
+  const state = { base: "a".repeat(40), upstream: "c".repeat(40) };
+  process.env.GITHUB_REPOSITORY = "shirubasoft/t2code";
+  process.env.GITHUB_RUN_ID = "123";
+  const issues = [];
+  globalThis.fetch = async (_url, options) => {
+    if (options.method === "POST") {
+      const issue = JSON.parse(options.body);
+      issues.push(issue);
+      return Response.json(issue);
+    }
+    return Response.json(issues);
+  };
+  await recordBlocked(state);
+  await recordBlocked(state);
+  assert.equal(issues.length, 1);
+  assert.match(issues[0].body, /actions\/runs\/123/);
+  await recordBlocked({ ...state, upstream: "d".repeat(40) });
+  assert.equal(issues.length, 2);
+});
+
+test("network smoke rejects attempted public requests and local DNS while permitting its loopback client", () => {
+  const loopback =
+    '42 connect(7, {sa_family=AF_INET, sin_port=htons(47700), sin_addr=inet_addr("127.0.0.1")}, 16) = 0';
+  const publicRequest =
+    '43 connect(7, {sa_family=AF_INET, sin_port=htons(443), sin_addr=inet_addr("1.1.1.1")}, 16) = -1 ENETUNREACH';
+  const dns =
+    '43 sendto(7, "dns", 3, 0, {sa_family=AF_INET, sin_port=htons(53), sin_addr=inet_addr("127.0.0.53")}, 16) = -1';
+  assert.deepEqual(unexpectedConnections(loopback), []);
+  assert.deepEqual(unexpectedConnections([loopback, publicRequest, dns].join("\n")), [
+    publicRequest,
+    dns,
+  ]);
+});
+
+test("a changed upstream input resumes a blocked PR with a fresh attempt budget", async () => {
+  const directory = repository();
+  const previousDirectory = process.cwd();
+  const base = "a".repeat(40);
+  const upstream = "b".repeat(40);
+  const head = "c".repeat(40);
+  process.env.GITHUB_REPOSITORY = "shirubasoft/t2code";
+  delete process.env.GITHUB_OUTPUT;
+  globalThis.fetch = async (url) => {
+    if (url.includes("/pulls?"))
+      return Response.json([
+        {
+          number: 1,
+          head: { sha: head, repo: { full_name: "shirubasoft/t2code" } },
+          body: `<!-- t2-sync ${JSON.stringify({ base, upstream: "d".repeat(40), attempt: 3 })} -->\n<!-- t2-sync-blocked -->`,
+        },
+      ]);
+    if (url.includes("/issues?")) return Response.json([]);
+    if (url.includes("/actions/")) return Response.json({ workflow_runs: [] });
+    return Response.json({ sha: url.includes("pingdotgg") ? upstream : base });
+  };
+  try {
+    process.chdir(directory);
+    await plan();
+    const state = JSON.parse(readFileSync("sync-plan.json", "utf8"));
+    assert.equal(state.attempt, 1);
+    assert.equal(state.start, head);
+    assert.equal(state.upstream, upstream);
+  } finally {
+    process.chdir(previousDirectory);
+  }
+});

@@ -1,0 +1,21 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["decision", "summary", "edits"],
+  "properties": {
+    "decision": { "type": "string", "enum": ["ready", "blocked"] },
+    "summary": { "type": "string" },
+    "edits": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "content"],
+        "properties": {
+          "path": { "type": "string" },
+          "content": { "type": ["string", "null"] }
+        }
+      }
+    }
+  }
+}
