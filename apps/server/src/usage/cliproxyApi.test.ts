@@ -2,8 +2,9 @@ import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as TestClock from "effect/testing/TestClock";
-import { HttpClient, HttpClientResponse } from "effect/unstable/http";
+import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/unstable/http";
 
+import * as NetworkPolicy from "../networkPolicy.ts";
 import { creditRedeemRequestId, makeCliproxyApi } from "./cliproxyApi.ts";
 
 const config = {
@@ -308,3 +309,27 @@ describe("CLIProxyAPI built-in management API", () => {
     }),
   );
 });
+
+it.effect(
+  "uses the configured remote harness through the guarded transport without granting other requests",
+  () =>
+    Effect.gen(function* () {
+      const urls: string[] = [];
+      yield* Effect.gen(function* () {
+        const api = yield* makeCliproxyApi;
+        expect(yield* api.readAccounts(config)).toEqual([]);
+        const ungranted = yield* HttpClient.get(config.url).pipe(Effect.result);
+        expect(ungranted._tag).toBe("Failure");
+        expect(yield* NetworkPolicy.UserNetworkAccess).toBe(false);
+      }).pipe(
+        Effect.provide(NetworkPolicy.layer),
+        Effect.provideService(FetchHttpClient.Fetch, (url, init) => {
+          urls.push(String(url));
+          expect(new Headers(init?.headers).get("authorization")).toBe("Bearer management-secret");
+          expect(init?.redirect).toBe("manual");
+          return Promise.resolve(Response.json({ files: [] }));
+        }),
+      );
+      expect(urls).toEqual(["http://hub.test:8317/v0/management/auth-files"]);
+    }),
+);

@@ -22,6 +22,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
 import { GitCommandError, type ReviewDiffFileContentsInput } from "@t3tools/contracts";
 import { ServerConfig } from "../config.ts";
+import { UserNetworkAccess } from "../networkPolicy.ts";
 import { gitCommandDuration } from "../observability/Metrics.ts";
 import {
   makeGitVcsDriverCore,
@@ -32,10 +33,11 @@ import * as GitVcsDriver from "./GitVcsDriver.ts";
 
 const ServerConfigLayer = ServerConfig.layerTest(process.cwd(), {
   prefix: "t3-git-vcs-driver-test-",
-});
+}).pipe(Layer.merge(Layer.succeed(UserNetworkAccess, true)));
 const TestLayer = GitVcsDriver.layer.pipe(
   Layer.provide(ServerConfigLayer),
   Layer.provideMerge(NodeServices.layer),
+  Layer.merge(Layer.succeed(UserNetworkAccess, true)),
 );
 
 const makeNonRepositoryHandle = () =>
@@ -138,6 +140,36 @@ const initRepoWithCommit = (
     const initialBranch = yield* git(cwd, ["branch", "--show-current"]);
     return { initialBranch };
   });
+
+it.effect("guards direct Git processes and suppresses lazy fetch for background reads", () =>
+  Effect.gen(function* () {
+    const spawned: Array<ChildProcess.Command> = [];
+    const driver = yield* makeGitVcsDriverCore().pipe(
+      Effect.provideService(
+        ChildProcessSpawner.ChildProcessSpawner,
+        ChildProcessSpawner.make((command) => {
+          spawned.push(command);
+          return Effect.succeed(makeSuccessfulHandle(""));
+        }),
+      ),
+    );
+    const fetch = { operation: "test.network", cwd: "/repo", args: ["fetch", "origin"] };
+    const blocked = yield* driver
+      .execute(fetch)
+      .pipe(Effect.provideService(UserNetworkAccess, false), Effect.flip);
+    assert.equal(blocked.detail, "External Git operations require a user action in T2 Code.");
+    assert.equal(spawned.length, 0);
+    yield* driver.execute(fetch).pipe(Effect.provideService(UserNetworkAccess, true));
+    yield* driver
+      .execute({ ...fetch, args: ["show", "HEAD"] })
+      .pipe(Effect.provideService(UserNetworkAccess, false));
+    assert.equal(spawned.length, 2);
+    const read = spawned[1]!;
+    assert.isTrue(ChildProcess.isStandardCommand(read));
+    if (ChildProcess.isStandardCommand(read))
+      assert.equal(read.options.env?.GIT_NO_LAZY_FETCH, "1");
+  }).pipe(Effect.provide(ServerConfigLayer.pipe(Layer.provideMerge(NodeServices.layer)))),
+);
 
 it.effect("bounds Git bursts across drivers without timing out queued commands", () =>
   Effect.gen(function* () {

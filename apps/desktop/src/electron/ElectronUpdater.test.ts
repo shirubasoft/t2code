@@ -24,6 +24,10 @@ vi.mock("electron-updater", () => ({
   autoUpdater: autoUpdaterMock,
 }));
 
+vi.mock("./ElectronNetworkPolicy.ts", () => ({
+  withRequestedUpdateNetwork: (operation: () => Promise<unknown>) => operation(),
+}));
+
 import * as ElectronUpdater from "./ElectronUpdater.ts";
 
 describe("ElectronUpdater", () => {

@@ -334,7 +334,8 @@
     "./cliRelease": {
       "types": "./src/cliRelease.ts",
       "import": "./src/cliRelease.ts"
-    }
+    },
+    "./localNetwork": "./src/localNetwork.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

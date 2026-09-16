@@ -5,6 +5,7 @@ import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 
 import { autoUpdater } from "electron-updater";
+import { withRequestedUpdateNetwork } from "./ElectronNetworkPolicy.ts";
 
 type AutoUpdater = typeof autoUpdater;
 
@@ -126,14 +127,14 @@ export const make = ElectronUpdater.of({
   checkForUpdates: Effect.suspend(() => {
     const channel = autoUpdater.channel;
     return Effect.tryPromise({
-      try: () => autoUpdater.checkForUpdates(),
+      try: () => withRequestedUpdateNetwork(() => autoUpdater.checkForUpdates()),
       catch: (cause) => new ElectronUpdaterCheckForUpdatesError({ channel, cause }),
     }).pipe(Effect.asVoid);
   }),
   downloadUpdate: Effect.suspend(() => {
     const channel = autoUpdater.channel;
     return Effect.tryPromise({
-      try: () => autoUpdater.downloadUpdate(),
+      try: () => withRequestedUpdateNetwork(() => autoUpdater.downloadUpdate()),
       catch: (cause) => new ElectronUpdaterDownloadUpdateError({ channel, cause }),
     }).pipe(Effect.asVoid);
   }),

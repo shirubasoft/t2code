@@ -24,6 +24,7 @@ import type {
 } from "@t3tools/contracts";
 import { GitManagerError } from "@t3tools/contracts";
 
+import { UserNetworkAccess } from "../networkPolicy.ts";
 import * as VcsStatusBroadcaster from "./VcsStatusBroadcaster.ts";
 import * as BackgroundPolicy from "../background/BackgroundPolicy.ts";
 import * as GitWorkflowService from "../git/GitWorkflowService.ts";
@@ -587,6 +588,32 @@ describe("VcsStatusBroadcaster", () => {
       }).pipe(Effect.provide(testLayer));
     },
   );
+
+  it.effect("background refresh never inherits a caller's network permission", () => {
+    const observed = Deferred.makeUnsafe<boolean>();
+    const testLayer = VcsStatusBroadcaster.layer.pipe(
+      Layer.provideMerge(NodeServices.layer),
+      Layer.provide(makeBackgroundPolicyLayer(() => true)),
+      Layer.provide(
+        Layer.mock(GitWorkflowService.GitWorkflowService)({
+          localStatus: () => Effect.succeed(baseLocalStatus),
+          invalidateRemoteStatus: () => Effect.void,
+          remoteStatus: () =>
+            Effect.gen(function* () {
+              yield* Deferred.succeed(observed, yield* UserNetworkAccess);
+              return baseRemoteStatus;
+            }),
+        }),
+      ),
+    );
+    return Effect.gen(function* () {
+      const broadcaster = yield* VcsStatusBroadcaster.VcsStatusBroadcaster;
+      yield* broadcaster
+        .streamStatus({ cwd: "/repo" })
+        .pipe(Stream.runDrain, Effect.provideService(UserNetworkAccess, true), Effect.forkScoped);
+      assert.isFalse(yield* Deferred.await(observed));
+    }).pipe(Effect.provide(testLayer));
+  });
 
   it.effect("streams a local snapshot first and remote updates later", () => {
     const state = {

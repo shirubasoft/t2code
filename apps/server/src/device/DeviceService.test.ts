@@ -378,3 +378,15 @@ it.effect("keeps shutdown successful when subsequent discovery fails", () =>
     expect(state.devices.find((device) => device.id === session.deviceId)?.booted).toBe(false);
   }).pipe(Effect.scoped),
 );
+
+it.effect("rejects remote device probes without starting a host", () =>
+  Effect.gen(function* () {
+    const { service, starts, requests } = yield* fixture();
+    const error = yield* service
+      .testHost({ id: "remote", label: "Remote", target: "external.test" })
+      .pipe(Effect.flip);
+    expect(error).toMatchObject({ _tag: "DeviceHostUnavailableError" });
+    expect(starts).toEqual([]);
+    expect(requests).toEqual([]);
+  }),
+);

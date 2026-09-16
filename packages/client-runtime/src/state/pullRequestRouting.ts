@@ -361,6 +361,8 @@ export function createPullRequestRouter() {
     tag: T,
     input: EnvironmentRpcInput<T>,
   ) {
+    // Linked badges read the local cache; routing would probe forge credentials in the background.
+    if (tag === WS_METHODS.pullRequestsSummary) return yield* request(tag, input);
     if (!reads.has(tag) || !isRef(input)) return yield* routedRequest(tag, input);
     const registry = yield* EnvironmentRegistry;
     const entries = yield* SubscriptionRef.get(registry.entries);

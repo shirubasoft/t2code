@@ -1,3 +1,4 @@
+import { UserNetworkAccess } from "../networkPolicy.ts";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
@@ -636,6 +637,7 @@ export const make = Effect.gen(function* () {
             automaticRemoteRefreshInterval,
             refreshImmediately,
           ).pipe(
+            Effect.provideService(UserNetworkAccess, false),
             Effect.forkIn(broadcasterScope),
             Effect.map((fiber) => {
               const nextPollers = new Map(activePollers);

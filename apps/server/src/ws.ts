@@ -86,6 +86,7 @@ import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 
 import * as CheckpointDiffQuery from "./checkpointing/CheckpointDiffQuery.ts";
 import * as ServerConfig from "./config.ts";
+import { UserNetworkAccess, rpcAllowsNetwork } from "./networkPolicy.ts";
 import * as EnvironmentTheme from "./environmentTheme.ts";
 import * as Keybindings from "./keybindings.ts";
 import * as ExternalLauncher from "./process/externalLauncher.ts";
@@ -691,7 +692,10 @@ const makeWsRpcLayer = (
       ) =>
         instrumentRpcEffect(
           method,
-          authorizeEffect(requiredScopeForRpcMethod(method), effect),
+          authorizeEffect(
+            requiredScopeForRpcMethod(method),
+            effect.pipe(Effect.provideService(UserNetworkAccess, rpcAllowsNetwork(method))),
+          ),
           traceAttributes,
         );
       const observeRpcStream = <A, E, R>(
@@ -701,7 +705,10 @@ const makeWsRpcLayer = (
       ) =>
         instrumentRpcStream(
           method,
-          authorizeStream(requiredScopeForRpcMethod(method), stream),
+          authorizeStream(
+            requiredScopeForRpcMethod(method),
+            stream.pipe(Stream.provideService(UserNetworkAccess, rpcAllowsNetwork(method))),
+          ),
           traceAttributes,
         );
       const observeRpcStreamEffect = <A, StreamError, StreamContext, EffectError, EffectContext>(
@@ -715,7 +722,15 @@ const makeWsRpcLayer = (
       ) =>
         instrumentRpcStreamEffect(
           method,
-          authorizeEffect(requiredScopeForRpcMethod(method), effect),
+          authorizeEffect(
+            requiredScopeForRpcMethod(method),
+            effect.pipe(
+              Effect.map((stream) =>
+                stream.pipe(Stream.provideService(UserNetworkAccess, rpcAllowsNetwork(method))),
+              ),
+              Effect.provideService(UserNetworkAccess, rpcAllowsNetwork(method)),
+            ),
+          ),
           traceAttributes,
         );
       const toDispatchCommandError = (cause: unknown, fallbackMessage: string) =>
@@ -1788,14 +1803,8 @@ const makeWsRpcLayer = (
             observability: {
               logsDirectoryPath: config.logsDir,
               localTracingEnabled: true,
-              ...(config.otlpTracesUrl !== undefined
-                ? { otlpTracesUrl: config.otlpTracesUrl }
-                : {}),
-              otlpTracesEnabled: config.otlpTracesUrl !== undefined,
-              ...(config.otlpMetricsUrl !== undefined
-                ? { otlpMetricsUrl: config.otlpMetricsUrl }
-                : {}),
-              otlpMetricsEnabled: config.otlpMetricsUrl !== undefined,
+              otlpTracesEnabled: false,
+              otlpMetricsEnabled: false,
             },
             settings,
             shellResumeCompletionMarker: true,

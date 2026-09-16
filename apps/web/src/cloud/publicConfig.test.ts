@@ -11,7 +11,7 @@ afterEach(() => {
 });
 
 describe("hasCloudPublicConfig", () => {
-  it("requires both public cloud values", () => {
+  it("cannot enable hosted services through environment configuration", () => {
     vi.stubEnv("VITE_CLERK_PUBLISHABLE_KEY", "");
     vi.stubEnv("VITE_CLERK_JWT_TEMPLATE", "");
     vi.stubEnv("VITE_T3CODE_RELAY_URL", "");
@@ -24,7 +24,7 @@ describe("hasCloudPublicConfig", () => {
     expect(hasCloudPublicConfig()).toBe(false);
 
     vi.stubEnv("VITE_T3CODE_RELAY_URL", "https://relay.example.test");
-    expect(hasCloudPublicConfig()).toBe(true);
+    expect(hasCloudPublicConfig()).toBe(false);
   });
 
   it("rejects an insecure relay URL", () => {

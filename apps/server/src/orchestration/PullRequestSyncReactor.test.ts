@@ -14,6 +14,7 @@ import {
   type ThreadPullRequestSnapshot,
 } from "@t3tools/contracts";
 import { assert, describe, it } from "@effect/vitest";
+import { threadPullRequestKeyOf } from "@t3tools/shared/threadPullRequests";
 import * as Crypto from "effect/Crypto";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -24,6 +25,7 @@ import * as Stream from "effect/Stream";
 import { TestClock } from "effect/testing";
 
 import { PullRequestService } from "../pullRequest/PullRequestService.ts";
+import { UserNetworkAccess } from "../networkPolicy.ts";
 import { ServerActivation } from "../serverActivation.ts";
 import {
   OrchestrationEngineService,
@@ -233,23 +235,37 @@ const makeHarness = Effect.fn("makePullRequestSyncHarness")(function* (options: 
 
 type Harness = Effect.Success<ReturnType<typeof makeHarness>>;
 
+const refreshLinks = Effect.fn("refreshLinkedPullRequests")(function* (
+  fixture: Harness,
+  reactor: PullRequestSyncReactor.PullRequestSyncReactor["Service"],
+) {
+  const snapshot = yield* Ref.get(fixture.snapshots);
+  const refreshed = new Set<string>();
+  for (const thread of snapshot.threads) {
+    for (const link of thread.pullRequests) {
+      const key = threadPullRequestKeyOf(link);
+      if (link.source !== "stack-dismissed" && !refreshed.has(key)) {
+        refreshed.add(key);
+        yield* reactor.requestSync(link);
+      }
+    }
+  }
+  yield* reactor.drain;
+});
+
 const startAndSweep = Effect.fn("startPullRequestSyncHarness")(function* (fixture: Harness) {
   const reactor = yield* PullRequestSyncReactor.PullRequestSyncReactor;
   yield* reactor.start();
   yield* Deferred.succeed(fixture.activation, undefined);
-  yield* Queue.take(fixture.snapshotReads);
-  yield* reactor.drain;
-  return reactor;
+  const explicit = {
+    ...reactor,
+    requestSync: (key: Parameters<typeof reactor.requestSync>[0]) =>
+      reactor.requestSync(key).pipe(Effect.provideService(UserNetworkAccess, true)),
+  };
+  yield* refreshLinks(fixture, explicit);
+  return explicit;
 });
-
-const sweepAgain = Effect.fn("sweepPullRequestSyncHarness")(function* (
-  fixture: Harness,
-  reactor: PullRequestSyncReactor.PullRequestSyncReactor["Service"],
-) {
-  yield* TestClock.adjust("1 minute");
-  yield* Queue.take(fixture.snapshotReads);
-  yield* reactor.drain;
-});
+const sweepAgain = refreshLinks;
 
 /** What the reactor would have persisted, so the next sweep sees its own writes. */
 function applySync(
@@ -324,7 +340,7 @@ describe("PullRequestSyncReactor", () => {
         });
         yield* Effect.gen(function* () {
           const reactor = yield* startAndSweep(fixture);
-          assert.strictEqual((yield* Ref.get(fixture.stackCalls)).length, 0);
+          assert.strictEqual((yield* Ref.get(fixture.stackCalls)).length, 1);
           yield* reactor.requestSync({
             host: "github.com",
             repository: "owner/repository",
@@ -332,7 +348,7 @@ describe("PullRequestSyncReactor", () => {
           });
           yield* Queue.take(fixture.snapshotReads);
           yield* reactor.drain;
-          assert.strictEqual((yield* Ref.get(fixture.stackCalls)).length, 1);
+          assert.strictEqual((yield* Ref.get(fixture.stackCalls)).length, 2);
         }).pipe(Effect.provide(fixture.layer));
       }),
     ),
@@ -463,7 +479,7 @@ describe("PullRequestSyncReactor", () => {
 
           // Still open on an active thread, so the host was asked again, but nothing changed.
           assert.strictEqual((yield* Ref.get(fixture.summaryCalls)).length, 2);
-          assert.strictEqual((yield* Ref.get(fixture.stackCalls)).length, 1);
+          assert.strictEqual((yield* Ref.get(fixture.stackCalls)).length, 2);
           assert.strictEqual((yield* Ref.get(fixture.syncCommands)).length, 1);
         }).pipe(Effect.provide(fixture.layer));
       }),
@@ -514,66 +530,6 @@ describe("PullRequestSyncReactor", () => {
     ),
   );
 
-  it.effect("stops asking the host once a pull request is merged", () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        yield* TestClock.setTime(Date.parse(NOW));
-        const fixture = yield* makeHarness({
-          snapshot: makeSnapshot([
-            makeThread("merged", { pullRequests: [makeLink(1, { state: "merged" })] }),
-          ]),
-        });
-
-        yield* Effect.gen(function* () {
-          const reactor = yield* startAndSweep(fixture);
-          yield* sweepAgain(fixture, reactor);
-
-          assert.deepStrictEqual(yield* Ref.get(fixture.summaryCalls), []);
-          assert.deepStrictEqual(yield* Ref.get(fixture.syncCommands), []);
-
-          yield* reactor.requestSync({
-            host: "github.com",
-            repository: "owner/repository",
-            number: 1,
-          });
-          yield* Queue.take(fixture.snapshotReads);
-          yield* reactor.drain;
-
-          assert.deepStrictEqual(
-            (yield* Ref.get(fixture.summaryCalls)).map((call) => call.number),
-            [1],
-          );
-        }).pipe(Effect.provide(fixture.layer));
-      }),
-    ),
-  );
-
-  it.effect("discovers externally reopened pull requests after fifteen minutes", () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        yield* TestClock.setTime(Date.parse(NOW));
-        const state = yield* Ref.make<"closed" | "open">("closed");
-        const fixture = yield* makeHarness({
-          snapshot: makeSnapshot([
-            makeThread("closed", { pullRequests: [makeLink(2, { state: "closed" })] }),
-          ]),
-          summary: (input) =>
-            Ref.get(state).pipe(Effect.map((state) => makeSummary(input, { state }))),
-        });
-        yield* Effect.gen(function* () {
-          const reactor = yield* startAndSweep(fixture);
-          assert.strictEqual((yield* Ref.get(fixture.summaryCalls)).length, 1);
-          yield* Ref.set(state, "open");
-          for (let index = 0; index < 14; index += 1) yield* sweepAgain(fixture, reactor);
-          assert.strictEqual((yield* Ref.get(fixture.summaryCalls)).length, 1);
-          yield* sweepAgain(fixture, reactor);
-          assert.strictEqual((yield* Ref.get(fixture.summaryCalls)).length, 2);
-          assert.strictEqual((yield* Ref.get(fixture.syncCommands)).at(-1)?.snapshot.state, "open");
-        }).pipe(Effect.provide(fixture.layer));
-      }),
-    ),
-  );
-
   it.effect("preserves a refresh requested while an older host read is in flight", () =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -609,37 +565,6 @@ describe("PullRequestSyncReactor", () => {
           yield* reactor.drain;
           assert.strictEqual((yield* Ref.get(fixture.summaryCalls)).length, 2);
           assert.strictEqual((yield* Ref.get(fixture.syncCommands)).at(-1)?.snapshot.state, "open");
-        }).pipe(Effect.provide(fixture.layer));
-      }),
-    ),
-  );
-
-  it.effect("polls open pull requests on settled threads every fifteen minutes", () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        yield* TestClock.setTime(Date.parse(NOW));
-        const fixture = yield* makeHarness({
-          snapshot: makeSnapshot([
-            makeThread("settled", {
-              settledOverride: "settled",
-              settledAt: "2026-08-21T00:00:00.000Z",
-              pullRequests: [makeLink(5, { state: "open" })],
-            }),
-          ]),
-        });
-
-        yield* Effect.gen(function* () {
-          const reactor = yield* startAndSweep(fixture);
-          assert.strictEqual((yield* Ref.get(fixture.summaryCalls)).length, 1);
-
-          yield* sweepAgain(fixture, reactor);
-          assert.strictEqual((yield* Ref.get(fixture.summaryCalls)).length, 1);
-
-          for (let index = 0; index < 13; index += 1) yield* sweepAgain(fixture, reactor);
-          assert.strictEqual((yield* Ref.get(fixture.summaryCalls)).length, 1);
-
-          yield* sweepAgain(fixture, reactor);
-          assert.strictEqual((yield* Ref.get(fixture.summaryCalls)).length, 2);
         }).pipe(Effect.provide(fixture.layer));
       }),
     ),
@@ -723,6 +648,66 @@ describe("PullRequestSyncReactor", () => {
             (yield* Ref.get(fixture.syncCommands)).map((command) => command.number),
             [8],
           );
+        }).pipe(Effect.provide(fixture.layer));
+      }),
+    ),
+  );
+  it.effect(
+    "carries an explicit grant into the worker and refreshes only the requested pull request",
+    () =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const fixture = yield* makeHarness({
+            snapshot: makeSnapshot([
+              makeThread("many", { pullRequests: [makeLink(1), makeLink(2)] }),
+            ]),
+            summary: (input) =>
+              Effect.gen(function* () {
+                assert.strictEqual(yield* UserNetworkAccess, true);
+                return makeSummary(input);
+              }),
+          });
+          yield* Effect.gen(function* () {
+            const reactor = yield* PullRequestSyncReactor.PullRequestSyncReactor;
+            yield* reactor.start();
+            yield* reactor
+              .requestSync({ host: "github.com", repository: "owner/repository", number: 1 })
+              .pipe(Effect.provideService(UserNetworkAccess, true));
+            yield* reactor.drain;
+            assert.deepStrictEqual(
+              (yield* Ref.get(fixture.summaryCalls)).map((call) => call.number),
+              [1],
+            );
+            assert.deepStrictEqual(
+              (yield* Ref.get(fixture.syncCommands)).map((command) => command.number),
+              [1],
+            );
+            assert.strictEqual(yield* UserNetworkAccess, false);
+          }).pipe(Effect.provide(fixture.layer));
+        }),
+      ),
+  );
+
+  it.effect("does no startup or timer work, and an ungranted request schedules nothing", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const fixture = yield* makeHarness({
+          snapshot: makeSnapshot([makeThread("open", { pullRequests: [makeLink(1)] })]),
+        });
+        yield* Effect.gen(function* () {
+          const reactor = yield* PullRequestSyncReactor.PullRequestSyncReactor;
+          yield* reactor.start();
+          yield* Deferred.succeed(fixture.activation, undefined);
+          yield* reactor.requestSync({
+            host: "github.com",
+            repository: "owner/repository",
+            number: 1,
+          });
+          yield* TestClock.adjust("1 hour");
+          yield* reactor.drain;
+          assert.deepStrictEqual(yield* Ref.get(fixture.summaryCalls), []);
+          assert.deepStrictEqual(yield* Ref.get(fixture.stackCalls), []);
+          assert.deepStrictEqual(yield* Ref.get(fixture.syncCommands), []);
         }).pipe(Effect.provide(fixture.layer));
       }),
     ),
