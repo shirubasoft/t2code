@@ -61,7 +61,7 @@ jobs:
           node-version: 24
       - name: Test accepted privacy controls
         working-directory: control
-        run: node --test scripts/verify-private-build.test.mjs
+        run: node --test .github/t2code/verify-private-build.test.mjs
       - name: Validate using accepted policy
         working-directory: control
         run: node .github/t2code/check-candidate.mjs ../candidate
@@ -98,7 +98,7 @@ jobs:
         uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1
         with:
           node-version-file: package.json
-          cache: true
+          cache: false
           run-install: true
 
       - name: Ensure Electron runtime is installed
@@ -149,7 +149,7 @@ jobs:
         uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1
         with:
           node-version-file: package.json
-          cache: true
+          cache: false
           run-install: true
 
       - name: Ensure Electron runtime is installed
@@ -196,7 +196,7 @@ jobs:
         uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1
         with:
           node-version-file: package.json
-          cache: true
+          cache: false
           run-install: true
 
       # No Electron setup here: `t3` (apps/server) has no Electron dependency
@@ -295,7 +295,7 @@ jobs:
         uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1
         with:
           node-version-file: package.json
-          cache: true
+          cache: false
           run-install: |
             args:
               - --filter=@t3tools/scripts...

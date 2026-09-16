@@ -5,7 +5,7 @@ import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import * as NodeTest from "node:test";
-import { inventory, verifySource, verifyArtifacts } from "./verify-private-build.mjs";
+import { inventory, verifySource, verifyArtifacts } from "../../scripts/verify-private-build.mjs";
 
 function fixture(t) {
   const root = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t2-policy-"));

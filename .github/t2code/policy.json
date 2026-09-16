@@ -6,7 +6,6 @@
   "protectedPaths": [
     ".github/",
     "scripts/verify-private-build.mjs",
-    "scripts/verify-private-build.test.mjs",
     "scripts/private-build-policy.json",
     "scripts/build-desktop-artifact.ts",
     "scripts/build-desktop-artifact.test.ts",
