@@ -36,7 +36,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ inputs.pr || github.event.pull_request.number || github.sha }}
+  group: ci-${{ github.workflow }}-${{ inputs.pr != '0' && inputs.pr || github.event.pull_request.number || inputs.sha || github.sha }}
   cancel-in-progress: true
 
 jobs:
