@@ -3,17 +3,17 @@ import * as NodeFS from "node:fs";
 import { assert, describe, it } from "vite-plus/test";
 import * as Schema from "effect/Schema";
 import { fromYaml } from "@t3tools/shared/schemaYaml";
-import desktopPackage from "../../apps/desktop/package.json" with { type: "json" };
-import serverPackage from "../../apps/server/package.json" with { type: "json" };
+import desktopPackage from "../apps/desktop/package.json" with { type: "json" };
+import serverPackage from "../apps/server/package.json" with { type: "json" };
 import {
   createStageWorkspaceConfig,
   resolveDesktopRuntimeDependencies,
   resolveFffNativeDependencies,
   resolveMergedStageDependencies,
-} from "../build-desktop-artifact.ts";
-import { selectCliRuntimeExternalDependencies } from "./cli-external-packages.ts";
-import { resolveCatalogDependencies } from "./resolve-catalog.ts";
-import { createStagingLockfile } from "./staging-lockfile.ts";
+} from "./build-desktop-artifact.ts";
+import { selectCliRuntimeExternalDependencies } from "./lib/cli-external-packages.ts";
+import { resolveCatalogDependencies } from "./lib/resolve-catalog.ts";
+import { createStagingLockfile } from "./lib/staging-lockfile.ts";
 
 function fixture() {
   const lock = {
@@ -103,12 +103,9 @@ describe("reviewed staging lockfile", () => {
     assert.throws(() => missingIntegrity.derive(), /Missing reviewed package integrity/);
   });
 
-  const rootLockfile = NodeFS.readFileSync(
-    new URL("../../pnpm-lock.yaml", import.meta.url),
-    "utf8",
-  );
+  const rootLockfile = NodeFS.readFileSync(new URL("../pnpm-lock.yaml", import.meta.url), "utf8");
   const rootWorkspace = NodeFS.readFileSync(
-    new URL("../../pnpm-workspace.yaml", import.meta.url),
+    new URL("../pnpm-workspace.yaml", import.meta.url),
     "utf8",
   );
   const workspace = Schema.decodeUnknownSync(

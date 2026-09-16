@@ -1098,7 +1098,7 @@
     "packages/shared/src/localNetwork.ts": "c2c3d908a70e4a2e0ce0464aa76d98dd80c52edb135c462fef3d032751f5c34c",
     "packages/shared/src/observability.ts": "7a6a6e9c28cce8afe0b4074373454e97db7d38f309c996b96665a72be358ed5a",
     "patches/electron-updater@6.8.3.patch": "9c43917f4c49d90934cb57589209e4305c4d5ae649f35ff673b7acac4aeea598",
-    "scripts/lib/staging-lockfile.test.ts": "b80b578c372ae5b220ed0af20c20bf5e9817129a2940c4b4e3257aaa194e4e51",
-    "scripts/lib/staging-lockfile.ts": "aab2bd30e8236532b40bc29b5ac8d948882148204b58ea7096b740c33c2ce807"
+    "scripts/lib/staging-lockfile.ts": "aab2bd30e8236532b40bc29b5ac8d948882148204b58ea7096b740c33c2ce807",
+    "scripts/staging-lockfile.test.ts": "de864a0e7952c067f91f6903186ccba3d98faa9b7f2dc74e98df556023de3245"
   }
 }
