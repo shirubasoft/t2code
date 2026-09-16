@@ -6,6 +6,7 @@ import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import * as NodeTest from "node:test";
 import * as NodeURL from "node:url";
+import { parseUpdateManifest, serializeUpdateManifest } from "../../scripts/lib/update-manifest.ts";
 
 const script = NodeURL.fileURLToPath(new URL("release.mjs", import.meta.url));
 const version = "0.1.42";
@@ -38,21 +39,27 @@ function fixture() {
   NodeFS.mkdirSync(assets);
   const bytes = Buffer.from("installer fixture");
   const hash = NodeCrypto.createHash("sha512").update(bytes).digest("base64");
-  for (const arch of ["x64", "arm64"]) {
-    for (const ext of ["dmg", "AppImage", "exe"])
-      NodeFS.writeFileSync(NodePath.join(assets, `T2-Code-${version}-${arch}.${ext}`), bytes);
+  for (const [arch, ext] of [
+    ["x64", "dmg"],
+    ["arm64", "dmg"],
+    ["x86_64", "AppImage"],
+    ["arm64", "AppImage"],
+    ["x64", "exe"],
+    ["arm64", "exe"],
+  ]) {
+    NodeFS.writeFileSync(NodePath.join(assets, `T2-Code-${version}-${arch}.${ext}`), bytes);
   }
   for (const [name, arch, ext] of [
     ["latest-mac.yml", "arm64", "dmg"],
     ["latest-mac-x64.yml", "x64", "dmg"],
     ["latest-win-x64.yml", "x64", "exe"],
     ["latest-win-arm64.yml", "arm64", "exe"],
-    ["latest-linux.yml", "x64", "AppImage"],
+    ["latest-linux.yml", "x86_64", "AppImage"],
     ["latest-linux-arm64.yml", "arm64", "AppImage"],
   ]) {
     NodeFS.writeFileSync(
       NodePath.join(assets, name),
-      `version: ${version}\nfiles:\n  - url: T2-Code-${version}-${arch}.${ext}\n    sha512: ${hash}\n    size: ${bytes.length}\nreleaseDate: '2026-09-16T00:00:00.000Z'\n`,
+      `version: ${version}\nfiles:\n  - url: T2-Code-${version}-${arch}.${ext}\n    sha512: ${hash}\n    size: ${bytes.length}\n${ext === "AppImage" ? "    blockMapSize: 4\n" : ""}releaseDate: '2026-09-16T00:00:00.000Z'\n`,
     );
   }
   return {
@@ -117,6 +124,22 @@ NodeTest.test("release assembly rejects external update URLs", () => {
   const result = assemble();
   NodeAssert.notEqual(result.status, 0);
   NodeAssert.match(result.stderr, /External or unsafe update asset/);
+});
+
+NodeTest.test("the actual AppImage manifest shape retains its embedded block map size", () => {
+  const { assets } = fixture();
+  const raw = NodeFS.readFileSync(NodePath.join(assets, "latest-linux.yml"), "utf8");
+  const parsed = parseUpdateManifest(raw, "latest-linux.yml", "Linux");
+  NodeAssert.equal(parsed.files[0].url, `T2-Code-${version}-x86_64.AppImage`);
+  NodeAssert.equal(parsed.files[0].blockMapSize, 4);
+  NodeAssert.deepEqual(
+    parseUpdateManifest(
+      serializeUpdateManifest(parsed, { platformLabel: "Linux" }),
+      "roundtrip.yml",
+      "Linux",
+    ),
+    parsed,
+  );
 });
 
 NodeTest.test("release assembly rejects modified installer bytes and missing architectures", () => {

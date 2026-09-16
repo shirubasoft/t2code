@@ -117,6 +117,7 @@ function createWindow(
     title: "T3 Code Snapshot Animation",
     transparent: true,
     webPreferences: {
+      spellcheck: false,
       backgroundThrottling: false,
       contextIsolation: true,
       nodeIntegration: false,

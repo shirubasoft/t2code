@@ -131,7 +131,7 @@ jobs:
         shell: bash
         run: |
           sudo apt-get update
-          sudo apt-get install -y libsecret-1-dev pkg-config strace iproute2
+          sudo apt-get install -y libsecret-1-dev pkg-config strace iproute2 xvfb xauth libnss3 libgbm1 libasound2t64 libgtk-3-0 libnotify4 libxss1 libxtst6
           if ! command -v magick >/dev/null 2>&1 && ! command -v convert >/dev/null 2>&1; then
               sudo apt-get install -y imagemagick
           fi
@@ -162,6 +162,20 @@ jobs:
           fi
 
           vp run dist:desktop:artifact "${args[@]}"
+
+      - name: Verify packaged desktop starts without external network attempts
+        if: inputs.platform == 'linux'
+        shell: bash
+        run: bash .github/t2code/desktop-network-smoke.sh release/*.AppImage
+
+      - name: Retain packaged desktop smoke evidence
+        if: always() && inputs.platform == 'linux'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: smoke-evidence-linux-${{ inputs.arch }}
+          path: desktop-smoke-evidence/
+          if-no-files-found: ignore
+          retention-days: 3
 
       # The single-executable is built with a Node that supports --build-sea
       # (25.7+); the repo itself stays on the engines.node version. It always

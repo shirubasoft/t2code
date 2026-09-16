@@ -12,7 +12,8 @@ sudo -n unshare --net -- /bin/bash -s -- "$node_path" "$1" "$2" "$trace" "$PWD" 
 set -euo pipefail
 ip link set lo up
 cd "$5"
-exec runuser -u "$6" -- timeout 90 strace -f -qq -s 256 -e trace=network -o "$4" \
+exec runuser -u "$6" -- timeout 90 strace -f -qq -yy -s 256 \
+  -e trace=network,write,writev,sendfile,splice,vmsplice,close,dup,dup2,dup3,fcntl -o "$4" \
   "$1" scripts/smoke-cli-archive.ts --archive "$2" --expect-version "$3"
 SMOKE
 node .github/t2code/verify-network-trace.mjs "$trace"

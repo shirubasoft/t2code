@@ -168,7 +168,14 @@ describe("ElectronWindow", () => {
       assert.strictEqual(error.cause, cause);
       assert.equal(error.message, 'Failed to create Electron BrowserWindow "T3 Code" (1100x780).');
       assert.notInclude(error.message, cause.message);
-      assert.deepEqual(browserWindowMock.mock.calls, [[options]]);
+      assert.deepEqual(browserWindowMock.mock.calls, [
+        [
+          {
+            ...options,
+            webPreferences: { ...options.webPreferences, spellcheck: false },
+          },
+        ],
+      ]);
     }).pipe(Effect.provide(TestLayer)),
   );
 

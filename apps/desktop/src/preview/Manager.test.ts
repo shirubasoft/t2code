@@ -3077,6 +3077,7 @@ describe("PreviewManager", () => {
             skipTaskbar: true,
             webPreferences: expect.objectContaining({
               preload: "/tmp/t3/desktop/preview-pip-preload.cjs",
+              spellcheck: false,
               backgroundThrottling: false,
             }),
           }),

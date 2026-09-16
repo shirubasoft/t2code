@@ -527,6 +527,7 @@ const POPUP_WINDOW_OPTIONS = {
     contextIsolation: true,
     nodeIntegration: false,
     sandbox: true,
+    spellcheck: false,
   },
 } satisfies Electron.BrowserWindowConstructorOptions;
 
@@ -3150,6 +3151,7 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
               ...(hostPlatform === "darwin" ? { type: "panel" as const } : {}),
               webPreferences: {
                 preload: pictureInPicturePreloadPath,
+                spellcheck: false,
                 backgroundThrottling: false,
                 contextIsolation: true,
                 nodeIntegration: false,

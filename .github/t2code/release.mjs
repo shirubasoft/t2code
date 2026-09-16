@@ -60,7 +60,8 @@ function assemble() {
   mergeManifests(directory, "latest-win-x64.yml", "latest-win-arm64.yml", "latest.yml", "Windows");
   for (const arch of ["x64", "arm64"]) {
     for (const ext of ["dmg", "AppImage", "exe"]) {
-      if (!existsSync(resolve(directory, `T2-Code-${version}-${arch}.${ext}`)))
+      const artifactArch = ext === "AppImage" && arch === "x64" ? "x86_64" : arch;
+      if (!existsSync(resolve(directory, `T2-Code-${version}-${artifactArch}.${ext}`)))
         throw new Error(`Missing ${arch} ${ext} installer.`);
     }
   }

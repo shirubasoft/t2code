@@ -2,7 +2,11 @@ import { describe, expect, it, vi } from "vite-plus/test";
 
 const { created, updater } = vi.hoisted(() => ({
   created: { listener: undefined as ((session: unknown) => void) | undefined },
-  updater: { webRequest: { onBeforeRequest: vi.fn() } },
+  updater: {
+    webRequest: { onBeforeRequest: vi.fn() },
+    setSpellCheckerLanguages: vi.fn(),
+    setSpellCheckerEnabled: vi.fn(),
+  },
 }));
 vi.mock("electron", () => ({
   app: {
@@ -56,8 +60,16 @@ describe("desktop network policy", () => {
       request: { url: string },
       callback: (result: { cancel: boolean }) => void,
     ) => void;
-    const renderer = { webRequest: { onBeforeRequest: vi.fn() } };
+    const renderer = {
+      webRequest: { onBeforeRequest: vi.fn() },
+      setSpellCheckerLanguages: vi.fn(),
+      setSpellCheckerEnabled: vi.fn(),
+    };
     created.listener?.(renderer);
+    expect(updater.setSpellCheckerLanguages).toHaveBeenCalledWith([]);
+    expect(renderer.setSpellCheckerLanguages).toHaveBeenCalledWith([]);
+    expect(updater.setSpellCheckerEnabled).toHaveBeenCalledWith(false);
+    expect(renderer.setSpellCheckerEnabled).toHaveBeenCalledWith(false);
     const rendererHandler = renderer.webRequest.onBeforeRequest.mock.calls.at(
       -1,
     )?.[0] as typeof handler;

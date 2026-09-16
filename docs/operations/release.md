@@ -45,8 +45,10 @@ skipped. Versions use `0.1.<release workflow run number>`.
 Each release contains macOS DMGs, Linux AppImages, and Windows installers for
 both x64 and arm64, plus standalone CLI archives for macOS arm64, Linux x64/arm64,
 and Windows x64/arm64. macOS x64 uses the desktop app; upstream's Node
-single-executable packaging does not support that CLI target. Linux CLI smoke tests
-run with only loopback networking and reject attempted external connections.
+single-executable packaging does not support that CLI target. Linux CLI and desktop
+smoke tests run with only loopback networking and reject external requests or
+packet transmissions. The desktop check uses a fresh profile, completes local onboarding,
+and opens Settings before an installer can be published.
 
 `SHA256SUMS` covers the attached files. `provenance.json` identifies the exact fork
 commit and, for automated syncs, the upstream commit. Update feeds reference only

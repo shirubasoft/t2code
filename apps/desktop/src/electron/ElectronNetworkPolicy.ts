@@ -54,6 +54,10 @@ export async function withRequestedUpdateNetwork<A>(operation: () => Promise<A>)
 /** Cover the main window and every preview partition before their first request. */
 export function installLocalNetworkPolicy(): void {
   const configure = (session: Electron.Session) => {
+    // The session constructor queues dictionary loads before this event. Clearing
+    // languages cancels those loads; disabling spellcheck alone does not.
+    session.setSpellCheckerLanguages([]);
+    session.setSpellCheckerEnabled(false);
     session.webRequest.onBeforeRequest((details, callback) => {
       const allowed =
         isLocalRendererRequest(details.url) ||
