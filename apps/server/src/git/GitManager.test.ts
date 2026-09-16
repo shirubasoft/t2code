@@ -48,6 +48,7 @@ import * as ProjectSetupScriptRunner from "../project/ProjectSetupScriptRunner.t
 import * as ProviderRegistry from "../provider/Services/ProviderRegistry.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as GitManager from "./GitManager.ts";
+import { UserNetworkAccess } from "../networkPolicy.ts";
 
 const encodeCliJson = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
 const decodeForgejoPullRequest = Schema.decodeEffect(ForgejoPullRequestSchema);
@@ -224,7 +225,7 @@ function runGit(
       stdout: result.stdout,
       stderr: result.stderr,
     };
-  });
+  }).pipe(Effect.provideService(UserNetworkAccess, true));
 }
 
 function initRepo(
@@ -606,27 +607,31 @@ function runStackedAction(
   },
   options?: Parameters<GitManager.GitManager["Service"]["runStackedAction"]>[1],
 ) {
-  return manager.runStackedAction(
-    {
-      ...input,
-      actionId: input.actionId ?? "test-action-id",
-    },
-    options,
-  );
+  return manager
+    .runStackedAction(
+      {
+        ...input,
+        actionId: input.actionId ?? "test-action-id",
+      },
+      options,
+    )
+    .pipe(Effect.provideService(UserNetworkAccess, true));
 }
 
 function resolvePullRequest(
   manager: GitManager.GitManager["Service"],
   input: { cwd: string; reference: string },
 ) {
-  return manager.resolvePullRequest(input);
+  return manager.resolvePullRequest(input).pipe(Effect.provideService(UserNetworkAccess, true));
 }
 
 function preparePullRequestThread(
   manager: GitManager.GitManager["Service"],
   input: GitPreparePullRequestThreadInput,
 ) {
-  return manager.preparePullRequestThread(input);
+  return manager
+    .preparePullRequestThread(input)
+    .pipe(Effect.provideService(UserNetworkAccess, true));
 }
 
 function makeManager(input?: {
