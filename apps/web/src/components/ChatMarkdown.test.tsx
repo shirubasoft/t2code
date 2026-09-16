@@ -141,7 +141,7 @@ describe("ChatMarkdown context references", () => {
 });
 
 describe("ChatMarkdown favicon privacy", () => {
-  it("suppresses private link images while preserving public links across updates", async () => {
+  it("preserves links across updates without requesting external favicon images", async () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     let renderer: ReactTestRenderer | undefined;
     const markdown = (url: string) => <ChatMarkdown cwd="/tmp/project" text={`[Link](${url})`} />;
@@ -149,25 +149,29 @@ describe("ChatMarkdown favicon privacy", () => {
       await act(async () => {
         renderer = create(markdown("https://example.com"));
       });
-      expect(renderer!.root.findAllByType("img").map((image) => image.props.src)).toEqual([
-        "https://www.google.com/s2/favicons?domain=example.com&sz=32",
-      ]);
+      expect(renderer!.root.findAllByType("img")).toHaveLength(0);
+      expect(renderer!.root.findByType("a").props.href).toBe("https://example.com");
       for (const url of ["http://192.168.1.10:8080", "http://localhost:3000", "http://home.arpa"]) {
         await act(async () => {
           renderer!.update(markdown(url));
         });
         expect(renderer!.root.findAllByType("img")).toHaveLength(0);
+        expect(renderer!.root.findByType("a").props.href).toBe(url);
       }
       await act(async () => {
         renderer!.update(markdown("https://example.com"));
       });
-      expect(renderer!.root.findAllByType("img")).toHaveLength(1);
+      expect(renderer!.root.findAllByType("img")).toHaveLength(0);
+      expect(renderer!.root.findByType("a").props.href).toBe("https://example.com");
       // GitHub links draw the brand mark in currentColor instead of fetching a favicon.
       await act(async () => {
         renderer!.update(markdown("https://github.com/pingdotgg/t3code/pull/1"));
       });
       expect(renderer!.root.findAllByType("img")).toHaveLength(0);
       expect(renderer!.root.findAllByType(GitHubIcon)).toHaveLength(1);
+      expect(renderer!.root.findByType("a").props.href).toBe(
+        "https://github.com/pingdotgg/t3code/pull/1",
+      );
     } finally {
       await act(async () => {
         renderer?.unmount();
