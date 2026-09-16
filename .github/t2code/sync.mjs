@@ -208,8 +208,19 @@ export function prepareMerge(state, cwd = process.cwd()) {
     const existsAtBase =
       git(["cat-file", "-e", `${state.base}:${path}`], { cwd, allowFailure: true }).status === 0;
     if (existsAtBase)
-      git(["restore", `--source=${state.base}`, "--staged", "--worktree", "--", path], { cwd });
-    else git(["rm", "--force", "--ignore-unmatch", "--", path], { cwd });
+      git(
+        [
+          "--literal-pathspecs",
+          "restore",
+          `--source=${state.base}`,
+          "--staged",
+          "--worktree",
+          "--",
+          path,
+        ],
+        { cwd },
+      );
+    else git(["--literal-pathspecs", "rm", "--force", "--ignore-unmatch", "--", path], { cwd });
   }
   const conflicts = git(["diff", "--name-only", "--diff-filter=U"], { cwd }).stdout;
   writeFileSync(
@@ -290,7 +301,7 @@ export function applyEdits(result, cwd = process.cwd()) {
       mkdirSync(dirname(target), { recursive: true });
       writeFileSync(target, edit.content);
     }
-    git(["add", "--all", "--", edit.path], { cwd });
+    git(["--literal-pathspecs", "add", "--all", "--", edit.path], { cwd });
   }
   const conflicts = git(["diff", "--name-only", "--diff-filter=U"], { cwd }).stdout;
   if (conflicts) throw new Error(`Unresolved conflicts:\n${conflicts}`);

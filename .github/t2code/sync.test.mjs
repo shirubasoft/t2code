@@ -3,7 +3,8 @@ const assert = NodeAssert;
 import * as NodeChildProcess from "node:child_process";
 const { spawnSync } = NodeChildProcess;
 import * as NodeFS from "node:fs";
-const { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } = NodeFS;
+const { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } =
+  NodeFS;
 import * as NodeOS from "node:os";
 const { tmpdir } = NodeOS;
 import * as NodePath from "node:path";
@@ -15,6 +16,7 @@ import {
   assertEditable,
   finishValidation,
   plan,
+  prepareMerge,
   recordBlocked,
   validationTitle,
 } from "./sync.mjs";
@@ -37,6 +39,101 @@ function repository() {
   assert.equal(result.status, 0);
   return directory;
 }
+
+function git(directory, args) {
+  const result = spawnSync(
+    "git",
+    [
+      "-c",
+      "core.hooksPath=/dev/null",
+      "-c",
+      "core.fsmonitor=false",
+      "-c",
+      "user.name=Test",
+      "-c",
+      "user.email=test@example.invalid",
+      ...args,
+    ],
+    { cwd: directory, encoding: "utf8" },
+  );
+  assert.equal(result.status, 0, result.stderr);
+  return result.stdout.trimEnd();
+}
+
+function mergeFixture(baseFiles, upstreamFiles) {
+  const root = repository();
+  const directory = join(root, "candidate");
+  mkdirSync(directory);
+  git(root, ["init", directory]);
+  const put = (files) => {
+    for (const [path, content] of Object.entries(files)) {
+      mkdirSync(NodePath.dirname(join(directory, path)), { recursive: true });
+      writeFileSync(join(directory, path), content);
+    }
+  };
+  put(baseFiles);
+  git(directory, ["add", "--all"]);
+  git(directory, ["commit", "-m", "accepted base"]);
+  const base = git(directory, ["rev-parse", "HEAD"]);
+  put(upstreamFiles);
+  git(directory, ["add", "--all"]);
+  git(directory, ["commit", "-m", "upstream"]);
+  const upstream = git(directory, ["rev-parse", "HEAD"]);
+  git(directory, ["checkout", "--detach", base]);
+  git(directory, ["remote", "add", "origin", directory]);
+  // Redirect the controller's fixed upstream URL to this isolated repository.
+  git(directory, [
+    "config",
+    `url.${directory}/.insteadOf`,
+    "https://github.com/pingdotgg/t3code.git",
+  ]);
+  return { directory, state: { base, upstream, start: base, attempt: 1 } };
+}
+
+test("merge cleanup removes literal metacharacter filenames without removing accepted workflows", () => {
+  const accepted = {
+    ".github/workflows/ci.yml": "accepted CI\n",
+    ".github/workflows/release.yml": "accepted release\n",
+  };
+  const added = {
+    ".github/workflows/ci[.]yml": "untrusted CI\n",
+    ".github/workflows/release[.]yml": "untrusted release\n",
+  };
+  const { directory, state } = mergeFixture(accepted, added);
+  prepareMerge(state, directory);
+  for (const [path, content] of Object.entries(accepted)) {
+    assert.equal(readFileSync(join(directory, path), "utf8"), content);
+    assert.equal(git(directory, ["show", `:${path}`]), content.trimEnd());
+  }
+  for (const path of Object.keys(added)) assert.equal(existsSync(join(directory, path)), false);
+  assert.equal(git(directory, ["diff", "--cached", "--name-only", state.base]), "");
+});
+
+test("merge cleanup restores accepted protected filenames literally", () => {
+  const path = ".github/workflows/ci[.]yml";
+  const { directory, state } = mergeFixture(
+    { [path]: "accepted literal\n", ".github/workflows/ci.yml": "accepted CI\n" },
+    { [path]: "untrusted replacement\n" },
+  );
+  prepareMerge(state, directory);
+  assert.equal(readFileSync(join(directory, path), "utf8"), "accepted literal\n");
+  assert.equal(git(directory, ["diff", "--cached", "--name-only", state.base]), "");
+});
+
+test("agent edits stage only the literal filename containing metacharacters", () => {
+  const directory = repository();
+  writeFileSync(join(directory, "source.ts"), "accepted\n");
+  git(directory, ["add", "--all"]);
+  git(directory, ["commit", "-m", "accepted base"]);
+  writeFileSync(join(directory, "source.ts"), "unrelated unstaged change\n");
+  applyEdits(
+    { decision: "ready", edits: [{ path: "source[.]ts", content: "requested edit\n" }] },
+    directory,
+  );
+  assert.equal(git(directory, ["diff", "--cached", "--name-only"]), "source[.]ts");
+  assert.equal(git(directory, ["show", ":source.ts"]), "accepted");
+  assert.equal(git(directory, ["show", ":source[.]ts"]), "requested edit");
+});
 
 test("agent edits cannot modify trust controls or escape the checkout", () => {
   for (const path of [
