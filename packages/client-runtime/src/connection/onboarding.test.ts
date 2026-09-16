@@ -80,11 +80,26 @@ function pairingHttpLayer(
 }
 
 describe("connection onboarding", () => {
+  it.effect("rejects an external pairing target before discovery or token exchange", () =>
+    Effect.gen(function* () {
+      const calls: Array<{ readonly url: string; readonly init: RequestInit }> = [];
+      const result = yield* preparePairingRegistration({
+        host: "remote.example.test",
+        pairingCode: "private-pairing-token",
+      }).pipe(
+        Effect.provide(Layer.mergeAll(CLIENT_PRESENTATION_LAYER, pairingHttpLayer(calls))),
+        Effect.result,
+      );
+      expect(result._tag).toBe("Failure");
+      expect(calls).toEqual([]);
+    }),
+  );
+
   it.effect("prepares a persisted bearer registration from pairing details", () =>
     Effect.gen(function* () {
       const calls: Array<{ readonly url: string; readonly init: RequestInit }> = [];
       const registration = yield* preparePairingRegistration({
-        host: "remote.example.test",
+        host: "http://127.0.0.1:3773",
         pairingCode: "pairing-token",
       }).pipe(Effect.provide(Layer.mergeAll(CLIENT_PRESENTATION_LAYER, pairingHttpLayer(calls))));
 
@@ -99,16 +114,16 @@ describe("connection onboarding", () => {
           environmentId: "environment-paired",
           label: "Paired environment",
           connectionId: "bearer:environment-paired",
-          httpBaseUrl: "https://remote.example.test/",
-          wsBaseUrl: "wss://remote.example.test/",
+          httpBaseUrl: "http://127.0.0.1:3773/",
+          wsBaseUrl: "ws://127.0.0.1:3773/",
         },
         credential: {
           token: "bearer-token",
         },
       });
       expect(calls.map((call) => call.url)).toEqual([
-        "https://remote.example.test/.well-known/t3/environment",
-        "https://remote.example.test/oauth/token",
+        "http://127.0.0.1:3773/.well-known/t3/environment",
+        "http://127.0.0.1:3773/oauth/token",
       ]);
 
       const tokenRequest = calls.find((call) => call.url.endsWith("/oauth/token"));
@@ -127,7 +142,7 @@ describe("connection onboarding", () => {
     Effect.gen(function* () {
       const calls: Array<{ readonly url: string; readonly init: RequestInit }> = [];
       const error = yield* preparePairingRegistration({
-        host: "remote.example.test",
+        host: "http://127.0.0.1:3773",
         pairingCode: "pairing-token",
       }).pipe(
         Effect.provide(
@@ -140,7 +155,7 @@ describe("connection onboarding", () => {
       );
       expect(error).toMatchObject({ reason: "unsupported" });
       expect(calls.map((call) => call.url)).toEqual([
-        "https://remote.example.test/.well-known/t3/environment",
+        "http://127.0.0.1:3773/.well-known/t3/environment",
       ]);
     }),
   );
@@ -150,7 +165,7 @@ describe("connection onboarding", () => {
       const calls: Array<{ readonly url: string; readonly init: RequestInit }> = [];
 
       yield* preparePairingRegistration({
-        host: "remote.example.test",
+        host: "http://127.0.0.1:3773",
         pairingCode: "pairing-token",
       }).pipe(
         Effect.provide(
@@ -163,7 +178,7 @@ describe("connection onboarding", () => {
       );
 
       expect(calls.map((call) => call.url)).toEqual([
-        "https://remote.example.test/.well-known/t3/environment",
+        "http://127.0.0.1:3773/.well-known/t3/environment",
       ]);
     }),
   );

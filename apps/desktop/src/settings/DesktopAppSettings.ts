@@ -230,7 +230,7 @@ function normalizeDesktopSettingsDocument(
     (parsed.wslBackendEnabled === undefined && parsed.wslMode === "wsl");
 
   return {
-    localEnvironmentEnabled: parsed.localEnvironmentEnabled !== false,
+    localEnvironmentEnabled: true,
     linuxPasswordStore: normalizeLinuxPasswordStorePreference(parsed.linuxPasswordStore),
     mainWindowBounds,
     mainWindowMaximized: mainWindowBounds !== null && parsed.mainWindowMaximized === true,
@@ -381,10 +381,10 @@ function setWslOnly(settings: DesktopSettings, enabled: boolean): DesktopSetting
       };
 }
 
-function setLocalEnvironmentEnabled(settings: DesktopSettings, enabled: boolean): DesktopSettings {
-  return settings.localEnvironmentEnabled === enabled
+function setLocalEnvironmentEnabled(settings: DesktopSettings, _enabled: boolean): DesktopSettings {
+  return settings.localEnvironmentEnabled
     ? settings
-    : { ...settings, localEnvironmentEnabled: enabled };
+    : { ...settings, localEnvironmentEnabled: true };
 }
 
 function applyWslWindowsFallback(settings: DesktopSettings): DesktopSettings {

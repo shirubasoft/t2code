@@ -35,8 +35,6 @@ describe("faviconUrlForOrigin", () => {
     ]) {
       expect(faviconUrlForOrigin(url)).toBeNull();
     }
-    expect(faviconUrlForOrigin("https://example.com/path", 32)).toBe(
-      "https://www.google.com/s2/favicons?domain=example.com&sz=32",
-    );
+    expect(faviconUrlForOrigin("https://example.com/path", 32)).toBeNull();
   });
 });

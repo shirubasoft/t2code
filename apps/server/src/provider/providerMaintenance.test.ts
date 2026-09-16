@@ -9,6 +9,7 @@ import { ProviderDriverKind, ProviderInstanceId, type ServerProvider } from "@t3
 import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
+import { UserNetworkAccess } from "../networkPolicy.ts";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import { HttpClient } from "effect/unstable/http";
@@ -180,6 +181,23 @@ it.layer(NodeServices.layer)("providerMaintenance", (it) => {
           latestVersion: null,
           checkedAt: "2026-04-10T00:00:00.000Z",
         });
+      }),
+    ),
+  );
+
+  it.effect("background refresh never queries the registry even with update checks enabled", () =>
+    enrichProviderSnapshotWithVersionAdvisory(installedPackageToolProvider, manualPackageTool, {
+      enableProviderUpdateChecks: true,
+    }).pipe(
+      Effect.provideService(UserNetworkAccess, false),
+      Effect.provideService(ProviderVersionCache, new Map()),
+      Effect.provideService(
+        HttpClient.HttpClient,
+        HttpClient.make(() => Effect.die("Background refresh must not query a provider registry")),
+      ),
+      Effect.map((provider) => {
+        expect(provider.versionAdvisory?.status).toBe("unknown");
+        expect(provider.versionAdvisory?.latestVersion).toBeNull();
       }),
     ),
   );

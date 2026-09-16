@@ -83,19 +83,19 @@ describe("searchSettings", () => {
       searchSettings("remote pairing")
         .slice(0, 2)
         .map((item) => item.id),
-    ).toEqual(["network-access", "connections-environment"]);
+    ).toEqual([]);
   });
 
   it("finds settings that used to be reachable only through their section", () => {
     expect(searchSettings("pull request template")[0]?.id).toBe("follow-change-request-templates");
     expect(searchSettings("git security keys")[0]?.id).toBe("git-fetch-interval");
-    expect(searchSettings("push notifications")[0]?.id).toBe("publish-agent-activity");
+    expect(searchSettings("push notifications")).toEqual([]);
     expect(searchSettings("battery saver")[0]?.id).toBe("background-activity");
     expect(searchSettings("binary path")[0]?.id).toBe("providers");
     expect(searchSettings("Antigravity")[0]?.id).toBe("providers");
     expect(searchSettings("Google sign in")[0]?.id).toBe("providers");
-    expect(searchSettings("authorized clients")[0]?.id).toBe("connections-environment");
-    expect(searchSettings("administrative access")[0]?.id).toBe("connections-environment");
+    expect(searchSettings("authorized clients")).toEqual([]);
+    expect(searchSettings("administrative access")).toEqual([]);
   });
 
   it("lists thread confirmations in panel order", () => {
@@ -190,9 +190,9 @@ describe("searchSettings", () => {
     expect(remoteOnly).not.toContain("t3-connect");
     expect(remoteOnly).not.toContain("publish-agent-activity");
     expect(remoteOnly).not.toContain("wsl-backend");
-    // Browsers without access:write still render CloudLinkRow for their host.
+    // Local clients do not expose hosted notification settings.
     const browser = filterAvailableSettingsSearchItems(availability).map((item) => item.id);
-    expect(browser).toContain("publish-agent-activity");
+    expect(browser).not.toContain("publish-agent-activity");
   });
 
   it("shows automatic settlement settings when the server supports them", () => {

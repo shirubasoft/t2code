@@ -3,18 +3,9 @@ import * as Effect from "effect/Effect";
 import type * as Exit from "effect/Exit";
 import * as ExitRuntime from "effect/Exit";
 import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
-import * as SchemaIssue from "effect/SchemaIssue";
-import * as SchemaTransformation from "effect/SchemaTransformation";
 import * as Tracer from "effect/Tracer";
-import { OtlpResource, OtlpTracer, OtlpSerialization } from "effect/unstable/observability";
 
 import { RotatingFileSink } from "./logging.ts";
-
-export const OtlpProtocol = Schema.Literals(["http/json", "http/protobuf"]);
-export type OtlpProtocol = typeof OtlpProtocol.Type;
-export const otlpSerializationLayer = (protocol: OtlpProtocol) =>
-  protocol === "http/protobuf" ? OtlpSerialization.layerProtobuf : OtlpSerialization.layerJson;
 
 const FLUSH_BUFFER_THRESHOLD = 256;
 const textEncoder = new TextEncoder();
@@ -64,23 +55,7 @@ export interface EffectTraceRecord extends BaseTraceRecord {
       };
 }
 
-export interface OtlpTraceRecord extends BaseTraceRecord {
-  readonly type: "otlp-span";
-  readonly resourceAttributes: Readonly<Record<string, unknown>>;
-  readonly scope: Readonly<{
-    readonly name?: string;
-    readonly version?: string;
-    readonly attributes: Readonly<Record<string, unknown>>;
-  }>;
-  readonly status?:
-    | {
-        readonly code?: string;
-        readonly message?: string;
-      }
-    | undefined;
-}
-
-export type TraceRecord = EffectTraceRecord | OtlpTraceRecord;
+export type TraceRecord = EffectTraceRecord;
 
 function isStructuralTag(value: unknown): value is string {
   return (
@@ -135,14 +110,8 @@ export interface TraceSink {
 }
 
 export interface LocalFileTracerOptions extends TraceSinkOptions {
-  readonly delegate?: Tracer.Tracer;
   readonly sink?: TraceSink;
 }
-
-type OtlpSpan = OtlpTracer.ScopeSpan["spans"][number];
-type OtlpSpanEvent = OtlpSpan["events"][number];
-type OtlpSpanLink = OtlpSpan["links"][number];
-type OtlpSpanStatus = OtlpSpan["status"];
 
 interface SerializableSpan {
   readonly name: string;
@@ -522,11 +491,9 @@ export const makeLocalFileTracer = Effect.fn("makeLocalFileTracer")(function* (
       ...(options.onFlush ? { onFlush: options.onFlush } : {}),
     }));
 
-  const delegate =
-    options.delegate ??
-    Tracer.make({
-      span: (spanOptions) => new Tracer.NativeSpan(spanOptions),
-    });
+  const delegate = Tracer.make({
+    span: (spanOptions) => new Tracer.NativeSpan(spanOptions),
+  });
 
   return Tracer.make({
     span(spanOptions) {
@@ -535,207 +502,3 @@ export const makeLocalFileTracer = Effect.fn("makeLocalFileTracer")(function* (
     ...(delegate.context ? { context: delegate.context } : {}),
   });
 });
-
-const SPAN_KIND_MAP: Record<number, OtlpTraceRecord["kind"]> = {
-  1: "internal",
-  2: "server",
-  3: "client",
-  4: "producer",
-  5: "consumer",
-};
-
-export function decodeOtlpTraceRecords(
-  payload: OtlpTracer.TraceData,
-): ReadonlyArray<OtlpTraceRecord> {
-  const records: Array<OtlpTraceRecord> = [];
-
-  for (const resourceSpan of payload.resourceSpans) {
-    const resourceAttributes = decodeAttributes(resourceSpan.resource?.attributes ?? []);
-
-    for (const scopeSpan of resourceSpan.scopeSpans) {
-      for (const span of scopeSpan.spans) {
-        records.push(
-          otlpSpanToTraceRecord({
-            resourceAttributes,
-            scopeAttributes: decodeAttributes(
-              "attributes" in scopeSpan.scope && Array.isArray(scopeSpan.scope.attributes)
-                ? scopeSpan.scope.attributes
-                : [],
-            ),
-            scopeName: scopeSpan.scope.name,
-            scopeVersion:
-              "version" in scopeSpan.scope && typeof scopeSpan.scope.version === "string"
-                ? scopeSpan.scope.version
-                : undefined,
-            span,
-          }),
-        );
-      }
-    }
-  }
-
-  return records;
-}
-
-function otlpSpanToTraceRecord(input: {
-  readonly resourceAttributes: Readonly<Record<string, unknown>>;
-  readonly scopeAttributes: Readonly<Record<string, unknown>>;
-  readonly scopeName: string | undefined;
-  readonly scopeVersion: string | undefined;
-  readonly span: OtlpSpan;
-}): OtlpTraceRecord {
-  return {
-    type: "otlp-span",
-    name: input.span.name,
-    traceId: input.span.traceId,
-    spanId: input.span.spanId,
-    ...(input.span.parentSpanId ? { parentSpanId: input.span.parentSpanId } : {}),
-    sampled: true,
-    kind: normalizeSpanKind(input.span.kind),
-    startTimeUnixNano: input.span.startTimeUnixNano,
-    endTimeUnixNano: input.span.endTimeUnixNano,
-    durationMs:
-      Number(parseBigInt(input.span.endTimeUnixNano) - parseBigInt(input.span.startTimeUnixNano)) /
-      1_000_000,
-    attributes: decodeAttributes(input.span.attributes),
-    resourceAttributes: input.resourceAttributes,
-    scope: {
-      ...(input.scopeName ? { name: input.scopeName } : {}),
-      ...(input.scopeVersion ? { version: input.scopeVersion } : {}),
-      attributes: input.scopeAttributes,
-    },
-    events: decodeEvents(input.span.events),
-    links: decodeLinks(input.span.links),
-    status: decodeStatus(input.span.status),
-  };
-}
-
-function decodeStatus(input: OtlpSpanStatus): OtlpTraceRecord["status"] {
-  const code = String(input.code);
-  const message = input.message;
-
-  return {
-    code,
-    ...(message ? { message } : {}),
-  };
-}
-
-function decodeEvents(input: ReadonlyArray<OtlpSpanEvent>): ReadonlyArray<TraceRecordEvent> {
-  return input.map((current) => ({
-    name: current.name,
-    timeUnixNano: current.timeUnixNano,
-    attributes: decodeAttributes(current.attributes),
-  }));
-}
-
-function decodeLinks(input: ReadonlyArray<OtlpSpanLink>): ReadonlyArray<TraceRecordLink> {
-  return input.flatMap((current) => {
-    const traceId = current.traceId;
-    const spanId = current.spanId;
-    return {
-      traceId,
-      spanId,
-      attributes: decodeAttributes(current.attributes),
-    };
-  });
-}
-
-function decodeAttributes(
-  input: ReadonlyArray<OtlpResource.KeyValue>,
-): Readonly<Record<string, unknown>> {
-  const entries: Record<string, unknown> = {};
-
-  for (const attribute of input) {
-    entries[attribute.key] = decodeValue(attribute.value);
-  }
-
-  return compactTraceAttributes(entries);
-}
-
-function decodeValue(input: OtlpResource.AnyValue | null | undefined): unknown {
-  if (input == null) {
-    return null;
-  }
-  if ("stringValue" in input) {
-    return input.stringValue;
-  }
-  if ("boolValue" in input) {
-    return input.boolValue;
-  }
-  if ("intValue" in input) {
-    return input.intValue;
-  }
-  if ("doubleValue" in input) {
-    return input.doubleValue;
-  }
-  if ("bytesValue" in input) {
-    return input.bytesValue;
-  }
-  if (input.arrayValue) {
-    return input.arrayValue.values.map((entry) => decodeValue(entry));
-  }
-  if (input.kvlistValue) {
-    return decodeAttributes(input.kvlistValue.values);
-  }
-  return null;
-}
-
-function normalizeSpanKind(input: number): OtlpTraceRecord["kind"] {
-  return SPAN_KIND_MAP[input] || "internal";
-}
-
-function parseBigInt(input: string): bigint {
-  try {
-    return BigInt(input);
-  } catch {
-    return 0n;
-  }
-}
-
-/**
- * Parses the `OTEL_EXPORTER_OTLP_HEADERS` wire format used by
- * `T3CODE_OTLP_HEADERS`: W3C Baggage `key=value` pairs joined by commas, with
- * percent-encoded values. Each pair splits at its first `=` so an encoded or
- * literal `=` inside a value survives, and whitespace around the separators is
- * ignored.
- */
-export const OtlpHeadersFromString = Schema.String.pipe(
-  Schema.decodeTo(
-    Schema.Record(Schema.String, Schema.String),
-    SchemaTransformation.transformOrFail({
-      decode: (input) => {
-        const headers: Record<string, string> = {};
-        for (const pair of input.split(",")) {
-          if (pair.trim() === "") {
-            continue;
-          }
-          const separator = pair.indexOf("=");
-          const key = separator === -1 ? "" : pair.slice(0, separator).trim();
-          if (key === "") {
-            return Effect.fail(
-              new SchemaIssue.InvalidValue({
-                message: `Expected key=value but received ${JSON.stringify(pair.trim())}.`,
-              }),
-            );
-          }
-          try {
-            headers[key] = decodeURIComponent(pair.slice(separator + 1).trim());
-          } catch {
-            return Effect.fail(
-              new SchemaIssue.InvalidValue({
-                message: `Header ${JSON.stringify(key)} has a malformed percent-encoded value.`,
-              }),
-            );
-          }
-        }
-        return Effect.succeed(headers);
-      },
-      encode: (headers) =>
-        Effect.succeed(
-          Object.entries(headers)
-            .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
-            .join(","),
-        ),
-    }),
-  ),
-);

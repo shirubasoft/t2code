@@ -122,7 +122,6 @@ import { Button } from "../components/ui/button";
 import { Menu, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "../components/ui/menu";
 import { SidebarInset } from "../components/ui/sidebar";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../components/ui/tooltip";
-import { useLiveRefresh } from "../hooks/useLiveRefresh";
 import { useOpenPanelPullRequestUrl } from "../hooks/useOpenPanelPullRequestUrl";
 import { writeTextToClipboard } from "../hooks/useCopyToClipboard";
 import { toastManager } from "../components/ui/toast";
@@ -143,7 +142,6 @@ import {
   pullRequestEnvironment,
   usePullRequestList,
   usePullRequestListStats,
-  usePullRequestTurnRefreshes,
   type EnvironmentQueryTarget,
 } from "../state/pullRequests";
 import { useAtomCommand } from "../state/use-atom-command";
@@ -628,12 +626,6 @@ function PullRequestsRouteView() {
         .join("|"),
     [environmentQueries],
   );
-  const turnRefreshes = usePullRequestTurnRefreshes(
-    environmentQueries.map(({ environmentId }) => environmentId),
-  );
-  const turnRefreshToken = turnRefreshes
-    .map(([environmentId, revision]) => `${environmentId}:${revision}`)
-    .join("|");
   // Page size is view state, not a URL concern: a shared link should open the first page.
   const scopeKey = `${environmentKey}:${assignmentKey}:${search.state}:${search.involvement}:${scopedProjectId ?? ""}:${search.host ?? ""}:${search.draft ?? ""}:${search.review ?? ""}:${search.checks ?? ""}:${search.author ?? ""}:${search.labels?.join("\u0000") ?? ""}`;
   const filterKey = `${scopeKey}:${sentQuery}`;
@@ -1128,30 +1120,6 @@ function PullRequestsRouteView() {
       cursors: null,
     });
   };
-
-  const appliedTurnRefreshToken = useRef("");
-  const refreshAfterTurn = useEffectEvent(() => {
-    if (sentCursors !== null) refreshList();
-  });
-  useEffect(() => {
-    if (turnRefreshToken.length === 0 || appliedTurnRefreshToken.current === turnRefreshToken) {
-      return;
-    }
-    appliedTurnRefreshToken.current = turnRefreshToken;
-    refreshAfterTurn();
-  }, [turnRefreshToken]);
-
-  // The list goes stale the same way the detail does: somebody opens a pull request, a check
-  // finishes, a branch is merged. So it reads again on the way back to the window, and once a
-  // minute while somebody is reading it. Those reads go through the server's cache and stop
-  // when the reader stops, which is what keeps a page left open from spending a night of the
-  // host's rate limit.
-  useLiveRefresh(
-    () => {
-      refreshList(true);
-    },
-    { enabled: pullRequestsSupported },
-  );
 
   const viewers = baselineQuery.data?.viewers ?? listData?.viewers ?? EMPTY_VIEWERS;
   const listErrors = baselineQuery.data?.errors ?? listData?.errors ?? [];

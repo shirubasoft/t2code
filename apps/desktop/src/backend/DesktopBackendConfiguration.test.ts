@@ -3,11 +3,9 @@ import { assert, describe, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
-import * as Logger from "effect/Logger";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
-import * as PlatformError from "effect/PlatformError";
 import * as Schema from "effect/Schema";
 import { ChildProcessSpawner } from "effect/unstable/process";
 
@@ -28,10 +26,6 @@ const PersistedServerObservabilitySettingsDocument = Schema.Struct({
 
 const encodePersistedServerObservabilitySettingsDocument = Schema.encodeEffect(
   Schema.fromJsonString(PersistedServerObservabilitySettingsDocument),
-);
-
-const isDesktopBackendObservabilitySettingsReadError = Schema.is(
-  DesktopBackendConfiguration.DesktopBackendObservabilitySettingsReadError,
 );
 
 const serverExposureLayer = Layer.succeed(DesktopServerExposure.DesktopServerExposure, {
@@ -376,7 +370,7 @@ describe("DesktopBackendConfiguration", () => {
     }> = [];
     const observedProbeRoots: string[] = [];
     let legacyCleanupCount = 0;
-    const linuxAppRoot = "/home/test/.t3/wsl-runtime/1.2.3-x64";
+    const linuxAppRoot = "/home/test/.t2/wsl-runtime/1.2.3-x64";
     const resolvedPath = "/home/test/.local/bin:/usr/bin:/bin";
 
     return withPackagedWslHarness(
@@ -513,7 +507,7 @@ describe("DesktopBackendConfiguration", () => {
 
   it.effect("resolveWsl retires a staged runtime whose executable does not start", () => {
     const archiveHash = "c".repeat(64);
-    const stagedAppRoot = `/home/test/.t3/wsl-runtime/sha256-${archiveHash}`;
+    const stagedAppRoot = `/home/test/.t2/wsl-runtime/sha256-${archiveHash}`;
     const observedProbeRoots: string[] = [];
     const observedNodePtyRoots: string[] = [];
     const invalidatedRuntimeIds: string[] = [];
@@ -555,7 +549,7 @@ describe("DesktopBackendConfiguration", () => {
   });
 
   it.effect("resolveWsl keeps the staged runtime when the mounted tree fails too", () => {
-    const stagedAppRoot = "/home/test/.t3/wsl-runtime/cache";
+    const stagedAppRoot = "/home/test/.t2/wsl-runtime/cache";
     const invalidatedRuntimeIds: string[] = [];
     return withPackagedWslHarness(
       {
@@ -591,7 +585,7 @@ describe("DesktopBackendConfiguration", () => {
   });
 
   it.effect("resolveWsl keeps WSL retryable when the mounted fallback fails transiently", () => {
-    const stagedAppRoot = "/home/test/.t3/wsl-runtime/cache";
+    const stagedAppRoot = "/home/test/.t2/wsl-runtime/cache";
     const invalidatedRuntimeIds: string[] = [];
     return withPackagedWslHarness(
       {
@@ -714,7 +708,7 @@ describe("DesktopBackendConfiguration", () => {
     ),
   );
 
-  it.effect("resolvePrimary surfaces persisted backend observability endpoints", () =>
+  it.effect("resolvePrimary ignores persisted telemetry exporter endpoints", () =>
     withHarness(
       Effect.gen(function* () {
         const fileSystem = yield* FileSystem.FileSystem;
@@ -735,8 +729,8 @@ describe("DesktopBackendConfiguration", () => {
         );
 
         const config = yield* configuration.resolvePrimary;
-        assert.equal(config.bootstrap.otlpTracesUrl, "http://127.0.0.1:4318/v1/traces");
-        assert.equal(config.bootstrap.otlpMetricsUrl, "http://127.0.0.1:4318/v1/metrics");
+        assert.isFalse("otlpTracesUrl" in config.bootstrap);
+        assert.isFalse("otlpMetricsUrl" in config.bootstrap);
       }),
     ),
   );
@@ -747,70 +741,10 @@ describe("DesktopBackendConfiguration", () => {
         const configuration = yield* DesktopBackendConfiguration.DesktopBackendConfiguration;
         const config = yield* configuration.resolvePrimary;
 
-        assert.isUndefined(config.bootstrap.otlpTracesUrl);
-        assert.isUndefined(config.bootstrap.otlpMetricsUrl);
+        assert.isFalse("otlpTracesUrl" in config.bootstrap);
+        assert.isFalse("otlpMetricsUrl" in config.bootstrap);
       }),
     ),
-  );
-
-  it.effect("logs structured context when persisted observability settings cannot be read", () =>
-    Effect.gen(function* () {
-      const fileSystem = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
-      const baseDir = yield* fileSystem.makeTempDirectoryScoped({
-        prefix: "t3-desktop-backend-config-test-",
-      });
-      const settingsPath = path.join(baseDir, "userdata", "settings.json");
-      const cause = PlatformError.systemError({
-        _tag: "PermissionDenied",
-        module: "FileSystem",
-        method: "readFileString",
-        pathOrDescriptor: settingsPath,
-      });
-      const messages: Array<unknown> = [];
-      const logger = Logger.make(({ message }) => {
-        messages.push(message);
-      });
-      const failingFileSystemLayer = Layer.succeed(
-        FileSystem.FileSystem,
-        FileSystem.makeNoop({
-          readFileString: () => Effect.fail(cause),
-        }),
-      );
-
-      const config = yield* Effect.gen(function* () {
-        const configuration = yield* DesktopBackendConfiguration.DesktopBackendConfiguration;
-        return yield* configuration.resolvePrimary;
-      }).pipe(
-        Effect.provide(
-          Layer.mergeAll(
-            DesktopBackendConfiguration.layer.pipe(
-              Layer.provideMerge(serverExposureLayer),
-              Layer.provideMerge(DesktopAppSettings.layerTest()),
-              Layer.provideMerge(DesktopWslServerTree.layerTest()),
-              Layer.provideMerge(DesktopWslEnvironment.layerTest()),
-              Layer.provideMerge(makeEnvironmentLayer(baseDir)),
-              Layer.provideMerge(failingFileSystemLayer),
-            ),
-            Logger.layer([logger], { mergeWithExisting: false }),
-          ),
-        ),
-      );
-
-      assert.isUndefined(config.bootstrap.otlpTracesUrl);
-      assert.isUndefined(config.bootstrap.otlpMetricsUrl);
-
-      const error = messages
-        .flatMap((message) => (Array.isArray(message) ? message : [message]))
-        .find(isDesktopBackendObservabilitySettingsReadError);
-      assert.isDefined(error);
-      assert.equal(error.settingsPath, settingsPath);
-      assert.equal(error.cause, cause);
-      assert.equal(
-        error.message,
-        `Failed to read persisted backend observability settings at ${settingsPath}.`,
-      );
-    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
   it.effect("resolvePrimary captures backend output in dev so child logs can be persisted", () =>
@@ -887,7 +821,7 @@ describe("DesktopBackendConfiguration", () => {
           // already declared, so it isn't forwarded twice.
           assert.equal(
             config.env.WSLENV,
-            "GOPATH/p:OPENAI_API_KEY/u:EMPTY::AZURE_DEVOPS_EXT_PAT/u:ANTHROPIC_API_KEY:T3CODE_OTLP_HEADERS:T3CODE_OTLP_PROTOCOL",
+            "GOPATH/p:OPENAI_API_KEY/u:EMPTY::AZURE_DEVOPS_EXT_PAT/u:ANTHROPIC_API_KEY",
           );
         }).pipe(
           Effect.provide(

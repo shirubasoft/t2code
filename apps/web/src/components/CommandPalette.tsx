@@ -933,7 +933,7 @@ function OpenCommandPaletteDialog(props: {
     );
   }, [browseEnvironment, browseEnvironmentIsDesktopLocal, desktopLocalBootstraps]);
   const sourceControlDiscovery = useEnvironmentQuery(
-    browseEnvironmentId === null
+    addProjectEnvironmentId === null || browseEnvironmentId === null
       ? null
       : sourceControlEnvironment.discovery({
           environmentId: browseEnvironmentId,

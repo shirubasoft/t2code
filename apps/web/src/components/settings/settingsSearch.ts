@@ -639,26 +639,10 @@ export const SETTINGS_SEARCH_ITEMS = [
     title: "Local environment",
     to: "/settings/connections",
     targetId: "connections-environment",
-    searchTerms: ["turn off on disable enable local server agents remote only restart"],
+    searchTerms: ["local server agents this computer"],
     desktopOnly: true,
   },
-  {
-    id: "network-access",
-    title: "Network access",
-    to: "/settings/connections",
-    targetId: "connections-environment",
-    searchTerms: ["expose backend remote pairing local machine interfaces host restart"],
-    localBackendManagementOnly: true,
-  },
-  {
-    id: "tailscale-https",
-    title: "Tailscale HTTPS",
-    to: "/settings/connections",
-    targetId: "connections-environment",
-    searchTerms: ["serve magicdns endpoint remote secure network"],
-    desktopOnly: true,
-    localBackendManagementOnly: true,
-  },
+
   {
     id: "wsl-backend",
     title: "WSL backend",
@@ -671,39 +655,14 @@ export const SETTINGS_SEARCH_ITEMS = [
     localBackendManagementOnly: true,
     wslAvailableOnly: true,
   },
-  {
-    id: "t3-connect",
-    localEnvironmentOnly: true,
-    title: "T3 Connect",
-    to: "/settings/connections",
-    targetId: "connections-environment",
-    searchTerms: ["managed tunnel cloud other devices remote"],
-    desktopOnly: true,
-    cloudOnly: true,
-  },
-  {
-    id: "publish-agent-activity",
-    localEnvironmentOnly: true,
-    title: "Publish agent activity",
-    to: "/settings/connections",
-    targetId: "connections-environment",
-    searchTerms: ["mobile push notifications live activities cloud tunnel"],
-    cloudOnly: true,
-  },
+
   {
     id: "connections-environment",
     title: "This machine",
     to: "/settings/connections",
-    searchTerms: [
-      "connections server backend local remote access administrative permissions scope pairing links qr code authorized clients sessions revoke endpoint",
-    ],
+    searchTerms: ["connections server backend local this computer"],
   },
-  {
-    id: "remote-environments",
-    title: "Environments",
-    to: "/settings/connections",
-    searchTerms: ["add pair backend host code ssh config agent tunnel saved t3 connect"],
-  },
+
   {
     id: "load-balancing",
     title: "Load balancing",

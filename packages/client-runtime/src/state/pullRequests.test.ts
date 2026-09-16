@@ -140,7 +140,7 @@ for (const scenario of [
                   return yield* failure;
                 if (local && ambiguous) return yield* failure;
               }),
-            [WS_METHODS.pullRequestsSummary]: (input: { allowStale?: boolean }) =>
+            [WS_METHODS.pullRequestsDetail]: (input: { allowStale?: boolean }) =>
               Effect.gen(function* () {
                 calls.push(`${name}:read`);
                 expect(input.allowStale).toBe(false);
@@ -189,7 +189,7 @@ for (const scenario of [
         const route = createPullRequestRouter();
         const result = yield* (
           reading
-            ? route(WS_METHODS.pullRequestsSummary, input)
+            ? route(WS_METHODS.pullRequestsDetail, input)
             : route(WS_METHODS.pullRequestsRunAction, input)
         ).pipe(
           Effect.provideService(EnvironmentRegistry.EnvironmentRegistry, environmentRegistry),
@@ -351,7 +351,7 @@ for (const permission of ["default", "origin-off", "destination-off", "read-only
           detail: "source failed",
         });
         const client = {
-          [WS_METHODS.pullRequestsSummary]: () =>
+          [WS_METHODS.pullRequestsDetail]: () =>
             Effect.suspend(() => {
               calls.push("source-read");
               return Effect.fail(failure);
@@ -374,7 +374,7 @@ for (const permission of ["default", "origin-off", "destination-off", "read-only
         const request = Effect.gen(function* () {
           const route = createPullRequestRouter();
           if (permission !== "read-only")
-            yield* route(WS_METHODS.pullRequestsSummary, ref).pipe(Effect.flip);
+            yield* route(WS_METHODS.pullRequestsDetail, ref).pipe(Effect.flip);
           yield* route(WS_METHODS.pullRequestsRunAction, { ...ref, action: "merge" });
         }).pipe(
           Effect.provideService(EnvironmentRegistry.EnvironmentRegistry, environmentRegistry),
@@ -532,7 +532,7 @@ for (const probe of ["origin", "alternate"] as const) {
         const client = {
           [WS_METHODS.pullRequestsRouting]: () =>
             probe === "origin" ? Effect.never : Effect.succeed(identity),
-          [WS_METHODS.pullRequestsSummary]: () =>
+          [WS_METHODS.pullRequestsDetail]: () =>
             Effect.suspend(() => {
               sourceReads += 1;
               return Effect.fail(
@@ -544,7 +544,7 @@ for (const probe of ["origin", "alternate"] as const) {
           [WS_METHODS.pullRequestsRoutingIdentity]: () => Effect.never,
         } as unknown as WsRpcProtocolClient;
         const { environmentRegistry, supervisor } = yield* makeTestRuntime(client, alternate);
-        const error = yield* createPullRequestRouter()(WS_METHODS.pullRequestsSummary, {
+        const error = yield* createPullRequestRouter()(WS_METHODS.pullRequestsDetail, {
           projectId: ProjectId.make("project-1"),
           repository: "acme/web",
           number: 7,
@@ -582,7 +582,7 @@ for (const source of ["pending", "pending-local", "failed-local", "failed", "off
                     viewer: "maria-rcks",
                     accountId: "123",
                   }),
-              [WS_METHODS.pullRequestsSummary]: (input: { allowStale?: boolean }) =>
+              [WS_METHODS.pullRequestsDetail]: (input: { allowStale?: boolean }) =>
                 Effect.gen(function* () {
                   calls.push(local ? "local" : input.allowStale === false ? "origin" : "held");
                   if (source === "offline" && !local && input.allowStale === undefined) {
@@ -604,7 +604,7 @@ for (const source of ["pending", "pending-local", "failed-local", "failed", "off
             clientFor(true),
             source === "failed-local" || source === "pending-local",
           );
-          const request = createPullRequestRouter()(WS_METHODS.pullRequestsSummary, {
+          const request = createPullRequestRouter()(WS_METHODS.pullRequestsDetail, {
             projectId: ProjectId.make("project-1"),
             repository: "acme/web",
             number: 7,
@@ -704,7 +704,7 @@ it.live(
                   accountId: local ? "123" : originAccountId,
                 };
               }),
-            [WS_METHODS.pullRequestsSummary]: () => (local ? Effect.succeed(null) : Effect.never),
+            [WS_METHODS.pullRequestsDetail]: () => (local ? Effect.succeed(null) : Effect.never),
             [WS_METHODS.pullRequestsRunAction]: (input: { expectedAccountId: string }) =>
               Effect.sync(() => {
                 mutations.push({ environment, expectedAccountId: input.expectedAccountId });
@@ -727,7 +727,7 @@ it.live(
         const hostedReference = { ...reference, host: "github.com", allowStale: false };
         const route = createPullRequestRouter();
         yield* Effect.gen(function* () {
-          yield* route(WS_METHODS.pullRequestsSummary, reference);
+          yield* route(WS_METHODS.pullRequestsDetail, reference);
           originAccountId = "456";
           yield* route(WS_METHODS.pullRequestsRunAction, { ...reference, action: "merge" });
 
@@ -883,6 +883,9 @@ it.effect("refreshes pull request activity after a comment is updated", () =>
 
       commentBody = "after turn";
       yield* PubSub.publish(refreshEvents, 1);
+      yield* Effect.yieldNow;
+      expect((yield* AtomRegistry.getResult(registry, activity)).comments[0]?.body).toBe("updated");
+      registry.refresh(activity);
       yield* refreshed.await;
 
       expect(
@@ -1132,7 +1135,7 @@ it.effect("updates reviewer requests and enriched reviewers without rereading th
   ),
 );
 
-it.effect("refreshes stack state after reopening and head SHAs after a turn", () =>
+it.effect("refreshes stack state only after explicit actions", () =>
   Effect.scoped(
     Effect.gen(function* () {
       const refreshEvents = yield* PubSub.unbounded<number>();
@@ -1190,8 +1193,45 @@ it.effect("refreshes stack state after reopening and head SHAs after a turn", ()
       yield* Effect.addFinalizer(() => Effect.sync(stop));
       headSha = "new-head";
       yield* PubSub.publish(refreshEvents, 1);
+      yield* Effect.yieldNow;
+      expect((yield* AtomRegistry.getResult(registry, stack))?.layers[0]?.headSha).toBe("old-head");
+      registry.refresh(stack);
       yield* refreshed.await;
       expect((yield* AtomRegistry.getResult(registry, stack))?.layers[0]?.headSha).toBe("new-head");
+    }),
+  ),
+);
+
+it.effect("keeps background summaries on their source without probing forge identities", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const calls: string[] = [];
+      const client = {
+        [WS_METHODS.pullRequestsSummary]: () =>
+          Effect.sync(() => {
+            calls.push("summary");
+            return null;
+          }),
+        [WS_METHODS.pullRequestsRouting]: () =>
+          Effect.sync(() => {
+            calls.push("identity");
+            throw new Error("Background summary must not probe forge credentials.");
+          }),
+      } as unknown as WsRpcProtocolClient;
+      const { environmentRegistry, supervisor } = yield* makeTestRuntime(client, client, false);
+      const result = yield* createPullRequestRouter()(WS_METHODS.pullRequestsSummary, {
+        projectId: ProjectId.make("project-1"),
+        host: "github.com",
+        repository: "acme/web",
+        number: 7,
+        allowStale: true,
+      }).pipe(
+        Effect.provideService(EnvironmentRegistry.EnvironmentRegistry, environmentRegistry),
+        Effect.provideService(GitHubRoutingPermissions, trustedRouting),
+        Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor),
+      );
+      expect(result).toBeNull();
+      expect(calls).toEqual(["summary"]);
     }),
   ),
 );

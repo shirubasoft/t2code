@@ -129,6 +129,7 @@ const fetchReleaseAsset = Effect.fn("cloud.pinned_runtime.fetch_release_asset")(
   // The install lock is held for the whole transaction, so a stalled download
   // must fail rather than block every other caller.
   return yield* httpClient.execute(HttpClientRequest.get(url)).pipe(
+    Effect.provideService(HttpClient.TracerPropagationEnabled, false),
     Effect.flatMap(HttpClientResponse.filterStatusOk),
     Effect.flatMap((response) => response.arrayBuffer),
     Effect.map((buffer) => new Uint8Array(buffer)),

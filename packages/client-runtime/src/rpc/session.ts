@@ -4,6 +4,7 @@ import {
   WsSubscribeServerConfigRpc,
   WS_METHODS,
 } from "@t3tools/contracts";
+import { isLoopbackUrl } from "@t3tools/shared/localNetwork";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
@@ -160,6 +161,12 @@ export const make = Effect.fn("RpcSessionFactory.make")(function* (
   };
 
   const connect = Effect.fnUntraced(function* (connection: PreparedConnection) {
+    if (!isLoopbackUrl(connection.socketUrl)) {
+      return yield* new ConnectionBlockedError({
+        reason: "configuration",
+        detail: "Remote connections are unavailable in the local edition.",
+      });
+    }
     const networkHint =
       connection.target._tag === "RelayConnectionTarget" ? ` ${NETWORK_BLOCKING_HINT}` : "";
     const mapRpcError = (error: Parameters<typeof mapSessionRpcError>[0]) =>

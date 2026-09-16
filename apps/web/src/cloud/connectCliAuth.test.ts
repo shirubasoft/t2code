@@ -2,30 +2,48 @@ import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import {
   buildConnectCliClerkAuthorizeUrl,
+  connectCliAuthRoutesEnabled,
   connectCliSignInRedirectUrl,
   hasConnectCliAuthConfig,
 } from "./connectCliAuth";
+import * as PublicConfig from "./publicConfig";
 
 // Any pk_test_* key decodes to <base64 hostname>.clerk.accounts.dev.
 const TEST_PUBLISHABLE_KEY = `pk_test_${btoa("witty-mole-42.clerk.accounts.dev$")}`;
 
+function mockAuthorizeUrlConfig() {
+  vi.spyOn(PublicConfig, "resolveCloudPublicConfig").mockReturnValue({
+    ...PublicConfig.resolveCloudPublicConfig(),
+    clerkPublishableKey: TEST_PUBLISHABLE_KEY,
+  });
+}
+
 describe("connectCliAuth", () => {
   afterEach(() => {
     vi.unstubAllEnvs();
+    vi.restoreAllMocks();
   });
 
-  it("requires both the publishable key and the CLI OAuth client id", () => {
+  it("keeps hosted authentication disabled even with all legacy environment settings", () => {
     vi.stubEnv("VITE_CLERK_PUBLISHABLE_KEY", TEST_PUBLISHABLE_KEY);
     vi.stubEnv("VITE_CLERK_JWT_TEMPLATE", "t3-relay");
     vi.stubEnv("VITE_T3CODE_RELAY_URL", "https://relay.example.com");
     expect(hasConnectCliAuthConfig()).toBe(false);
 
     vi.stubEnv("VITE_CLERK_CLI_OAUTH_CLIENT_ID", "oauthapp_123");
-    expect(hasConnectCliAuthConfig()).toBe(true);
+    expect(hasConnectCliAuthConfig()).toBe(false);
+    expect(connectCliAuthRoutesEnabled()).toBe(false);
+    expect(
+      buildConnectCliClerkAuthorizeUrl({
+        state: "state-1",
+        challenge: "challenge-1",
+        loopbackPort: 34338,
+      }),
+    ).toBeNull();
   });
 
   it("builds a PKCE authorize URL that redirects to the CLI's loopback listener", () => {
-    vi.stubEnv("VITE_CLERK_PUBLISHABLE_KEY", TEST_PUBLISHABLE_KEY);
+    mockAuthorizeUrlConfig();
     vi.stubEnv("VITE_CLERK_CLI_OAUTH_CLIENT_ID", "oauthapp_123");
 
     const authorizeUrl = buildConnectCliClerkAuthorizeUrl({
@@ -45,7 +63,7 @@ describe("connectCliAuth", () => {
   });
 
   it("returns null when the CLI OAuth client id is not configured", () => {
-    vi.stubEnv("VITE_CLERK_PUBLISHABLE_KEY", TEST_PUBLISHABLE_KEY);
+    mockAuthorizeUrlConfig();
     expect(
       buildConnectCliClerkAuthorizeUrl({
         state: "state-1",
@@ -56,7 +74,7 @@ describe("connectCliAuth", () => {
   });
 
   it("sends the sign-in redirect to the authorize endpoint, not back to /connect", () => {
-    vi.stubEnv("VITE_CLERK_PUBLISHABLE_KEY", TEST_PUBLISHABLE_KEY);
+    mockAuthorizeUrlConfig();
     vi.stubEnv("VITE_CLERK_CLI_OAUTH_CLIENT_ID", "oauthapp_123");
 
     const connectUrl =
@@ -70,8 +88,9 @@ describe("connectCliAuth", () => {
     expect(new URL(redirectUrl).pathname).toBe("/oauth/authorize");
   });
 
-  it("falls back to the current URL when the authorize URL cannot be built", () => {
+  it("keeps the current URL with the real local configuration", () => {
     vi.stubEnv("VITE_CLERK_PUBLISHABLE_KEY", TEST_PUBLISHABLE_KEY);
+    vi.stubEnv("VITE_CLERK_CLI_OAUTH_CLIENT_ID", "oauthapp_123");
 
     const connectUrl =
       "https://app.t3.codes/connect#state=state-1&challenge=challenge-1&port=34338";

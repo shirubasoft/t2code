@@ -24,7 +24,7 @@ import {
 import { bootstrapRemoteBearerSession } from "@t3tools/client-runtime/authorization";
 import { fetchRemoteEnvironmentDescriptor } from "@t3tools/client-runtime/environment";
 import { managedRelayAccountChanges, managedRelaySessionAtom } from "@t3tools/client-runtime/relay";
-import { EnvironmentRpcRequestObserver } from "@t3tools/client-runtime/rpc";
+import { EnvironmentRpcRequestObserver, remoteHttpClientLayer } from "@t3tools/client-runtime/rpc";
 import {
   AuthStandardClientScopes,
   type DesktopBridge,
@@ -40,7 +40,6 @@ import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as Ref from "effect/Ref";
 import * as Stream from "effect/Stream";
-import { FetchHttpClient } from "effect/unstable/http";
 
 import { APP_VERSION } from "../branding";
 import { readDesktopPrimaryBearerToken } from "../environments/primary/desktopAuth";
@@ -572,7 +571,7 @@ const platformConnectionSourceLayer = Layer.effect(
 
       yield* Ref.set(cacheRef, next);
       return registrations as ReadonlyArray<PlatformConnectionRegistration>;
-    }).pipe(Effect.provide(FetchHttpClient.layer));
+    }).pipe(Effect.provide(remoteHttpClientLayer((input, init) => globalThis.fetch(input, init))));
 
     return PlatformConnectionSource.of({
       registrations: Stream.tick(PLATFORM_POLL_INTERVAL).pipe(

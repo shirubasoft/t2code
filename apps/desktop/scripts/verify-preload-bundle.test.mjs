@@ -5,7 +5,6 @@ import { verifyPreloadBundle } from "./verify-preload-bundle.mjs";
 const validPreload = `
   const electron = require("electron");
   const PICK_FOLDER_CHANNEL = "desktop:pick-folder";
-  electron.contextBridge.exposeInMainWorld("__clerk_internal_electron_passkeys", {});
   electron.contextBridge.exposeInMainWorld("desktopBridge", {
     getClientPlatform: () => process.platform,
     getLocalEnvironmentBootstraps: () => [],
@@ -14,6 +13,16 @@ const validPreload = `
 `;
 
 describe("desktop preload bundle verifier", () => {
+  it("rejects a hosted-login bridge added to an otherwise valid local preload", () => {
+    assert.throws(
+      () =>
+        verifyPreloadBundle(
+          `${validPreload}\nelectron.contextBridge.exposeInMainWorld("__clerk_internal_electron_passkeys", {});`,
+        ),
+      /unexpected globals: __clerk_internal_electron_passkeys/,
+    );
+  });
+
   it("rejects required API names that only appear in strings", () => {
     assert.throws(
       () =>

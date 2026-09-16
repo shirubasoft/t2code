@@ -1,3 +1,16 @@
+# T2 Code fork policy
+
+This repository builds the local T2 Code edition of T3 Code. These product constraints override upstream remoting, cloud authentication, analytics, and release defaults below.
+
+- The app must work without a T2/T3 account or hosted login. Provider harnesses keep their own authentication.
+- Remove product analytics, tracking identities, crash delivery, and external trace/metric exporters. Settings or environment variables must never re-enable them. Local logs and CPU, memory, power, and token diagnostics are allowed.
+- App-owned network requests are limited to loopback, connected provider harnesses, and explicit user Git operations or fork update checks/downloads. No background forge polling, remote assets, pricing/model feeds, hosted authentication, or remote discovery.
+- This build has no remote environments, tunnels, or cloud relay. Preserve local desktop, local web, WSL, and provider behavior. A remote edition needs a separate reviewed distribution.
+- Preserve upstream functionality within those constraints and keep changes small. Do not accept a migration by deleting unrelated features or weakening tests.
+- Automatic migrations cannot change their trusted policy, validation, merge, runner, or packaging controls. A policy conflict stops the migration for maintainer review.
+
+The migration instructions in [`.github/t2code/migrate.md`](.github/t2code/migrate.md) and the accepted privacy baseline are enforced by independent CI. See [operating the fork](docs/operations/t2code.md) for release and runner procedures.
+
 # T3 Code
 
 T3 Code is a minimal GUI for coding agents. A Node WebSocket server wraps provider CLIs and agents (Codex, Claude Code, Cursor, Grok, OpenCode, Antigravity) and serves web, desktop, and mobile clients.

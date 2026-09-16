@@ -78,6 +78,7 @@ const resolveNewestVersion = Effect.fn("cli.update.resolve_newest")(function* (
         ),
       )
       .pipe(
+        Effect.provideService(HttpClient.TracerPropagationEnabled, false),
         Effect.flatMap(HttpClientResponse.filterStatusOk),
         Effect.flatMap((response) => response.text),
         Effect.mapError(() => new CliUpdateError({ reason: "Could not list t3 releases." })),

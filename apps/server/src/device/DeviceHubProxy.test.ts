@@ -28,6 +28,7 @@ const fixture = (
   scopes: ReadonlyArray<AuthEnvironmentScope>,
   fail = false,
   authError?: ServerAuthCredentialError | ServerAuthInternalError,
+  hubOrigin = "http://127.0.0.1:5555",
 ) => {
   let finalized = 0;
   const requests: string[] = [];
@@ -59,7 +60,7 @@ const fixture = (
       Layer.provideMerge(
         Layer.succeed(DeviceService, {
           currentReadiness: () =>
-            Effect.succeed({ hostId: LOCAL_DEVICE_HOST_ID, hub: { origin: "http://hub.test" } }),
+            Effect.succeed({ hostId: LOCAL_DEVICE_HOST_ID, hub: { origin: hubOrigin } }),
         } as DeviceService["Service"]),
       ),
       Layer.provideMerge(Layer.succeed(HttpClient.HttpClient, client)),
@@ -71,6 +72,25 @@ const fixture = (
 };
 
 describe("device hub proxy", () => {
+  it.each([false, true])(
+    "rejects a remote hub before any request or socket upgrade (WebSocket %s)",
+    async (upgrade) => {
+      const { handler, requests } = fixture(
+        [AuthOrchestrationReadScope],
+        false,
+        undefined,
+        "https://remote.test",
+      );
+      const response = await handler(
+        new Request("http://t3.test/api/device-hub/api/devices" + (upgrade ? "/ws" : ""), {
+          headers: upgrade ? { upgrade: "websocket" } : {},
+        }),
+      );
+      expect(response.status).toBe(403);
+      expect(requests).toEqual([]);
+    },
+  );
+
   it("releases the upstream response after forwarding its body and strips tickets", async () => {
     const { handler, requests, finalized } = fixture([AuthOrchestrationReadScope]);
     const response = await handler(
@@ -78,7 +98,7 @@ describe("device hub proxy", () => {
     );
     expect(response.status).toBe(200);
     expect(await response.text()).toBe("frame");
-    expect(requests).toEqual(["http://hub.test/api/devices"]);
+    expect(requests).toEqual(["http://127.0.0.1:5555/api/devices"]);
     expect(finalized()).toBe(1);
   });
 

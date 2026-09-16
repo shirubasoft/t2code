@@ -18,6 +18,7 @@ import {
 } from "@t3tools/contracts";
 import * as ProcessRunner from "../processRunner.ts";
 import * as VcsProcess from "./VcsProcess.ts";
+import { UserNetworkAccess } from "../networkPolicy.ts";
 
 const run = (input: VcsProcess.VcsProcessInput) =>
   Effect.gen(function* () {
@@ -93,7 +94,7 @@ describe("VcsProcess.run", () => {
           }),
         ),
         { concurrency: "unbounded" },
-      ).pipe(Effect.forkChild);
+      ).pipe(Effect.provideService(UserNetworkAccess, true), Effect.forkChild);
 
       yield* Effect.all(Array.from({ length: 4 }, () => Queue.take(starts)));
       yield* Effect.yieldNow;
@@ -104,6 +105,41 @@ describe("VcsProcess.run", () => {
       yield* Fiber.join(burst);
       expect(yield* Ref.get(total)).toBe(32);
       expect(yield* Ref.get(peak)).toBe(4);
+    }),
+  );
+
+  it.effect("blocks background network commands before spawning and scopes explicit requests", () =>
+    Effect.gen(function* () {
+      const calls: Array<ProcessRunner.ProcessRunInput> = [];
+      const service = yield* VcsProcess.make.pipe(
+        Effect.provideService(
+          ProcessRunner.ProcessRunner,
+          ProcessRunner.ProcessRunner.of({
+            run: (input) =>
+              Effect.sync(() => {
+                calls.push(input);
+                return {
+                  code: ChildProcessSpawner.ExitCode(0),
+                  stdout: "",
+                  stderr: "",
+                  timedOut: false,
+                  stdoutTruncated: false,
+                  stderrTruncated: false,
+                  stdoutInvalidUtf8: false,
+                  stderrInvalidUtf8: false,
+                };
+              }),
+          }),
+        ),
+      );
+      const fetch = { ...baseInput, args: ["-C", "/repo", "fetch", "origin"] };
+      expect(yield* service.run(fetch).pipe(Effect.flip)).toBeInstanceOf(VcsProcessSpawnError);
+      expect(calls).toHaveLength(0);
+      yield* service.run(fetch).pipe(Effect.provideService(UserNetworkAccess, true));
+      expect(calls).toHaveLength(1);
+      expect(yield* service.run(fetch).pipe(Effect.flip)).toBeInstanceOf(VcsProcessSpawnError);
+      yield* service.run({ ...baseInput, args: ["commit", "-m", "push"] });
+      expect(calls.at(-1)?.env?.GIT_NO_LAZY_FETCH).toBe("1");
     }),
   );
 

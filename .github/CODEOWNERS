@@ -1,0 +1,8 @@
+# Automation cannot alter its accepted policy or publish controls.
+/.github/ @danspark
+/scripts/verify-private-build.mjs @danspark
+/scripts/private-build-policy.json @danspark
+/scripts/build-desktop-artifact.ts @danspark
+/scripts/build-desktop-artifact.test.ts @danspark
+/scripts/lib/update-manifest.ts @danspark
+/.gitmodules @danspark

@@ -234,7 +234,11 @@ export const make = Effect.gen(function* () {
       } satisfies typeof ElectronWindowCreateOptions.Type;
 
       return Effect.try({
-        try: () => new Electron.BrowserWindow(options),
+        try: () =>
+          new Electron.BrowserWindow({
+            ...options,
+            webPreferences: { ...options.webPreferences, spellcheck: false },
+          }),
         catch: (cause) => new ElectronWindowCreateError({ options: diagnosticOptions, cause }),
       });
     },

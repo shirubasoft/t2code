@@ -37,6 +37,8 @@ import {
   parseRemoteRefWithRemoteNames,
 } from "../git/remoteRefs.ts";
 import { ServerConfig } from "../config.ts";
+import { UserNetworkAccess } from "../networkPolicy.ts";
+import { gitRequiresNetwork } from "./vcsNetworkPolicy.ts";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 const gitProcesses = Semaphore.makeUnsafe(8);
@@ -774,6 +776,13 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
       const appendTruncationMarker = input.appendTruncationMarker ?? false;
 
       const runGitCommand = Effect.fn("runGitCommand")(function* () {
+        const userNetworkAccess = yield* UserNetworkAccess;
+        if (gitRequiresNetwork(commandInput.args) && !userNetworkAccess) {
+          return yield* new GitCommandError({
+            ...gitCommandContext(commandInput),
+            detail: "External Git operations require a user action in T2 Code.",
+          });
+        }
         const trace2Monitor = yield* createTrace2Monitor(commandInput, input.progress).pipe(
           Effect.provideService(Path.Path, path),
           Effect.provideService(FileSystem.FileSystem, fileSystem),
@@ -794,6 +803,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
                 ...process.env,
                 ...input.env,
                 ...trace2Monitor.env,
+                ...(userNetworkAccess ? {} : { GIT_NO_LAZY_FETCH: "1" }),
               },
             }),
           )

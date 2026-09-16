@@ -20,6 +20,7 @@ import * as Stream from "effect/Stream";
 import { HttpClient, HttpClientRequest } from "effect/unstable/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
+import { UserNetworkAccess } from "../networkPolicy.ts";
 import { collectUint8StreamText } from "../stream/collectUint8StreamText.ts";
 
 const LATEST_VERSION_CACHE_TTL_MS = 60 * 60 * 1_000;
@@ -693,6 +694,7 @@ export const enrichProviderSnapshotWithVersionAdvisory = Effect.fn(
   const capabilities =
     maintenanceCapabilities ?? makeManualProviderMaintenanceCapabilities(snapshot.driver);
   const shouldResolveLatestVersion =
+    (yield* UserNetworkAccess) &&
     options?.enableProviderUpdateChecks !== false &&
     snapshot.enabled &&
     snapshot.installed &&

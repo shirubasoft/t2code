@@ -19,6 +19,7 @@
 import type { DeviceHubAccess } from "@t3tools/client-runtime/state/deviceHubAccess";
 import { withDeviceHubQuery } from "@t3tools/client-runtime/state/deviceHubAccess";
 import type { DevicePlatform } from "@t3tools/contracts";
+import { isLoopbackUrl } from "@t3tools/shared/localNetwork";
 
 export type DeviceStreamStatus = "connecting" | "streaming" | "error";
 
@@ -430,6 +431,7 @@ export function createDeviceStreamClient(
       const response = await fetch(httpUrl(`/helper/${device}/stream.avcc`), {
         signal: controller.signal,
         credentials: access.credentials ? "include" : "same-origin",
+        redirect: "error",
       });
       if (response.status === 401 || response.status === 403) return handleUnauthorized();
       if (!response.ok || !response.body) throw new Error(`stream ${response.status}`);
@@ -487,6 +489,7 @@ export function createDeviceStreamClient(
       const response = await fetch(httpUrl(`/helper/${device}/stream.mjpeg`), {
         signal: controller.signal,
         credentials: access.credentials ? "include" : "same-origin",
+        redirect: "error",
       });
       if (response.status === 401 || response.status === 403) return handleUnauthorized();
       await response.body?.getReader().read();
@@ -594,6 +597,10 @@ export function createDeviceStreamClient(
 
   const start = () => {
     if (!stopped) return;
+    if (!isLoopbackUrl(access.httpBase) || !isLoopbackUrl(access.wsBase)) {
+      events.onStatus("error", "Device streams must run on this computer.");
+      return;
+    }
     stopped = false;
     firstFrame = false;
     events.onStatus("connecting");

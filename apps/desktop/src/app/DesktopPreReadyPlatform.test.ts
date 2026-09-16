@@ -25,6 +25,7 @@ const {
 
 vi.mock("electron", () => ({
   app: {
+    on: vi.fn(),
     setDesktopName: setDesktopNameMock,
     getVersion: () => "0.0.37",
     commandLine: {
@@ -89,7 +90,7 @@ describe("DesktopPreReadyPlatform", () => {
           desktopName = name;
         });
         writeFileSyncMock.mockImplementation((path: string, contents: string) => {
-          if (path === "/xdg/applications/com.t3tools.T3Code.desktop") desktopEntry = contents;
+          if (path === "/xdg/applications/com.shirubasoft.T2Code.desktop") desktopEntry = contents;
         });
 
         return Effect.scoped(
@@ -101,10 +102,10 @@ describe("DesktopPreReadyPlatform", () => {
               ),
             );
             const identity = yield* Effect.promise(() => portalIdentity);
-            assert.equal(identity.desktopName, "com.t3tools.T3Code.desktop");
+            assert.equal(identity.desktopName, "com.shirubasoft.T2Code.desktop");
             assert.include(identity.desktopEntry ?? "", 'Exec="/Applications/current.AppImage" %U');
-            assert.include(identity.desktopEntry ?? "", "Name=T3 Code (Alpha)");
-            assert.include(identity.desktopEntry ?? "", "MimeType=x-scheme-handler/t3code;");
+            assert.include(identity.desktopEntry ?? "", "Name=T2 Code (Alpha)");
+            assert.include(identity.desktopEntry ?? "", "MimeType=x-scheme-handler/t2code;");
           }),
         ).pipe(Effect.ensuring(Effect.sync(() => vi.unstubAllEnvs())));
       },
@@ -169,7 +170,7 @@ describe("DesktopPreReadyPlatform", () => {
         });
         assert.deepEqual(events, ["pre-ready", "clerk"]);
         assert.equal(registerSchemesMock.mock.calls.length, 1);
-        assert.equal(appendSwitchMock.mock.calls.length, 0);
+        assert.deepEqual(appendSwitchMock.mock.calls, [["disable-background-networking"]]);
         assert.equal(setDesktopNameMock.mock.calls.length, 0);
       }),
   );
