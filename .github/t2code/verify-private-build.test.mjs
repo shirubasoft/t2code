@@ -82,6 +82,51 @@ NodeTest.test("compiled dependency code is checked and an empty artifact path fa
   );
 });
 
+NodeTest.test(
+  "React Grab telemetry entry points are rejected while primitives remain allowed",
+  (t) => {
+    const { root, put } = fixture(t);
+    const path = "apps/server/src/picker.ts";
+    for (const text of [
+      'import "react-grab";',
+      'import { init } from "react-grab/core";',
+      'export { init } from "react-grab";',
+      'const grab = require("react-grab/core");',
+      'const grab = import("react-grab");',
+      "const grab = import(`react-grab/core`);",
+    ]) {
+      put(path, text);
+      NodeAssert.ok(
+        inventory(root).violations.some((line) => line.includes("prohibited telemetry")),
+        text,
+      );
+    }
+    put(path, 'import { getElementContext } from "react-grab/primitives";');
+    NodeAssert.deepEqual(inventory(root).violations, []);
+  },
+);
+
+NodeTest.test(
+  "React Grab version telemetry is rejected in source and bundled dependencies",
+  (t) => {
+    const { root, put } = fixture(t);
+    NodeFS.mkdirSync(NodePath.join(root, "out/node_modules/react-grab"), { recursive: true });
+    for (const host of ["react-grab.com", "www.react-grab.com"]) {
+      const text = `fetch("https://${host}/api/version?source=browser&v=0.1.44");`;
+      put("apps/server/src/picker.ts", text);
+      put("out/node_modules/react-grab/core.cjs", text);
+      NodeAssert.ok(
+        inventory(root).violations.some((line) => line.includes("prohibited telemetry")),
+      );
+      NodeAssert.ok(
+        verifyArtifacts(NodePath.join(root, "out")).some((line) =>
+          line.includes("prohibited code"),
+        ),
+      );
+    }
+  },
+);
+
 NodeTest.test("symlinks cannot escape the reviewed tree", (t) => {
   const { root, policy } = fixture(t);
   NodeFS.symlinkSync(NodeOS.tmpdir(), NodePath.join(root, "apps/server/src/outside"));
@@ -103,5 +148,62 @@ NodeTest.test("artifact scan includes external dependency JavaScript", (t) => {
   put("out/node_modules/hidden/main.cjs", 'exports.endpoint="https://api.segment.io/v1/track";');
   NodeAssert.ok(
     verifyArtifacts(NodePath.join(root, "out")).some((line) => line.includes("prohibited code")),
+  );
+});
+
+for (const implementation of [
+  'client.setRequestHeaders({ "x-user-staging-id": persistentId });',
+  'const identityFile = path.join(app.userDataPath, ".updaterId");',
+]) {
+  NodeTest.test(
+    `updater identity code is rejected in source and artifacts: ${implementation}`,
+    (t) => {
+      const { root, put } = fixture(t);
+      NodeFS.mkdirSync(NodePath.join(root, "out/node_modules/electron-updater/out"), {
+        recursive: true,
+      });
+      put("apps/server/src/updater.ts", implementation);
+      put("out/node_modules/electron-updater/out/AppUpdater.js", implementation);
+      NodeAssert.ok(
+        inventory(root).violations.some((line) => line.includes("prohibited telemetry")),
+      );
+      NodeAssert.ok(
+        verifyArtifacts(NodePath.join(root, "out")).some((line) =>
+          line.includes("prohibited code"),
+        ),
+      );
+    },
+  );
+}
+
+NodeTest.test(
+  "updater removal patch and privacy tests do not count as runtime identity code",
+  (t) => {
+    const { root, put } = fixture(t);
+    NodeFS.mkdirSync(NodePath.join(root, "patches"));
+    put(
+      "patches/electron-updater@6.8.3.patch",
+      '-client.setRequestHeaders({ "x-user-staging-id": persistentId });\n-const file = ".updaterId";\n',
+    );
+    put(
+      "apps/server/src/updater.test.ts",
+      'expect(headers).not.toHaveProperty("x-user-staging-id"); expect(files).not.toContain(".updaterId");',
+    );
+    NodeAssert.deepEqual(inventory(root).violations, []);
+  },
+);
+
+NodeTest.test("changes to reviewed dependency patches require policy review", (t) => {
+  const { root, put, policy } = fixture(t);
+  NodeFS.mkdirSync(NodePath.join(root, "patches"));
+  const patch = "patches/electron-updater@6.8.3.patch";
+  put(patch, '-client.setRequestHeaders({ "x-user-staging-id": persistentId });\n');
+  policy.capabilities = inventory(root).capabilities;
+  NodeAssert.deepEqual(verifySource(root, policy), []);
+  put(patch, "-client.setRequestHeaders({});\n");
+  NodeAssert.ok(
+    verifySource(root, policy).some((line) =>
+      line.startsWith(`${patch}: network/process capability changed`),
+    ),
   );
 });

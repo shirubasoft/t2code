@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Fiber from "effect/Fiber";
 import * as Path from "effect/Path";
-import { HttpClient, HttpClientResponse } from "effect/unstable/http";
+import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/unstable/http";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 
 import * as ProcessRunner from "../processRunner.ts";
@@ -62,6 +62,54 @@ const extractingRunner = (fs: FileSystem.FileSystem, path: Path.Path, commands: 
   });
 
 it.layer(NodeServices.layer)("ensurePinnedRuntimeInstalled", (it) => {
+  it.effect("downloads and verifies a release without exporting trace headers", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const baseDir = yield* fs.makeTempDirectoryScoped({ prefix: "t2-private-archive-" });
+      const checksums = yield* validChecksums;
+      const requests: Request[] = [];
+      const installed = yield* Effect.gen(function* () {
+        const httpClient = yield* HttpClient.HttpClient;
+        return yield* ensurePinnedRuntimeInstalled({
+          baseDir,
+          version,
+          fs,
+          path,
+          platform: "linux",
+          arch: "x64",
+          httpClient,
+          runner: extractingRunner(fs, path),
+          validate: () => Effect.void,
+        });
+      }).pipe(
+        Effect.provide(FetchHttpClient.layer),
+        Effect.provideService(FetchHttpClient.Fetch, (input, init) => {
+          const request = new Request(input, init);
+          requests.push(request);
+          return Promise.resolve(
+            new Response(request.url.endsWith("/SHA256SUMS") ? checksums : archiveBytes),
+          );
+        }),
+        Effect.withSpan("cli.update.download"),
+      );
+
+      assert.equal(yield* fs.readFileString(installed.sentinelPath), `${version}\n`);
+      assert.deepEqual(
+        requests.map((request) => request.url),
+        [
+          `https://github.com/shirubasoft/t2code/releases/download/v${version}/SHA256SUMS`,
+          `https://github.com/shirubasoft/t2code/releases/download/v${version}/${archiveName}`,
+        ],
+      );
+      for (const request of requests) {
+        for (const header of ["b3", "traceparent", "tracestate"]) {
+          assert.isFalse(request.headers.has(header));
+        }
+      }
+    }),
+  );
+
   it.effect("installs the verified release archive as the runtime executable", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;

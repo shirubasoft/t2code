@@ -9,6 +9,9 @@ const codeExtensions = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".
 const forbidden = [
   /(?:@sentry\/|posthog(?:-js|-node)?["']|@segment\/analytics|mixpanel-browser|amplitude-js|@amplitude\/analytics|@vercel\/analytics|@clerk\/)/i,
   /(?:us|eu)\.i\.posthog\.com|(?:ingest\.)?sentry\.io|api\.segment\.io|api\.axiom\.co|o[0-9]+\.ingest\./i,
+  /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?|\brequire\s*\(\s*)["'`]react-grab(?:\/core)?["'`]/,
+  /\b(?:www\.)?react-grab\.com\/api\/version\b/i,
+  /x-user-staging-id|\.updaterId\b/i,
   /(?:OtlpTracer|OtlpMetrics|OtlpLogger|OTLPTraceExporter|OTLPMetricExporter)\s*\./,
 ];
 // Any file that can open a connection, delegate execution, configure a client,
@@ -86,6 +89,7 @@ export function inventory(source, paths = sourceFiles(source)) {
     const manifest = path.endsWith("package.json");
     const buildInput =
       path.startsWith("scripts/") ||
+      path.startsWith("patches/") ||
       path.startsWith("native/") ||
       /^([^/]+\.(?:json|ya?ml|[cm]?js|ts)|\.gitmodules|\.npmrc|\.pnpmfile\.[cm]?js)$/.test(path) ||
       (/^(?:apps|packages)\//.test(path) &&

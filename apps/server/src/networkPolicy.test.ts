@@ -1,5 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Tracer from "effect/Tracer";
 import { FetchHttpClient, HttpClient } from "effect/unstable/http";
 
 import {
@@ -10,6 +11,41 @@ import {
 } from "./networkPolicy.ts";
 
 describe("local edition network transport", () => {
+  it.effect("keeps local HTTP spans without sending trace headers to a configured harness", () =>
+    Effect.gen(function* () {
+      const spans: Tracer.NativeSpan[] = [];
+      const tracer = Tracer.make({
+        span: (options) => {
+          const span = new Tracer.NativeSpan(options);
+          spans.push(span);
+          return span;
+        },
+      });
+      const requests: Request[] = [];
+      const response = yield* HttpClient.get("https://harness.example/api/usage", {
+        headers: { authorization: "Bearer harness-token" },
+      }).pipe(
+        Effect.provide(layer),
+        Effect.provideService(ProviderNetworkOrigins, ["https://harness.example"]),
+        Effect.provideService(HttpClient.TracerPropagationEnabled, true),
+        Effect.provideService(FetchHttpClient.Fetch, (input, init) => {
+          requests.push(new Request(input, init));
+          return Promise.resolve(new Response("local diagnostics preserved"));
+        }),
+        Effect.withSpan("provider.usage"),
+        Effect.withTracer(tracer),
+      );
+      expect(yield* response.text).toBe("local diagnostics preserved");
+      expect(requests).toHaveLength(1);
+      expect(requests[0]?.headers.get("authorization")).toBe("Bearer harness-token");
+      for (const header of ["b3", "traceparent", "tracestate"]) {
+        expect(requests[0]?.headers.has(header)).toBe(false);
+      }
+      expect(spans.some((span) => span.name === "http.client GET")).toBe(true);
+      expect(spans.some((span) => span.name === "provider.usage")).toBe(true);
+    }),
+  );
+
   it.effect("rejects background external traffic before fetch runs", () =>
     Effect.gen(function* () {
       let calls = 0;
@@ -64,6 +100,9 @@ describe("local edition network transport", () => {
         Effect.provideService(FetchHttpClient.Fetch, (url, init) => {
           urls.push(String(url));
           expect(init?.redirect).toBe("manual");
+          for (const header of ["b3", "traceparent", "tracestate"]) {
+            expect(new Headers(init?.headers).has(header)).toBe(false);
+          }
           return Promise.resolve(
             urls.length === 1
               ? new Response(null, {

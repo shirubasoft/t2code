@@ -87,6 +87,7 @@ export const layer = Layer.effect(
             (yield* UserNetworkAccess)
           ) {
             return yield* response.pipe(
+              Effect.provideService(HttpClient.TracerPropagationEnabled, false),
               Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" }),
             );
           }
