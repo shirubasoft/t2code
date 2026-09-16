@@ -44,8 +44,8 @@ import { NETWORK_BLOCKING_HINT } from "../errors/network.ts";
 const TARGET = new PrimaryConnectionTarget({
   environmentId: EnvironmentId.make("environment-1"),
   label: "Test environment",
-  httpBaseUrl: "https://environment.example.test",
-  wsBaseUrl: "wss://environment.example.test",
+  httpBaseUrl: "http://127.0.0.1:3773",
+  wsBaseUrl: "ws://127.0.0.1:3773",
 });
 
 const RELAY_TARGET = new RelayConnectionTarget({
@@ -69,7 +69,7 @@ const PREPARED_CONNECTION: PreparedConnection = {
   environmentId: TARGET.environmentId,
   label: TARGET.label,
   httpBaseUrl: TARGET.httpBaseUrl,
-  socketUrl: "wss://environment.example.test/ws",
+  socketUrl: "ws://127.0.0.1:3773/ws",
   httpAuthorization: null,
   target: TARGET,
 };
