@@ -17,7 +17,6 @@ import {
   finishValidation,
   plan,
   prepareMerge,
-  recordBlocked,
   validationTitle,
 } from "./sync.mjs";
 import { unexpectedConnections } from "./verify-network-trace.mjs";
@@ -211,6 +210,28 @@ test("ready edits stage real file replacements and blocked decisions leave files
   );
 });
 
+test("a migration can repair more than 100 small files without changing its payload bound", () => {
+  const directory = repository();
+  const edits = Array.from({ length: 101 }, (_, index) => ({
+    path: `source-${index}.ts`,
+    content: "fixed\n",
+  }));
+  applyEdits({ decision: "ready", edits }, directory);
+  assert.equal(git(directory, ["diff", "--cached", "--name-only"]).split("\n").length, 101);
+  assert.throws(
+    () =>
+      applyEdits(
+        {
+          decision: "ready",
+          edits: [{ path: "oversized.ts", content: "x".repeat(5 * 1024 * 1024) }],
+        },
+        directory,
+      ),
+    /edit limit/,
+  );
+  assert.equal(existsSync(join(directory, "oversized.ts")), false);
+});
+
 function validationFixture(overrides = {}) {
   const directory = repository();
   const base = "a".repeat(40);
@@ -258,6 +279,8 @@ function validationFixture(overrides = {}) {
           "CI result",
         ].map((name) => ({ name, conclusion: "success" })),
       };
+    else if (url.includes("/issues?")) data = [];
+    else if (url.endsWith("/actions/runs/7")) data = run;
     else if (url.endsWith("/pulls/1")) data = pr;
     else if (url.endsWith("/commits/main")) data = { sha: base };
     else if (url.endsWith("/merge")) data = { merged: true, sha: "d".repeat(40) };
@@ -265,7 +288,7 @@ function validationFixture(overrides = {}) {
     else data = {};
     return Response.json(data);
   };
-  return { pr, calls, base, sha };
+  return { pr, calls, base, sha, run };
 }
 
 test("trusted merger rejects candidate-defined workflow runs before making API calls", async () => {
@@ -284,6 +307,42 @@ test("trusted merger rejects a changed head before writing status or merging", a
   );
 });
 
+test("a dispatched merge retry reloads the original trusted validation", async () => {
+  const { calls, sha } = validationFixture();
+  writeFileSync(
+    process.env.GITHUB_EVENT_PATH,
+    JSON.stringify({ inputs: { validation_run_id: "7" } }),
+  );
+  await finishValidation();
+  assert.ok(calls[0].url.endsWith("/actions/runs/7"));
+  const merge = calls.find((call) => call.url.endsWith("/merge"));
+  assert.equal(JSON.parse(merge.body).sha, sha);
+});
+
+test("a dispatched merge retry rejects candidate-defined runs", async () => {
+  const { calls } = validationFixture({ head_branch: "codex/upstream-sync" });
+  writeFileSync(
+    process.env.GITHUB_EVENT_PATH,
+    JSON.stringify({ inputs: { validation_run_id: "7" } }),
+  );
+  await assert.rejects(finishValidation(), /accepted trusted/);
+  assert.equal(calls.length, 1);
+});
+
+test("a dispatched merge retry rejects a stale validated head", async () => {
+  const { calls, pr } = validationFixture();
+  pr.head.sha = "e".repeat(40);
+  writeFileSync(
+    process.env.GITHUB_EVENT_PATH,
+    JSON.stringify({ inputs: { validation_run_id: "7" } }),
+  );
+  await assert.rejects(finishValidation(), /changed after validation/);
+  assert.equal(
+    calls.some((call) => ["POST", "PUT", "PATCH"].includes(call.method)),
+    false,
+  );
+});
+
 test("trusted merger pins the head SHA, preserves ancestry, and releases the returned merge SHA", async () => {
   const { calls, sha } = validationFixture();
   await finishValidation();
@@ -293,25 +352,23 @@ test("trusted merger pins the head SHA, preserves ancestry, and releases the ret
   assert.equal(JSON.parse(release.body).inputs.sha, "d".repeat(40));
 });
 
-test("blocked migrations create one durable report for an exact input", async () => {
-  const state = { base: "a".repeat(40), upstream: "c".repeat(40) };
-  process.env.GITHUB_REPOSITORY = "shirubasoft/t2code";
-  process.env.GITHUB_RUN_ID = "123";
-  const issues = [];
-  globalThis.fetch = async (_url, options) => {
-    if (options.method === "POST") {
-      const issue = JSON.parse(options.body);
-      issues.push(issue);
-      return Response.json(issue);
-    }
-    return Response.json(issues);
-  };
-  await recordBlocked(state);
-  await recordBlocked(state);
-  assert.equal(issues.length, 1);
-  assert.match(issues[0].body, /actions\/runs\/123/);
-  await recordBlocked({ ...state, upstream: "d".repeat(40) });
-  assert.equal(issues.length, 2);
+test("a successful merge closes its retry report after dispatching the release", async () => {
+  const { calls, base } = validationFixture();
+  const fetch = globalThis.fetch;
+  globalThis.fetch = async (url, options) =>
+    url.includes("/issues?")
+      ? Response.json([
+          {
+            number: 9,
+            body: `<!-- t2-sync-retry ${JSON.stringify({ base, upstream: "c".repeat(40), run: 3 })} -->`,
+          },
+        ])
+      : fetch(url, options);
+  await finishValidation();
+  const close = calls.findIndex((call) => call.url.endsWith("/issues/9"));
+  const release = calls.findIndex((call) => call.url.endsWith("release.yml/dispatches"));
+  assert.ok(close > release);
+  assert.deepEqual(JSON.parse(calls[close].body), { state: "closed", state_reason: "completed" });
 });
 
 test("network smoke rejects attempted public requests and local DNS while permitting its loopback client", () => {
@@ -328,7 +385,7 @@ test("network smoke rejects attempted public requests and local DNS while permit
   ]);
 });
 
-test("a changed upstream input resumes a blocked PR with a fresh attempt budget", async () => {
+test("a changed upstream input resumes a formerly blocked PR and keeps its repairs", async () => {
   const directory = repository();
   const previousDirectory = process.cwd();
   const base = "a".repeat(40);
@@ -337,6 +394,8 @@ test("a changed upstream input resumes a blocked PR with a fresh attempt budget"
   process.env.GITHUB_REPOSITORY = "shirubasoft/t2code";
   delete process.env.GITHUB_OUTPUT;
   globalThis.fetch = async (url) => {
+    if (url.includes("/releases?"))
+      return Response.json([{ draft: false, target_commitish: base }]);
     if (url.includes("/pulls?"))
       return Response.json([
         {
