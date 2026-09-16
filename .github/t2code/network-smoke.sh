@@ -3,7 +3,9 @@ set -euo pipefail
 [[ $# == 2 ]] || exit 2
 trace=$(mktemp)
 trap 'rm -f "$trace"' EXIT
-node_path=$(command -v node)
+# Resolve Vite+ or other version-manager shims before entering the isolated
+# profile, where they cannot download a runtime or use the runner's cache.
+node_path=$(node -p 'process.execPath')
 
 # The archive executes as the ordinary runner user in a fresh network namespace.
 # Only loopback exists. strace records attempted destinations, including denied

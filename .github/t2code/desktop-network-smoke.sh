@@ -3,7 +3,9 @@ set -euo pipefail
 [[ $# == 1 ]] || exit 2
 appimage=$(realpath "$1")
 repo=$(pwd)
-node_path=$(command -v node)
+# Resolve Vite+ or other version-manager shims before entering the isolated
+# profile, where they cannot download a runtime or use the runner's cache.
+node_path=$(node -p 'process.execPath')
 smoke_dir=$(mktemp -d)
 evidence="$repo/desktop-smoke-evidence"
 mkdir -p "$evidence" "$smoke_dir/home" "$smoke_dir/runtime" "$smoke_dir/extracted"
