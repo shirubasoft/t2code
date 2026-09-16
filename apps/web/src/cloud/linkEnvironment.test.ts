@@ -24,6 +24,7 @@ import { EnvironmentRegistry } from "@t3tools/client-runtime/connection";
 import { ManagedRelay } from "@t3tools/client-runtime/relay";
 import { remoteHttpClientLayer } from "@t3tools/client-runtime/rpc";
 import { __resetDesktopPrimaryAuthForTests } from "../environments/primary/desktopAuth";
+import * as PublicConfig from "./publicConfig";
 
 import {
   linkPrimaryEnvironmentToCloud,
@@ -61,12 +62,12 @@ const dpopSignerLayer = Layer.succeed(
   }),
 );
 
-function relayLayer() {
+function relayLayer(relayUrl = "https://localhost:9443") {
   const http = remoteHttpClientLayer(globalThis.fetch);
   return Layer.mergeAll(
     http,
     ManagedRelay.layer({
-      relayUrl: "https://relay.example.test",
+      relayUrl,
       clientId: RelayWebClientId,
     }).pipe(Layer.provideMerge(dpopSignerLayer), Layer.provide(http)),
   );
@@ -119,8 +120,8 @@ function registryLayer(options?: {
   );
 }
 
-function services(options?: Parameters<typeof registryLayer>[0]) {
-  return Layer.mergeAll(relayLayer(), registryLayer(options));
+function services(options?: Parameters<typeof registryLayer>[0], relayUrl?: string) {
+  return Layer.mergeAll(relayLayer(relayUrl), registryLayer(options));
 }
 
 function withServices<A, E>(
@@ -130,8 +131,9 @@ function withServices<A, E>(
     HttpClient.HttpClient | ManagedRelay.ManagedRelayClient | EnvironmentRegistry
   >,
   options?: Parameters<typeof registryLayer>[0],
+  relayUrl?: string,
 ) {
-  return effect.pipe(Effect.provide(services(options)));
+  return effect.pipe(Effect.provide(services(options, relayUrl)));
 }
 
 function bodyText(body: BodyInit | null | undefined): string {
@@ -140,7 +142,10 @@ function bodyText(body: BodyInit | null | undefined): string {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.stubEnv("VITE_T3CODE_RELAY_URL", "https://relay.example.test");
+  vi.spyOn(PublicConfig, "resolveCloudPublicConfig").mockReturnValue({
+    ...PublicConfig.resolveCloudPublicConfig(),
+    relayUrl: "https://localhost:9443",
+  });
   relayClientInstallDialog.requestConfirmation.mockResolvedValue(true);
 });
 
@@ -152,14 +157,56 @@ afterEach(() => {
 });
 
 describe("web cloud link environment client", () => {
+  it.effect("rejects hosted linking with the real local configuration before any request", () =>
+    Effect.gen(function* () {
+      vi.mocked(PublicConfig.resolveCloudPublicConfig).mockRestore();
+      vi.stubEnv("VITE_T3CODE_RELAY_URL", "https://blocked-relay.example.test");
+      const fetchMock = vi.fn();
+      vi.stubGlobal("fetch", fetchMock);
+
+      const error = yield* withServices(
+        linkPrimaryEnvironmentToCloud({ target: TARGET, clerkToken: "private-test-token" }),
+      ).pipe(Effect.flip);
+
+      expect(error).toMatchObject({
+        _tag: "CloudEnvironmentLinkError",
+        message: "T3CODE_RELAY_URL is not configured.",
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(createProof).not.toHaveBeenCalled();
+      expect(relayClientInstallDialog.requestConfirmation).not.toHaveBeenCalled();
+    }),
+  );
+
+  it.effect("rejects an external relay before sending credentials even with injected config", () =>
+    Effect.gen(function* () {
+      const relayUrl = "https://blocked-relay.example.test";
+      vi.mocked(PublicConfig.resolveCloudPublicConfig).mockReturnValue({
+        ...PublicConfig.resolveCloudPublicConfig(),
+        relayUrl,
+      });
+      const fetchMock = vi.fn();
+      vi.stubGlobal("fetch", fetchMock);
+
+      const error = yield* withServices(
+        linkPrimaryEnvironmentToCloud({ target: TARGET, clerkToken: "private-test-token" }),
+        undefined,
+        relayUrl,
+      ).pipe(Effect.flip);
+
+      expect(error).toMatchObject({ _tag: "CloudEnvironmentLinkError" });
+      expect(fetchMock).not.toHaveBeenCalled();
+    }),
+  );
+
   it.effect("reads primary cloud link state from the explicit target", () =>
     Effect.gen(function* () {
       const fetchMock = vi.fn().mockResolvedValue(
         Response.json({
           linked: true,
           cloudUserId: "user-1",
-          relayUrl: "https://relay.example.test",
-          relayIssuer: "https://relay.example.test",
+          relayUrl: "https://localhost:9443",
+          relayIssuer: "https://localhost:9443",
           managedTunnelActive: true,
           publishAgentActivity: false,
         }),
@@ -172,8 +219,8 @@ describe("web cloud link environment client", () => {
         Option.some({
           linked: true,
           cloudUserId: "user-1",
-          relayUrl: "https://relay.example.test",
-          relayIssuer: "https://relay.example.test",
+          relayUrl: "https://localhost:9443",
+          relayIssuer: "https://localhost:9443",
           managedTunnelActive: true,
           publishAgentActivity: false,
         }),
@@ -190,15 +237,15 @@ describe("web cloud link environment client", () => {
         Response.json({
           linked: true,
           cloudUserId: "user-1",
-          relayUrl: "https://relay.example.test",
-          relayIssuer: "https://relay.example.test",
+          relayUrl: "https://localhost:9443",
+          relayIssuer: "https://localhost:9443",
           managedTunnelActive: true,
           publishAgentActivity: false,
         }),
       );
       vi.stubGlobal("fetch", fetchMock);
       vi.stubGlobal("window", {
-        location: { origin: "t3code://app" },
+        location: { origin: "t2code://app" },
         desktopBridge: {
           getLocalEnvironmentBearerToken: vi.fn().mockResolvedValue("desktop-bearer-token"),
         } as unknown as DesktopBridge,
@@ -218,8 +265,8 @@ describe("web cloud link environment client", () => {
         Response.json({
           linked: true,
           cloudUserId: "user-1",
-          relayUrl: "https://relay.example.test",
-          relayIssuer: "https://relay.example.test",
+          relayUrl: "https://localhost:9443",
+          relayIssuer: "https://localhost:9443",
           managedTunnelActive: true,
           publishAgentActivity: true,
         }),
@@ -261,12 +308,12 @@ describe("web cloud link environment client", () => {
             ok: true,
             environmentId: TARGET.environmentId,
             endpoint: {
-              httpBaseUrl: "https://desktop.example.test",
-              wsBaseUrl: "wss://desktop.example.test",
+              httpBaseUrl: "https://127.0.0.1:9444",
+              wsBaseUrl: "wss://127.0.0.1:9444",
               providerKind: "cloudflare_tunnel",
             },
             endpointRuntime: null,
-            relayIssuer: "https://relay.example.test",
+            relayIssuer: "https://localhost:9443",
             cloudUserId: "user-1",
             environmentCredential: "environment-credential",
             cloudMintPublicKey: "public-key",
@@ -320,7 +367,7 @@ describe("web cloud link environment client", () => {
               providerKind: "manual",
             },
             endpointRuntime: null,
-            relayIssuer: "https://relay.example.test",
+            relayIssuer: "https://localhost:9443",
             cloudUserId: "user-1",
             environmentCredential: "environment-credential",
             cloudMintPublicKey: "public-key",

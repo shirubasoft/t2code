@@ -1,4 +1,4 @@
-import { beforeEach, vi } from "vite-plus/test";
+import { afterEach, beforeEach, vi } from "vite-plus/test";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -9,6 +9,7 @@ import { remoteHttpClientLayer } from "@t3tools/client-runtime/rpc";
 import { HttpClient } from "effect/unstable/http";
 import { MobilePreferencesStore } from "../../persistence/mobile-preferences";
 import { MobileStorage } from "../../persistence/mobile-storage";
+import * as PublicConfig from "./publicConfig";
 
 import {
   linkEnvironmentToCloud,
@@ -24,7 +25,7 @@ vi.mock("expo-constants", () => ({
     expoConfig: {
       extra: {
         relay: {
-          url: "https://relay.example.test",
+          url: "https://blocked-relay.example.test",
         },
       },
     },
@@ -61,10 +62,10 @@ const loadPreferences = vi.fn(() => Effect.succeed({}));
 const savedConnection = {
   environmentId: EnvironmentId.make("env-1"),
   environmentLabel: "Desktop",
-  pairingUrl: "https://desktop.example.test/",
-  displayUrl: "https://desktop.example.test/",
-  httpBaseUrl: "https://desktop.example.test/",
-  wsBaseUrl: "wss://desktop.example.test/ws",
+  pairingUrl: "https://127.0.0.1:9444/",
+  displayUrl: "https://127.0.0.1:9444/",
+  httpBaseUrl: "https://127.0.0.1:9444/",
+  wsBaseUrl: "wss://127.0.0.1:9444/ws",
   bearerToken: "local-bearer",
 };
 
@@ -82,7 +83,7 @@ const testDpopSignerLayer = Layer.succeed(
   }),
 );
 
-function cloudClientLayer() {
+function cloudClientLayer(relayUrl = "https://localhost:9443") {
   const httpClientLayer = remoteHttpClientLayer((input, init) => globalThis.fetch(input, init));
   return Layer.mergeAll(
     httpClientLayer,
@@ -110,7 +111,7 @@ function cloudClientLayer() {
       }),
     ),
     ManagedRelay.layer({
-      relayUrl: "https://relay.example.test",
+      relayUrl,
       clientId: RelayMobileClientId,
     }).pipe(Layer.provideMerge(testDpopSignerLayer), Layer.provide(httpClientLayer)),
   );
@@ -126,7 +127,8 @@ const withCloudServices = <A, E>(
     | MobilePreferencesStore
     | MobileStorage
   >,
-) => effect.pipe(Effect.provide(cloudClientLayer()));
+  relayUrl?: string,
+) => effect.pipe(Effect.provide(cloudClientLayer(relayUrl)));
 
 function validLinkProof() {
   return "signed-environment-link-jwt";
@@ -137,15 +139,15 @@ function validLinkResponse(environmentId = "env-1") {
     ok: true,
     environmentId,
     endpoint: {
-      httpBaseUrl: "https://managed.example.test/",
-      wsBaseUrl: "wss://managed.example.test/ws",
+      httpBaseUrl: "https://127.0.0.1:9445/",
+      wsBaseUrl: "wss://127.0.0.1:9445/ws",
       providerKind: "cloudflare_tunnel",
     },
     endpointRuntime: {
       providerKind: "cloudflare_tunnel",
       connectorToken: "connector-token",
     },
-    relayIssuer: "https://relay.example.test",
+    relayIssuer: "https://localhost:9443",
     cloudUserId: "user_123",
     environmentCredential: "environment-credential",
     cloudMintPublicKey: "cloud-mint-public-key",
@@ -178,8 +180,8 @@ function listedEnvironment(environmentId: string) {
     environmentId: EnvironmentId.make(environmentId),
     label: "Desktop",
     endpoint: {
-      httpBaseUrl: `https://${environmentId}.example.test/`,
-      wsBaseUrl: `wss://${environmentId}.example.test/ws`,
+      httpBaseUrl: `https://127.0.0.1:${environmentId === "env-1" ? 9451 : 9452}/`,
+      wsBaseUrl: `wss://127.0.0.1:${environmentId === "env-1" ? 9451 : 9452}/ws`,
       providerKind: "cloudflare_tunnel" as const,
     },
     linkedAt: "2026-05-25T00:00:00.000Z",
@@ -191,7 +193,58 @@ describe("mobile cloud link environment client", () => {
     vi.restoreAllMocks();
     createProofMock.mockClear();
     loadPreferences.mockClear();
+    vi.spyOn(PublicConfig, "resolveCloudPublicConfig").mockReturnValue({
+      ...PublicConfig.resolveCloudPublicConfig(),
+      relay: { url: "https://localhost:9443" },
+    });
   });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it.effect("rejects hosted linking with the real local configuration before any request", () =>
+    Effect.gen(function* () {
+      vi.mocked(PublicConfig.resolveCloudPublicConfig).mockRestore();
+      const fetchMock = vi.fn();
+      vi.stubGlobal("fetch", fetchMock);
+
+      const error = yield* withCloudServices(
+        linkEnvironmentToCloud({
+          connection: savedConnection,
+          clerkToken: "private-test-token",
+        }),
+      ).pipe(Effect.flip);
+
+      expect(error).toMatchObject({
+        _tag: "CloudEnvironmentLinkError",
+        message: "Relay URL is not configured.",
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(createProofMock).not.toHaveBeenCalled();
+    }),
+  );
+
+  it.effect("rejects an external relay before sending credentials even with injected config", () =>
+    Effect.gen(function* () {
+      const relayUrl = "https://blocked-relay.example.test";
+      vi.mocked(PublicConfig.resolveCloudPublicConfig).mockReturnValue({
+        ...PublicConfig.resolveCloudPublicConfig(),
+        relay: { url: relayUrl },
+      });
+      const fetchMock = vi.fn();
+      vi.stubGlobal("fetch", fetchMock);
+
+      const error = yield* withCloudServices(
+        listCloudEnvironments({ clerkToken: "private-test-token" }),
+        relayUrl,
+      ).pipe(Effect.flip);
+
+      expect(error).toMatchObject({ _tag: "CloudEnvironmentLinkError" });
+      expect(fetchMock).not.toHaveBeenCalled();
+    }),
+  );
 
   it.effect("decodes relay environment list responses before returning records", () =>
     Effect.gen(function* () {
@@ -205,8 +258,8 @@ describe("mobile cloud link environment client", () => {
                   environmentId: "env-1",
                   label: "Desktop",
                   endpoint: {
-                    httpBaseUrl: "https://desktop.example.test/",
-                    wsBaseUrl: "wss://desktop.example.test/ws",
+                    httpBaseUrl: "https://127.0.0.1:9444/",
+                    wsBaseUrl: "wss://127.0.0.1:9444/ws",
                     providerKind: "cloudflare_tunnel",
                   },
                   linkedAt: "2026-05-25T00:00:00.000Z",
@@ -225,8 +278,8 @@ describe("mobile cloud link environment client", () => {
           environmentId: "env-1",
           label: "Desktop",
           endpoint: {
-            httpBaseUrl: "https://desktop.example.test/",
-            wsBaseUrl: "wss://desktop.example.test/ws",
+            httpBaseUrl: "https://127.0.0.1:9444/",
+            wsBaseUrl: "wss://127.0.0.1:9444/ws",
             providerKind: "cloudflare_tunnel",
           },
           linkedAt: "2026-05-25T00:00:00.000Z",
@@ -248,7 +301,7 @@ describe("mobile cloud link environment client", () => {
                   label: "Desktop",
                   endpoint: {
                     httpBaseUrl: "",
-                    wsBaseUrl: "wss://desktop.example.test/ws",
+                    wsBaseUrl: "wss://127.0.0.1:9444/ws",
                     providerKind: "cloudflare_tunnel",
                   },
                   linkedAt: "2026-05-25T00:00:00.000Z",
@@ -264,7 +317,7 @@ describe("mobile cloud link environment client", () => {
       ).pipe(Effect.flip);
       expect(error).toMatchObject({
         _tag: "CloudEnvironmentLinkError",
-        message: "https://relay.example.test/v1/environments failed",
+        message: "https://localhost:9443/v1/environments failed",
       });
     }),
   );
@@ -272,7 +325,7 @@ describe("mobile cloud link environment client", () => {
   it.effect("loads signed status for each advertised cloud environment", () =>
     Effect.gen(function* () {
       const fetchMock = vi.fn((url: string | URL, _init?: RequestInit) => {
-        if (String(url) === "https://relay.example.test/v1/environments") {
+        if (String(url) === "https://localhost:9443/v1/environments") {
           return Promise.resolve(
             Response.json({
               environments: [
@@ -280,8 +333,8 @@ describe("mobile cloud link environment client", () => {
                   environmentId: "env-1",
                   label: "Desktop",
                   endpoint: {
-                    httpBaseUrl: "https://desktop.example.test/",
-                    wsBaseUrl: "wss://desktop.example.test/ws",
+                    httpBaseUrl: "https://127.0.0.1:9444/",
+                    wsBaseUrl: "wss://127.0.0.1:9444/ws",
                     providerKind: "cloudflare_tunnel",
                   },
                   linkedAt: "2026-05-25T00:00:00.000Z",
@@ -290,16 +343,16 @@ describe("mobile cloud link environment client", () => {
             }),
           );
         }
-        if (String(url) === "https://relay.example.test/v1/client/dpop-token") {
+        if (String(url) === "https://localhost:9443/v1/client/dpop-token") {
           return Promise.resolve(Response.json(validDpopAccessTokenResponse()));
         }
-        expect(String(url)).toBe("https://relay.example.test/v1/environments/env-1/status");
+        expect(String(url)).toBe("https://localhost:9443/v1/environments/env-1/status");
         return Promise.resolve(
           Response.json({
             environmentId: "env-1",
             endpoint: {
-              httpBaseUrl: "https://desktop.example.test/",
-              wsBaseUrl: "wss://desktop.example.test/ws",
+              httpBaseUrl: "https://127.0.0.1:9444/",
+              wsBaseUrl: "wss://127.0.0.1:9444/ws",
               providerKind: "cloudflare_tunnel",
             },
             status: "online",
@@ -334,17 +387,17 @@ describe("mobile cloud link environment client", () => {
         },
       ]);
       expect(String(fetchMock.mock.calls[2]?.[0])).toBe(
-        "https://relay.example.test/v1/environments/env-1/status",
+        "https://localhost:9443/v1/environments/env-1/status",
       );
       expect(fetchMock.mock.calls[2]?.[1]?.method).toBe("POST");
       const statusHeaders = new Headers(fetchMock.mock.calls[2]?.[1]?.headers);
       expect(statusHeaders.get("authorization")).toBe("DPoP relay-dpop-token");
       expect(statusHeaders.get("dpop")).toBe(
-        "dpop:POST:https://relay.example.test/v1/environments/env-1/status",
+        "dpop:POST:https://localhost:9443/v1/environments/env-1/status",
       );
       expect(createProofMock).toHaveBeenCalledWith({
         method: "POST",
-        url: "https://relay.example.test/v1/environments/env-1/status",
+        url: "https://localhost:9443/v1/environments/env-1/status",
         accessToken: "relay-dpop-token",
       });
     }),
@@ -491,7 +544,7 @@ describe("mobile cloud link environment client", () => {
       vi.stubGlobal(
         "fetch",
         vi.fn((url: string | URL) => {
-          if (String(url) === "https://relay.example.test/v1/environments") {
+          if (String(url) === "https://localhost:9443/v1/environments") {
             return Promise.resolve(
               Response.json({
                 environments: [
@@ -499,8 +552,8 @@ describe("mobile cloud link environment client", () => {
                     environmentId: "env-1",
                     label: "Desktop",
                     endpoint: {
-                      httpBaseUrl: "https://desktop.example.test/",
-                      wsBaseUrl: "wss://desktop.example.test/ws",
+                      httpBaseUrl: "https://127.0.0.1:9444/",
+                      wsBaseUrl: "wss://127.0.0.1:9444/ws",
                       providerKind: "cloudflare_tunnel",
                     },
                     linkedAt: "2026-05-25T00:00:00.000Z",
@@ -509,7 +562,7 @@ describe("mobile cloud link environment client", () => {
               }),
             );
           }
-          if (String(url) === "https://relay.example.test/v1/client/dpop-token") {
+          if (String(url) === "https://localhost:9443/v1/client/dpop-token") {
             return Promise.resolve(Response.json(validDpopAccessTokenResponse()));
           }
           return Promise.resolve(Response.json({ error: "offline" }, { status: 503 }));
@@ -526,7 +579,7 @@ describe("mobile cloud link environment client", () => {
             label: "Desktop",
           },
           status: null,
-          statusError: "https://relay.example.test/v1/environments/env-1/status failed",
+          statusError: "https://localhost:9443/v1/environments/env-1/status failed",
         },
       ]);
     }),
@@ -537,7 +590,7 @@ describe("mobile cloud link environment client", () => {
       vi.stubGlobal(
         "fetch",
         vi.fn((url: string | URL) => {
-          if (String(url) === "https://relay.example.test/v1/environments") {
+          if (String(url) === "https://localhost:9443/v1/environments") {
             return Promise.resolve(
               Response.json({
                 environments: [
@@ -545,8 +598,8 @@ describe("mobile cloud link environment client", () => {
                     environmentId: "env-1",
                     label: "Desktop",
                     endpoint: {
-                      httpBaseUrl: "https://desktop.example.test/",
-                      wsBaseUrl: "wss://desktop.example.test/ws",
+                      httpBaseUrl: "https://127.0.0.1:9444/",
+                      wsBaseUrl: "wss://127.0.0.1:9444/ws",
                       providerKind: "cloudflare_tunnel",
                     },
                     linkedAt: "2026-05-25T00:00:00.000Z",
@@ -555,15 +608,15 @@ describe("mobile cloud link environment client", () => {
               }),
             );
           }
-          if (String(url) === "https://relay.example.test/v1/client/dpop-token") {
+          if (String(url) === "https://localhost:9443/v1/client/dpop-token") {
             return Promise.resolve(Response.json(validDpopAccessTokenResponse()));
           }
           return Promise.resolve(
             Response.json({
               environmentId: "env-other",
               endpoint: {
-                httpBaseUrl: "https://desktop.example.test/",
-                wsBaseUrl: "wss://desktop.example.test/ws",
+                httpBaseUrl: "https://127.0.0.1:9444/",
+                wsBaseUrl: "wss://127.0.0.1:9444/ws",
                 providerKind: "cloudflare_tunnel",
               },
               status: "online",
@@ -689,7 +742,7 @@ describe("mobile cloud link environment client", () => {
       expect(error).toMatchObject({
         _tag: "CloudEnvironmentLinkError",
         message:
-          "https://relay.example.test/v1/client/environment-links failed: Relay rejected the environment link proof (origin_not_allowed).",
+          "https://localhost:9443/v1/client/environment-links failed: Relay rejected the environment link proof (origin_not_allowed).",
         traceId: "trace-test",
       });
       expect(fetchMock).toHaveBeenCalledTimes(3);
@@ -764,13 +817,13 @@ describe("mobile cloud link environment client", () => {
 
       expect(bodies[1]).toMatchObject({
         endpoint: {
-          httpBaseUrl: "https://desktop.example.test/",
-          wsBaseUrl: "wss://desktop.example.test/ws",
+          httpBaseUrl: "https://127.0.0.1:9444/",
+          wsBaseUrl: "wss://127.0.0.1:9444/ws",
           providerKind: "cloudflare_tunnel",
         },
         origin: {
           localHttpHost: "127.0.0.1",
-          localHttpPort: 443,
+          localHttpPort: 9444,
         },
       });
       expect(bodies[2]).toMatchObject({
@@ -863,8 +916,8 @@ describe("mobile cloud link environment client", () => {
             Response.json({
               environmentId: "env-1",
               endpoint: {
-                httpBaseUrl: "https://desktop.example.test/",
-                wsBaseUrl: "wss://desktop.example.test/ws",
+                httpBaseUrl: "https://127.0.0.1:9444/",
+                wsBaseUrl: "wss://127.0.0.1:9444/ws",
                 providerKind: "cloudflare_tunnel",
               },
               credential: "one-time-cloud-credential",
@@ -881,8 +934,8 @@ describe("mobile cloud link environment client", () => {
               environmentId: EnvironmentId.make("env-1"),
               label: "Desktop",
               endpoint: {
-                httpBaseUrl: "https://desktop.example.test/",
-                wsBaseUrl: "wss://desktop.example.test/ws",
+                httpBaseUrl: "https://127.0.0.1:9444/",
+                wsBaseUrl: "wss://127.0.0.1:9444/ws",
                 providerKind: "cloudflare_tunnel",
               },
               linkedAt: "2026-05-25T00:00:00.000Z",
@@ -890,7 +943,7 @@ describe("mobile cloud link environment client", () => {
           }),
         );
 
-        expect(connection.pairingUrl).toBe("https://desktop.example.test/");
+        expect(connection.pairingUrl).toBe("https://127.0.0.1:9444/");
         expect(connection.pairingUrl).not.toContain("one-time-cloud-credential");
         expect(connection.bearerToken).toBeNull();
         expect(connection.authenticationMethod).toBe("dpop");
@@ -903,12 +956,12 @@ describe("mobile cloud link environment client", () => {
         });
         expect(createProofMock).toHaveBeenCalledWith({
           method: "POST",
-          url: "https://relay.example.test/v1/environments/env-1/connect",
+          url: "https://localhost:9443/v1/environments/env-1/connect",
           accessToken: "relay-dpop-token",
         });
         expect(createProofMock).toHaveBeenCalledWith({
           method: "POST",
-          url: "https://desktop.example.test/oauth/token",
+          url: "https://127.0.0.1:9444/oauth/token",
         });
       }),
   );
@@ -949,8 +1002,8 @@ describe("mobile cloud link environment client", () => {
             Response.json({
               environmentId: "env-1",
               endpoint: {
-                httpBaseUrl: "https://rotated-desktop.example.test/",
-                wsBaseUrl: "wss://rotated-desktop.example.test/ws",
+                httpBaseUrl: "https://127.0.0.1:9446/",
+                wsBaseUrl: "wss://127.0.0.1:9446/ws",
                 providerKind: "cloudflare_tunnel",
               },
               credential: "rotated-one-time-cloud-credential",
@@ -966,10 +1019,10 @@ describe("mobile cloud link environment client", () => {
           connection: {
             environmentId: EnvironmentId.make("env-1"),
             environmentLabel: "Desktop",
-            pairingUrl: "https://desktop.example.test/",
-            displayUrl: "https://desktop.example.test/",
-            httpBaseUrl: "https://desktop.example.test/",
-            wsBaseUrl: "wss://desktop.example.test/ws",
+            pairingUrl: "https://127.0.0.1:9444/",
+            displayUrl: "https://127.0.0.1:9444/",
+            httpBaseUrl: "https://127.0.0.1:9444/",
+            wsBaseUrl: "wss://127.0.0.1:9444/ws",
             bearerToken: null,
             authenticationMethod: "dpop",
             relayManaged: true,
@@ -980,9 +1033,9 @@ describe("mobile cloud link environment client", () => {
       expect(connection).toMatchObject({
         environmentId: "env-1",
         environmentLabel: "Rotated Desktop",
-        displayUrl: "https://rotated-desktop.example.test/",
-        httpBaseUrl: "https://rotated-desktop.example.test/",
-        wsBaseUrl: "wss://rotated-desktop.example.test/ws",
+        displayUrl: "https://127.0.0.1:9446/",
+        httpBaseUrl: "https://127.0.0.1:9446/",
+        wsBaseUrl: "wss://127.0.0.1:9446/ws",
         dpopAccessToken: "fresh-environment-dpop-token",
       });
     }),
@@ -999,8 +1052,8 @@ describe("mobile cloud link environment client", () => {
               : Response.json({
                   environmentId: "env-other",
                   endpoint: {
-                    httpBaseUrl: "https://desktop.example.test/",
-                    wsBaseUrl: "wss://desktop.example.test/ws",
+                    httpBaseUrl: "https://127.0.0.1:9444/",
+                    wsBaseUrl: "wss://127.0.0.1:9444/ws",
                     providerKind: "cloudflare_tunnel",
                   },
                   credential: "one-time-cloud-credential",
@@ -1017,8 +1070,8 @@ describe("mobile cloud link environment client", () => {
             environmentId: EnvironmentId.make("env-1"),
             label: "Desktop",
             endpoint: {
-              httpBaseUrl: "https://desktop.example.test/",
-              wsBaseUrl: "wss://desktop.example.test/ws",
+              httpBaseUrl: "https://127.0.0.1:9444/",
+              wsBaseUrl: "wss://127.0.0.1:9444/ws",
               providerKind: "cloudflare_tunnel",
             },
             linkedAt: "2026-05-25T00:00:00.000Z",
@@ -1060,8 +1113,8 @@ describe("mobile cloud link environment client", () => {
             environmentId: EnvironmentId.make("env-1"),
             label: "Desktop",
             endpoint: {
-              httpBaseUrl: "https://desktop.example.test/",
-              wsBaseUrl: "wss://desktop.example.test/ws",
+              httpBaseUrl: "https://127.0.0.1:9444/",
+              wsBaseUrl: "wss://127.0.0.1:9444/ws",
               providerKind: "cloudflare_tunnel",
             },
             linkedAt: "2026-05-25T00:00:00.000Z",
@@ -1070,7 +1123,7 @@ describe("mobile cloud link environment client", () => {
       ).pipe(Effect.flip);
       expect(error).toMatchObject({
         _tag: "CloudEnvironmentLinkError",
-        message: `https://relay.example.test/v1/environments/env-1/connect failed: Relay rejected the DPoP proof. ${DPOP_UNKNOWN_HINT}`,
+        message: `https://localhost:9443/v1/environments/env-1/connect failed: Relay rejected the DPoP proof. ${DPOP_UNKNOWN_HINT}`,
         traceId: "trace-connect",
       });
     }),
@@ -1094,8 +1147,8 @@ describe("mobile cloud link environment client", () => {
                 Response.json({
                   environmentId: "env-1",
                   endpoint: {
-                    httpBaseUrl: "https://desktop.example.test/",
-                    wsBaseUrl: "wss://desktop.example.test/ws",
+                    httpBaseUrl: "https://127.0.0.1:9444/",
+                    wsBaseUrl: "wss://127.0.0.1:9444/ws",
                     providerKind: "cloudflare_tunnel",
                   },
                   credential: "one-time-cloud-credential",
@@ -1135,8 +1188,8 @@ describe("mobile cloud link environment client", () => {
               environmentId: EnvironmentId.make("env-1"),
               label: "Desktop",
               endpoint: {
-                httpBaseUrl: "https://desktop.example.test/",
-                wsBaseUrl: "wss://desktop.example.test/ws",
+                httpBaseUrl: "https://127.0.0.1:9444/",
+                wsBaseUrl: "wss://127.0.0.1:9444/ws",
                 providerKind: "cloudflare_tunnel",
               },
               linkedAt: "2026-05-25T00:00:00.000Z",
@@ -1163,8 +1216,8 @@ describe("mobile cloud link environment client", () => {
               : Response.json({
                   environmentId: "env-1",
                   endpoint: {
-                    httpBaseUrl: "https://other-desktop.example.test/",
-                    wsBaseUrl: "wss://other-desktop.example.test/ws",
+                    httpBaseUrl: "https://127.0.0.1:9447/",
+                    wsBaseUrl: "wss://127.0.0.1:9447/ws",
                     providerKind: "cloudflare_tunnel",
                   },
                   credential: "one-time-cloud-credential",
@@ -1181,8 +1234,8 @@ describe("mobile cloud link environment client", () => {
             environmentId: EnvironmentId.make("env-1"),
             label: "Desktop",
             endpoint: {
-              httpBaseUrl: "https://desktop.example.test/",
-              wsBaseUrl: "wss://desktop.example.test/ws",
+              httpBaseUrl: "https://127.0.0.1:9444/",
+              wsBaseUrl: "wss://127.0.0.1:9444/ws",
               providerKind: "cloudflare_tunnel",
             },
             linkedAt: "2026-05-25T00:00:00.000Z",
@@ -1217,8 +1270,8 @@ describe("mobile cloud link environment client", () => {
                   : Response.json({
                       environmentId: "env-1",
                       endpoint: {
-                        httpBaseUrl: "https://desktop.example.test/",
-                        wsBaseUrl: "wss://desktop.example.test/ws",
+                        httpBaseUrl: "https://127.0.0.1:9444/",
+                        wsBaseUrl: "wss://127.0.0.1:9444/ws",
                         providerKind: "cloudflare_tunnel",
                       },
                       credential: "one-time-cloud-credential",
@@ -1235,8 +1288,8 @@ describe("mobile cloud link environment client", () => {
               environmentId: EnvironmentId.make("env-1"),
               label: "Desktop",
               endpoint: {
-                httpBaseUrl: "https://desktop.example.test/",
-                wsBaseUrl: "wss://desktop.example.test/ws",
+                httpBaseUrl: "https://127.0.0.1:9444/",
+                wsBaseUrl: "wss://127.0.0.1:9444/ws",
                 providerKind: "cloudflare_tunnel",
               },
               linkedAt: "2026-05-25T00:00:00.000Z",
