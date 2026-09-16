@@ -42,6 +42,7 @@ import {
 } from "./build-desktop-artifact.ts";
 import { selectCliRuntimeExternalDependencies } from "./lib/cli-external-packages.ts";
 import { resolveCatalogDependencies } from "./lib/resolve-catalog.ts";
+import { writeStagingLockfile } from "./lib/staging-lockfile.ts";
 
 const BuildPlatform = Schema.Literals(["mac", "linux", "win"]);
 const BuildArch = Schema.Literals(["arm64", "x64"]);
@@ -204,9 +205,12 @@ const stageRuntimeExternals = Effect.fn("stageRuntimeExternals")(function* (inpu
       nodeLinker: "hoisted",
     }),
   );
-  if (Object.keys(patchedDependencies).length > 0) {
-    yield* fs.copy(path.join(input.repoRoot, "patches"), path.join(input.stageDir, "patches"));
-  }
+  yield* writeStagingLockfile({
+    repoRoot: input.repoRoot,
+    stageDir: input.stageDir,
+    importers: ["apps/server"],
+    manifest: { dependencies },
+  });
 
   const install = yield* resolveSpawnCommand("vp", [...STAGE_INSTALL_ARGS]);
   yield* runCommand(

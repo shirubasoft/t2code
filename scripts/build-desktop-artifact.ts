@@ -36,6 +36,7 @@ import {
 import { loadRepoEnv } from "./lib/public-config.ts";
 import { selectDesktopRuntimeExternalDependencies } from "./lib/desktop-external-packages.ts";
 import { resolveCatalogDependencies } from "./lib/resolve-catalog.ts";
+import { writeStagingLockfile } from "./lib/staging-lockfile.ts";
 
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -916,13 +917,13 @@ interface StagePackageJson {
   readonly author: string;
   readonly main: string;
   readonly build: Record<string, unknown>;
-  readonly dependencies: Record<string, unknown>;
+  readonly dependencies: Record<string, string>;
   readonly devDependencies: {
     readonly electron: string;
   };
 }
 
-export const STAGE_INSTALL_ARGS = ["install", "--prod"] as const;
+export const STAGE_INSTALL_ARGS = ["install", "--prod", "--frozen-lockfile"] as const;
 export const DESKTOP_ELECTRON_LANGUAGES = ["en-US"] as const;
 export const DESKTOP_FILE_EXCLUSIONS = [
   // T3 Code always passes the user's installed Claude executable to the SDK,
@@ -2867,9 +2868,12 @@ export const stageWindowsServerSidecar = Effect.fn("stageWindowsServerSidecar")(
     path.join(serverStageDir, "pnpm-workspace.yaml"),
     sidecarWorkspaceConfigString,
   );
-  if (Object.keys(sidecarPatchedDependencies).length > 0) {
-    yield* fs.copy(path.join(input.repoRoot, "patches"), path.join(serverStageDir, "patches"));
-  }
+  yield* writeStagingLockfile({
+    repoRoot: input.repoRoot,
+    stageDir: serverStageDir,
+    importers: ["apps/server"],
+    manifest: sidecarPackageJson,
+  });
 
   yield* Effect.log("[desktop-artifact] Installing server sidecar runtime externals...");
   const installCommand = yield* resolveSpawnCommand("vp", [...STAGE_INSTALL_ARGS]);
@@ -3615,9 +3619,12 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
     stageWorkspaceConfigString,
   );
 
-  if (Object.keys(stagePatchedDependencies).length > 0) {
-    yield* fs.copy(path.join(repoRoot, "patches"), path.join(stageAppDir, "patches"));
-  }
+  yield* writeStagingLockfile({
+    repoRoot,
+    stageDir: stageAppDir,
+    importers: ["apps/desktop", "apps/server"],
+    manifest: stagePackageJson,
+  });
 
   yield* Effect.log("[desktop-artifact] Installing staged production dependencies...");
   const installCommand = yield* resolveSpawnCommand("vp", [...STAGE_INSTALL_ARGS]);

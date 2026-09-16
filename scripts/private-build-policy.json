@@ -802,8 +802,8 @@
     "pnpm-lock.yaml": "fc039792a72036366b4139701ce77fdda548850dfb50e51352c673191a94a870",
     "pnpm-workspace.yaml": "5e3f563ec76d016d1ca6ea350015981c4481920dc3f65d94bf999b287041bf72",
     "scripts/apply-web-brand-assets.ts": "10af040140b89fd0fe5f2294beb28eabbeac93d5ed5c46015af56430838d1653",
-    "scripts/build-cli-archive.ts": "6eaab419fab5342fbae311fc6bcb7cc37a95c5f249337d96b547bfdcbc23cc2c",
-    "scripts/build-desktop-artifact.ts": "3cc31ffc4a19344298143cff5c06085b82f9132499711f2b1ef8cd4ac1cf7b76",
+    "scripts/build-cli-archive.ts": "8e5b83495696b124d4f86b1701a45116c5ea59ac9ad3890db11ef0548071eed9",
+    "scripts/build-desktop-artifact.ts": "ac3a7a365568aa791ff13278e2e596828ef1d9d7d0b29df865c59b0d708d819c",
     "scripts/build-npm-platform-packages.ts": "2c2b49aa89179e960c4b8e2fb73be9d3c1787b705bb7998b2dae9d97a10c7e4e",
     "scripts/dev-runner.ts": "b24afb36842cdfcdcb476ff945b963f0322362c072966fe2b87709caa26f8969",
     "scripts/export-android-icons.ts": "0f1b947df4a78532d18c2757787a825db9c2ef6b0ab2bb493bd1160fb2f7cb9e",
@@ -820,6 +820,7 @@
     "scripts/lib/public-config.ts": "5f210a989da079707d2f843a39fedf5e7c5776c89ea2bdd90a3a64999bd0f322",
     "scripts/lib/reference-repos.ts": "9f704dfaefe8569af60ccd01b79bfc2f61e426119f0e8339761b8366d52ed86a",
     "scripts/lib/resolve-catalog.ts": "cb2d99fd0faa8e5315abae45ee0ca56d8d9dc665f253eb2096d184518adbea33",
+    "scripts/lib/staging-lockfile.ts": "aab2bd30e8236532b40bc29b5ac8d948882148204b58ea7096b740c33c2ce807",
     "scripts/lib/third-party-licenses.ts": "1d19d2886ff86092d8d8f87b88a42783dd091251646cdd291db4bf2295cf38b9",
     "scripts/lib/update-manifest.ts": "a5d0dca1a000e51ef1ab5edfabbd61788b4e380353050b5836c132c4fd59f37e",
     "scripts/merge-update-manifests.ts": "6bd55413716be2983c48c225e36bfc063a8e9fc76721e6dc14b65c4424824d48",
@@ -1096,6 +1097,8 @@
     "packages/shared/src/localNetwork.test.ts": "40bcbc9faa011e8e862a213d2aaf729ccf477339bbe2bbca08c7a125a6fc3ba6",
     "packages/shared/src/localNetwork.ts": "c2c3d908a70e4a2e0ce0464aa76d98dd80c52edb135c462fef3d032751f5c34c",
     "packages/shared/src/observability.ts": "7a6a6e9c28cce8afe0b4074373454e97db7d38f309c996b96665a72be358ed5a",
-    "patches/electron-updater@6.8.3.patch": "9c43917f4c49d90934cb57589209e4305c4d5ae649f35ff673b7acac4aeea598"
+    "patches/electron-updater@6.8.3.patch": "9c43917f4c49d90934cb57589209e4305c4d5ae649f35ff673b7acac4aeea598",
+    "scripts/lib/staging-lockfile.test.ts": "b80b578c372ae5b220ed0af20c20bf5e9817129a2940c4b4e3257aaa194e4e51",
+    "scripts/lib/staging-lockfile.ts": "aab2bd30e8236532b40bc29b5ac8d948882148204b58ea7096b740c33c2ce807"
   }
 }
