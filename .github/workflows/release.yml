@@ -72,6 +72,10 @@ jobs:
           run-install: false
       - name: Install build dependencies
         run: vp install --filter=t3... --filter=@t3tools/web... --filter=@t3tools/desktop... --filter=@t3tools/scripts...
+      - name: Install browser secret helper build libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsecret-1-dev pkg-config
       - name: Verify source and build release bundle
         env:
           RELEASE_VERSION: ${{ needs.metadata.outputs.version }}
