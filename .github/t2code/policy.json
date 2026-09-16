@@ -2,7 +2,6 @@
   "upstream": "pingdotgg/t3code",
   "upstreamBranch": "main",
   "branch": "codex/upstream-sync",
-  "maximumAttempts": 3,
   "protectedPaths": [
     ".github/",
     "scripts/verify-private-build.mjs",
