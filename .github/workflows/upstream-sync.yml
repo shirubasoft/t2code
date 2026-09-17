@@ -67,7 +67,9 @@ jobs:
           git init candidate
           git -C candidate remote remove origin || true
           git -C candidate remote add origin https://github.com/pingdotgg/t3code.git
-          git -C candidate fetch --no-tags --depth=1 origin "$UPSTREAM_SHA"
+          git -C candidate config remote.origin.promisor true
+          git -C candidate config remote.origin.partialclonefilter blob:none
+          git -C candidate fetch --filter=blob:none --no-tags --depth=1 origin "$UPSTREAM_SHA"
           git -C candidate checkout --force --detach "$UPSTREAM_SHA"
           git -C candidate clean -fdx
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
