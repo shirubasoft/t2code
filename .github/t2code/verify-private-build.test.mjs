@@ -5,7 +5,13 @@ import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import * as NodeTest from "node:test";
-import { inventory, verifySource, verifyArtifacts } from "../../scripts/verify-private-build.mjs";
+import {
+  inventory,
+  verifySource,
+  verifyArtifacts,
+  verifyBoundaries,
+} from "../../scripts/verify-private-build.mjs";
+import { assertEditable } from "./sync.mjs";
 
 function fixture(t) {
   const root = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t2-policy-"));
@@ -53,6 +59,27 @@ NodeTest.test("changing a privacy boundary without a network call fails", (t) =>
     verifySource(root, policy).some((line) => line.includes("privacy boundary changed")),
   );
 });
+
+NodeTest.test(
+  "reviewed privacy adapters always require approval even when their code looks pure",
+  (t) => {
+    const { root, put, policy } = fixture(t);
+    const path = "apps/server/src/vcs/vcsNetworkPolicy.ts";
+    NodeFS.mkdirSync(NodePath.dirname(NodePath.join(root, path)), { recursive: true });
+    put(path, "export const classify = () => true;\n");
+    const actual = inventory(root);
+    NodeAssert.ok(actual.capabilities[path]);
+    policy.capabilities = actual.capabilities;
+    policy.reviewedBoundaries = [path];
+    NodeAssert.doesNotThrow(() => assertEditable(path));
+    NodeAssert.throws(() => assertEditable("apps/server/src/vcs/vcsNetworkPolicy.test.ts"));
+    put(path, "export const classify = () => false;\n");
+    NodeAssert.deepEqual(verifyBoundaries(root, policy), []);
+    NodeAssert.ok(verifySource(root, policy).some((line) => line.includes(path)));
+    NodeFS.unlinkSync(NodePath.join(root, path));
+    NodeAssert.ok(verifyBoundaries(root, policy).some((line) => line.includes("adapter missing")));
+  },
+);
 
 NodeTest.test("a candidate cannot bless a new dependency or exporter", (t) => {
   const { root, put, policy } = fixture(t);

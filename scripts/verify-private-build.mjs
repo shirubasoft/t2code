@@ -5,6 +5,10 @@ import * as NodePath from "node:path";
 import * as NodeURL from "node:url";
 
 const directory = NodePath.dirname(NodeURL.fileURLToPath(import.meta.url));
+const reviewedBoundaries = new Set(
+  JSON.parse(NodeFS.readFileSync(NodePath.join(directory, "private-build-policy.json"), "utf8"))
+    .reviewedBoundaries ?? [],
+);
 const codeExtensions = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".html", ".css"]);
 const forbidden = [
   /(?:@sentry\/|posthog(?:-js|-node)?["']|@segment\/analytics|mixpanel-browser|amplitude-js|@amplitude\/analytics|@vercel\/analytics|@clerk\/)/i,
@@ -89,6 +93,7 @@ export function inventory(source, paths = sourceFiles(source)) {
       continue;
     const manifest = path.endsWith("package.json");
     const buildInput =
+      reviewedBoundaries.has(path) ||
       path.startsWith("scripts/") ||
       path.startsWith("patches/") ||
       path.startsWith("native/") ||
@@ -129,6 +134,14 @@ export function inventory(source, paths = sourceFiles(source)) {
 
 export function verifyBoundaries(source, policy) {
   const violations = [];
+  for (const path of policy.reviewedBoundaries ?? []) {
+    try {
+      if (!NodeFS.lstatSync(NodePath.join(source, path)).isFile())
+        violations.push(`${path}: reviewed privacy adapter must be a regular file`);
+    } catch {
+      violations.push(`${path}: required reviewed privacy adapter missing`);
+    }
+  }
   for (const [path, sha] of Object.entries(policy.boundaries)) {
     try {
       if (fileDigest(path, NodeFS.readFileSync(NodePath.join(source, path))) !== sha)

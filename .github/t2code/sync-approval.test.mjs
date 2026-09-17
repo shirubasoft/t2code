@@ -7,7 +7,7 @@ import * as NodeTest from "node:test";
 import { loadPolicy } from "../../scripts/verify-private-build.mjs";
 import { checkCandidate } from "./check-candidate.mjs";
 import { approvalArtifact, approveReview, baselinePath, reviewContext } from "./privacy-review.mjs";
-import { completeCandidate, policy, publishCandidate } from "./sync.mjs";
+import { applyEdits, completeCandidate, policy, publishCandidate } from "./sync.mjs";
 
 function fixture(t) {
   const originalDirectory = process.cwd();
@@ -36,7 +36,7 @@ function fixture(t) {
   git("remote", "add", "origin", remote);
   const controls = loadPolicy();
   const source = NodePath.resolve(import.meta.dirname, "../..");
-  for (const path of Object.keys(controls.boundaries)) {
+  for (const path of [...Object.keys(controls.boundaries), ...controls.reviewedBoundaries]) {
     NodeFS.mkdirSync(NodePath.dirname(NodePath.join(candidate, path)), { recursive: true });
     NodeFS.copyFileSync(NodePath.join(source, path), NodePath.join(candidate, path));
   }
@@ -113,35 +113,48 @@ async function propose(f) {
   return approval;
 }
 
-NodeTest.test(
-  "publication waits for independent approval, then dispatches and validates only the finalized commit",
-  async (t) => {
-    const f = fixture(t);
-    const approval = await propose(f);
-    NodeAssert.equal(f.calls.filter(({ url }) => url.endsWith("/dispatches")).length, 0);
-    const proposedSha = f.pr.head.sha;
-    await completeCandidate(f.state, approval, proposedSha, 12);
-    const finalizedSha = f.git("rev-parse", "HEAD");
-    NodeAssert.notEqual(finalizedSha, proposedSha);
-    NodeAssert.equal(f.git("diff", "--name-only", proposedSha, finalizedSha), baselinePath);
-    const dispatches = f.calls.filter(({ url }) => url.endsWith("/dispatches"));
-    NodeAssert.equal(dispatches.length, 1);
-    NodeAssert.deepEqual(JSON.parse(dispatches[0].body), {
-      ref: "main",
-      inputs: { pr: "12", sha: finalizedSha, base: f.base },
-    });
-    NodeAssert.equal(f.git("rev-parse", `refs/remotes/origin/${policy.branch}`), finalizedSha);
-    process.env.T2_CANDIDATE_SHA = finalizedSha;
-    await checkCandidate(f.candidate);
-    NodeFS.appendFileSync(
-      NodePath.join(f.candidate, "apps/server/src/local-example.ts"),
-      "export const changed = true;\n",
-    );
-    f.git("commit", "-qam", "unreviewed edit");
-    process.env.T2_CANDIDATE_SHA = f.git("rev-parse", "HEAD");
-    await NodeAssert.rejects(checkCandidate(f.candidate), /exact candidate/);
-  },
-);
+for (const decision of ["ready", "blocked"])
+  NodeTest.test(
+    `${decision} repairs wait for independent approval, then dispatch and validate only the finalized commit`,
+    async (t) => {
+      const f = fixture(t);
+      applyEdits(
+        {
+          decision,
+          edits: [
+            {
+              path: "apps/server/src/local-example.ts",
+              content: 'export const local = () => fetch("http://127.0.0.1:3773/api/local");\n',
+            },
+          ],
+        },
+        f.candidate,
+      );
+      const approval = await propose(f);
+      NodeAssert.equal(f.calls.filter(({ url }) => url.endsWith("/dispatches")).length, 0);
+      const proposedSha = f.pr.head.sha;
+      await completeCandidate(f.state, approval, proposedSha, 12);
+      const finalizedSha = f.git("rev-parse", "HEAD");
+      NodeAssert.notEqual(finalizedSha, proposedSha);
+      NodeAssert.equal(f.git("diff", "--name-only", proposedSha, finalizedSha), baselinePath);
+      const dispatches = f.calls.filter(({ url }) => url.endsWith("/dispatches"));
+      NodeAssert.equal(dispatches.length, 1);
+      NodeAssert.deepEqual(JSON.parse(dispatches[0].body), {
+        ref: "main",
+        inputs: { pr: "12", sha: finalizedSha, base: f.base },
+      });
+      NodeAssert.equal(f.git("rev-parse", `refs/remotes/origin/${policy.branch}`), finalizedSha);
+      process.env.T2_CANDIDATE_SHA = finalizedSha;
+      await checkCandidate(f.candidate);
+      NodeFS.appendFileSync(
+        NodePath.join(f.candidate, "apps/server/src/local-example.ts"),
+        "export const changed = true;\n",
+      );
+      f.git("commit", "-qam", "unreviewed edit");
+      process.env.T2_CANDIDATE_SHA = f.git("rev-parse", "HEAD");
+      await NodeAssert.rejects(checkCandidate(f.candidate), /exact candidate/);
+    },
+  );
 
 for (const change of ["head", "base", "review"]) {
   NodeTest.test(`a changed ${change} prevents baseline commit, push and CI dispatch`, async (t) => {
