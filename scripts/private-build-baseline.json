@@ -844,7 +844,7 @@
     "t3.json": "2d8f44f6a1c37f8f5102af01ebbd31c9fe4bd541fb653b739d50c004b68c0809",
     "third-party-licenses.config.json": "0a1b41a7a0bc7952431ed8632dee6337f3b3ea8abb0fbb3c342e8d86c02fe4ea",
     "tsconfig.base.json": "230d669e7dd60016efc4115c0e6de91f4b88c64bd2bc28d2104401303438ccdb",
-    "vite.config.ts": "250c0468795c12bdb1e42a2a78d40e41f2547778858fa67656ad8d9e5d6ec9a4"
+    "vite.config.ts": "c564f243ecc47986b441b012d2b3d7876e1d139ffe18c26e1e860f010b86d4b6"
   },
   "dependencies": {
     "apps/desktop/package.json": [
@@ -863,7 +863,11 @@
       "playwright-core",
       "react-grab"
     ],
-    "apps/marketing/package.json": ["@t3tools/shared", "astro", "sharp"],
+    "apps/marketing/package.json": [
+      "@t3tools/shared",
+      "astro",
+      "sharp"
+    ],
     "apps/mobile/modules/t3-markdown-text/package.json": [],
     "apps/mobile/modules/t3-review-diff/package.json": [],
     "apps/mobile/modules/t3-terminal/package.json": [],
@@ -1010,7 +1014,11 @@
       "drizzle-orm",
       "effect"
     ],
-    "oxlint-plugin-t3code/package.json": ["@effect/platform-node", "@oxlint/plugins", "effect"],
+    "oxlint-plugin-t3code/package.json": [
+      "@effect/platform-node",
+      "@oxlint/plugins",
+      "effect"
+    ],
     "package.json": [],
     "packages/client-runtime/package.json": [
       "@t3tools/contracts",
@@ -1022,9 +1030,15 @@
       "remark-parse",
       "unified"
     ],
-    "packages/contracts/package.json": ["effect"],
-    "packages/effect-acp/package.json": ["effect"],
-    "packages/effect-codex-app-server/package.json": ["effect"],
+    "packages/contracts/package.json": [
+      "effect"
+    ],
+    "packages/effect-acp/package.json": [
+      "effect"
+    ],
+    "packages/effect-codex-app-server/package.json": [
+      "effect"
+    ],
     "packages/shared/package.json": [
       "@noble/curves",
       "@noble/hashes",
@@ -1033,8 +1047,15 @@
       "jose",
       "yaml"
     ],
-    "packages/ssh/package.json": ["@t3tools/contracts", "@t3tools/shared", "effect"],
-    "packages/tailscale/package.json": ["@t3tools/shared", "effect"],
+    "packages/ssh/package.json": [
+      "@t3tools/contracts",
+      "@t3tools/shared",
+      "effect"
+    ],
+    "packages/tailscale/package.json": [
+      "@t3tools/shared",
+      "effect"
+    ],
     "scripts/package.json": [
       "@effect/platform-node",
       "@electron/asar",
