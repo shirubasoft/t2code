@@ -136,6 +136,7 @@
     "apps/desktop/src/electron/t2UpdaterPrivacy.ts",
     "apps/server/src/observability/t2Privacy.test.ts",
     "apps/desktop/src/app/t2Privacy.test.ts",
-    "apps/desktop/src/electron/t2UpdaterPrivacy.test.ts"
+    "apps/desktop/src/electron/t2UpdaterPrivacy.test.ts",
+    ".gitmodules"
   ]
 }

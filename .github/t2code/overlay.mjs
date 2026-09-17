@@ -19,6 +19,7 @@ export function readJson(path) {
   return JSON.parse(readFileSync(path, "utf8"));
 }
 function safePath(path) {
+  if (path === ".gitmodules") return path;
   if (!/^(apps|packages|scripts)\/[A-Za-z0-9_./-]+$/.test(path) || path.split("/").includes("..")) {
     throw new Error(`Invalid overlay path: ${path}`);
   }
