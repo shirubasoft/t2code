@@ -30,6 +30,8 @@ function fixture(t) {
     ).trim();
   NodeFS.mkdirSync(candidate);
   git("init", "-q");
+  git("config", "user.name", "Test");
+  git("config", "user.email", "test@example.invalid");
   git("init", "--bare", "-q", remote);
   git("remote", "add", "origin", remote);
   const controls = loadPolicy();

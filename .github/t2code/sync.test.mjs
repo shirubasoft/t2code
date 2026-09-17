@@ -425,6 +425,7 @@ test("a changed upstream input resumes a formerly blocked PR and keeps its repai
   const upstream = "b".repeat(40);
   const head = "c".repeat(40);
   process.env.GITHUB_REPOSITORY = "shirubasoft/t2code";
+  process.env.GITHUB_SHA = base;
   delete process.env.GITHUB_OUTPUT;
   globalThis.fetch = async (url) => {
     if (url.includes("/releases?"))
