@@ -34,7 +34,7 @@ function fetchUpstream() {
 }
 function plan() {
   const base = assertSha(git(["rev-parse", "HEAD"]).trim());
-  if (api("commits/main").sha !== base) {
+  if (api("git/ref/heads/main").object.sha !== base) {
     output({ ready: false });
     return;
   }
@@ -89,7 +89,7 @@ function propose() {
   const base = assertSha(state.base),
     upstream = assertSha(state.upstream);
   if (result.decision !== "ready") throw new Error(`Analytics review blocked: ${result.summary}`);
-  if (api("commits/main").sha !== base)
+  if (api("git/ref/heads/main").object.sha !== base)
     throw new Error("Main advanced; retry against its new state");
   const accepted = readJson(resolve(controlRoot, ".github/t2code/overlay.json"));
   if (!Array.isArray(result.edits) || result.edits.length > 1)
@@ -172,7 +172,7 @@ function merge() {
     pr.head.ref !== branch ||
     pr.head.repo.full_name !== repository ||
     pr.base.ref !== "main" ||
-    api("commits/main").sha !== base
+    api("git/ref/heads/main").object.sha !== base
   )
     throw new Error("Candidate or main changed during validation");
   api(`statuses/${sha}`, {
