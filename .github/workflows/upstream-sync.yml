@@ -16,256 +16,163 @@ jobs:
   plan:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
-    permissions:
-      contents: read
-      actions: write
-      pull-requests: write
-      issues: write
     outputs:
       ready: ${{ steps.plan.outputs.ready }}
       base: ${{ steps.plan.outputs.base }}
+      upstream: ${{ steps.plan.outputs.upstream }}
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
-          ref: ${{ github.sha }}
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+          ref: main
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 24
       - id: plan
         run: node .github/t2code/sync.mjs plan
         env:
           GH_TOKEN: ${{ github.token }}
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: steps.plan.outputs.ready == 'true'
         with:
-          name: sync-plan
-          path: |
-            sync-plan.json
-            validation-failure.txt
+          name: analytics-history
+          path: review/
           retention-days: 7
 
-  agent:
+  analytics:
     needs: plan
     if: needs.plan.outputs.ready == 'true'
     runs-on: [self-hosted, linux, t2code-sync]
     timeout-minutes: 55
-    permissions:
-      contents: read
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
           ref: ${{ needs.plan.outputs.base }}
           path: control
           persist-credentials: false
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          ref: ${{ needs.plan.outputs.base }}
-          path: candidate
-          fetch-depth: 0
-          persist-credentials: false
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: sync-plan
-          path: context
-      - name: Prepare merge without executing candidate code
-        working-directory: candidate
-        run: |
-          node ../control/.github/t2code/sync.mjs prepare
-          node ../control/.github/t2code/sync.mjs context
-          cp ../context/validation-failure.txt ../review/validation-failure.txt
-          node ../control/scripts/verify-private-build.mjs --source . > ../review/privacy-context.txt 2>&1 || true
+      - name: Read the pinned upstream snapshot
         env:
-          T2_REVIEW_CONTEXT: ${{ github.workspace }}/review-context.txt
-          T2_SYNC_PLAN: ${{ github.workspace }}/context/sync-plan.json
-      - name: Read-only Codex review and repair
+          UPSTREAM_SHA: ${{ needs.plan.outputs.upstream }}
         run: |
           set -euo pipefail
-          cat control/.github/t2code/migrate.md merge-context.txt review-context.txt > "$RUNNER_TEMP/migration-prompt.txt"
+          git init candidate
+          git -C candidate remote remove origin || true
+          git -C candidate remote add origin https://github.com/pingdotgg/t3code.git
+          git -C candidate config remote.origin.promisor true
+          git -C candidate config remote.origin.partialclonefilter blob:none
+          git -C candidate fetch --filter=blob:none --no-tags --depth=1 origin "$UPSTREAM_SHA"
+          git -C candidate checkout --force --detach "$UPSTREAM_SHA"
+          git -C candidate clean -fdx
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: analytics-history
+          path: review
+      - name: Review commit history and adapt analytics patches
+        run: |
+          set -euo pipefail
           output_dir=$(mktemp -d "$RUNNER_TEMP/t2-agent-output-XXXXXX")
           t2code-codex "$GITHUB_WORKSPACE/candidate" \
             "$GITHUB_WORKSPACE/control/.github/t2code/agent-output.schema.json" \
-            "$output_dir" "$GITHUB_WORKSPACE/review" < "$RUNNER_TEMP/migration-prompt.txt"
-          cp "$output_dir/agent-output.json" "$GITHUB_WORKSPACE/agent-output.json"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+            "$output_dir" "$GITHUB_WORKSPACE/review" < control/.github/t2code/migrate.md
+          cp "$output_dir/agent-output.json" agent-output.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: agent-output
+          name: analytics-review
           path: agent-output.json
           retention-days: 7
 
   propose:
-    needs: [plan, agent]
+    needs: [plan, analytics]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: write
       pull-requests: write
-      actions: write
     outputs:
-      sha: ${{ steps.publish.outputs.sha }}
-      pr: ${{ steps.publish.outputs.pr }}
+      sha: ${{ steps.propose.outputs.sha }}
+      pr: ${{ steps.propose.outputs.pr }}
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
           ref: ${{ needs.plan.outputs.base }}
           path: control
           persist-credentials: false
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
           ref: ${{ needs.plan.outputs.base }}
           path: candidate
           fetch-depth: 0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 24
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          name: sync-plan
+          name: analytics-history
           path: context
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          name: agent-output
+          name: analytics-review
           path: context
-      - name: Recreate merge and apply bounded edits
+      - id: propose
         working-directory: candidate
-        env:
-          T2_SYNC_PLAN: ${{ github.workspace }}/context/sync-plan.json
-          T2_AGENT_OUTPUT: ${{ github.workspace }}/context/agent-output.json
-        run: |
-          node ../control/.github/t2code/sync.mjs prepare
-          node ../control/.github/t2code/sync.mjs apply
-      - name: Preserve the candidate in its upstream PR
-        id: publish
-        working-directory: candidate
-        run: node ../control/.github/t2code/sync.mjs publish
+        run: node ../control/.github/t2code/sync.mjs propose
         env:
           GH_TOKEN: ${{ github.token }}
-          T2_SYNC_PLAN: ${{ github.workspace }}/context/sync-plan.json
-          T2_AGENT_OUTPUT: ${{ github.workspace }}/context/agent-output.json
-
-  review:
-    name: Independent privacy review
-    needs: [plan, propose]
-    runs-on: [self-hosted, linux, t2code-sync]
-    timeout-minutes: 55
-    permissions:
-      contents: read
-    outputs:
-      artifact: ${{ steps.approve.outputs.artifact }}
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          ref: ${{ needs.plan.outputs.base }}
-          path: control
-          persist-credentials: false
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          ref: ${{ needs.propose.outputs.sha }}
-          path: candidate
-          fetch-depth: 0
-          persist-credentials: false
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: sync-plan
-          path: context
-      - name: Describe the exact candidate without executing it
-        working-directory: candidate
-        run: |
-          node ../control/.github/t2code/sync.mjs context
-          node ../control/.github/t2code/privacy-review.mjs context
-        env:
-          T2_REVIEW_CONTEXT: ${{ github.workspace }}/review-context.txt
-          T2_SYNC_PLAN: ${{ github.workspace }}/context/sync-plan.json
-      - name: Review independently with a fresh read-only agent
-        run: |
-          set -euo pipefail
-          cat control/.github/t2code/privacy-review.md review-context.txt > "$RUNNER_TEMP/privacy-review-prompt.txt"
-          output_dir=$(mktemp -d "$RUNNER_TEMP/t2-agent-output-XXXXXX")
-          t2code-codex "$GITHUB_WORKSPACE/candidate" \
-            "$GITHUB_WORKSPACE/control/.github/t2code/privacy-review.schema.json" \
-            "$output_dir" "$GITHUB_WORKSPACE/review" < "$RUNNER_TEMP/privacy-review-prompt.txt"
-          cp "$output_dir/agent-output.json" "$GITHUB_WORKSPACE/privacy-review.json"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: privacy-review-findings
-          path: privacy-review.json
-          retention-days: 7
-      - name: Bind approval to the complete source tree
-        id: approve
-        working-directory: candidate
-        run: node ../control/.github/t2code/privacy-review.mjs approve
-        env:
-          T2_SYNC_PLAN: ${{ github.workspace }}/context/sync-plan.json
-          T2_PRIVACY_REVIEW: ${{ github.workspace }}/privacy-review.json
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: ${{ steps.approve.outputs.artifact }}
-          path: privacy-approval.json
-          retention-days: 7
+          T2_SYNC_CONTEXT: ${{ github.workspace }}/context
 
   validate:
-    needs: [plan, propose, review]
+    needs: [plan, propose]
+    uses: ./.github/workflows/ci.yml
+    with:
+      sha: ${{ needs.propose.outputs.sha }}
+      base: ${{ needs.plan.outputs.base }}
+      pr: ${{ needs.propose.outputs.pr }}
+    permissions:
+      contents: read
+      actions: read
+
+  merge:
+    needs: [plan, propose, validate]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: write
       pull-requests: write
+      statuses: write
       actions: write
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
           ref: ${{ needs.plan.outputs.base }}
-          path: control
           persist-credentials: false
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          ref: ${{ needs.propose.outputs.sha }}
-          path: candidate
-          fetch-depth: 0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 24
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: sync-plan
-          path: context
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: ${{ needs.review.outputs.artifact }}
-          path: context
-      - name: Record approved hashes and dispatch exact-candidate CI
-        working-directory: candidate
-        run: node ../control/.github/t2code/sync.mjs complete
+      - name: Merge the validated commit and publish a release
+        run: node .github/t2code/sync.mjs merge
         env:
           GH_TOKEN: ${{ github.token }}
-          T2_SYNC_PLAN: ${{ github.workspace }}/context/sync-plan.json
-          T2_PRIVACY_APPROVAL: ${{ github.workspace }}/context/privacy-approval.json
           T2_CANDIDATE_SHA: ${{ needs.propose.outputs.sha }}
+          T2_BASE_SHA: ${{ needs.plan.outputs.base }}
           T2_SYNC_PR: ${{ needs.propose.outputs.pr }}
-
-  blocked:
-    needs: [plan, agent, propose, review, validate]
-    if: always() && needs.plan.outputs.ready == 'true' && (needs.agent.result == 'failure' || needs.propose.result == 'failure' || needs.review.result == 'failure' || needs.validate.result == 'failure')
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    permissions:
-      contents: read
-      issues: write
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          ref: ${{ needs.plan.outputs.base }}
-          persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 24
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: sync-plan
-          path: context
-      - name: Record the blocked input once
-        run: node .github/t2code/sync.mjs blocked
-        env:
-          GH_TOKEN: ${{ github.token }}
-          T2_SYNC_PLAN: ${{ github.workspace }}/context/sync-plan.json

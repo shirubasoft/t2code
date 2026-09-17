@@ -22,11 +22,10 @@ import {
 import { remoteHttpClientLayer } from "../rpc/http.ts";
 import type { WsRpcProtocolClient } from "../rpc/protocol.ts";
 import { fetchEnvironmentSessionState } from "../state/session.ts";
-import { BearerConnectionProfile, type ConnectionCatalogEntry } from "./catalog.ts";
+import type { ConnectionCatalogEntry } from "./catalog.ts";
 import * as Connectivity from "./connectivity.ts";
 import * as ConnectionDriver from "./driver.ts";
 import {
-  BearerConnectionTarget,
   ConnectionBlockedError,
   ConnectionTransientError,
   PrimaryConnectionTarget,
@@ -45,8 +44,8 @@ import { NETWORK_BLOCKING_HINT } from "../errors/network.ts";
 const TARGET = new PrimaryConnectionTarget({
   environmentId: EnvironmentId.make("environment-1"),
   label: "Test environment",
-  httpBaseUrl: "http://127.0.0.1:3773",
-  wsBaseUrl: "ws://127.0.0.1:3773",
+  httpBaseUrl: "https://environment.example.test",
+  wsBaseUrl: "wss://environment.example.test",
 });
 
 const RELAY_TARGET = new RelayConnectionTarget({
@@ -60,33 +59,6 @@ const TARGET_ENTRY: ConnectionCatalogEntry = {
   enabled: true,
 };
 
-const REMOTE_TARGET_ENTRY: ConnectionCatalogEntry = {
-  ...TARGET_ENTRY,
-  target: new PrimaryConnectionTarget({
-    ...TARGET,
-    httpBaseUrl: "https://remote.example.test",
-    wsBaseUrl: "wss://remote.example.test",
-  }),
-};
-
-const BEARER_ENTRY: ConnectionCatalogEntry = {
-  target: new BearerConnectionTarget({
-    environmentId: TARGET.environmentId,
-    label: "Local WSL environment",
-    connectionId: "local-wsl",
-  }),
-  profile: Option.some(
-    new BearerConnectionProfile({
-      environmentId: TARGET.environmentId,
-      label: "Local WSL environment",
-      connectionId: "local-wsl",
-      httpBaseUrl: "http://localhost:3774",
-      wsBaseUrl: "ws://localhost:3774",
-    }),
-  ),
-  enabled: true,
-};
-
 const RELAY_ENTRY: ConnectionCatalogEntry = {
   target: RELAY_TARGET,
   profile: Option.none(),
@@ -97,7 +69,7 @@ const PREPARED_CONNECTION: PreparedConnection = {
   environmentId: TARGET.environmentId,
   label: TARGET.label,
   httpBaseUrl: TARGET.httpBaseUrl,
-  socketUrl: "ws://127.0.0.1:3773/ws",
+  socketUrl: "wss://environment.example.test/ws",
   httpAuthorization: null,
   target: TARGET,
 };
@@ -149,7 +121,6 @@ const eventuallyState = Effect.fn("TestConnectionHarness.eventuallyState")(funct
 });
 
 const makeHarness = Effect.fn("TestConnectionHarness.make")(function* (options?: {
-  readonly connectivity?: Connectivity.Connectivity["Service"];
   readonly networkStatus?: NetworkStatus;
   readonly prepare?: (
     attempt: number,
@@ -175,12 +146,10 @@ const makeHarness = Effect.fn("TestConnectionHarness.make")(function* (options?:
     ReadonlyArray<Deferred.Deferred<never, ConnectionTransientError>>
   >([]);
 
-  const connectivity =
-    options?.connectivity ??
-    Connectivity.Connectivity.of({
-      status: SubscriptionRef.get(networkStatus),
-      changes: SubscriptionRef.changes(networkStatus),
-    });
+  const connectivity = Connectivity.Connectivity.of({
+    status: SubscriptionRef.get(networkStatus),
+    changes: SubscriptionRef.changes(networkStatus),
+  });
 
   const prepare = Effect.fn("TestConnectionDriver.prepare")(function* (target: ConnectionTarget) {
     const attempt = yield* Ref.updateAndGet(prepareCount, (count) => count + 1);
@@ -331,113 +300,10 @@ describe("EnvironmentSupervisor", () => {
     }),
   );
 
-  for (const [name, entry] of [
-    ["primary", TARGET_ENTRY],
-    ["bearer", BEARER_ENTRY],
-    [
-      "IPv6 primary",
-      {
-        ...TARGET_ENTRY,
-        target: new PrimaryConnectionTarget({
-          ...TARGET,
-          httpBaseUrl: "http://[::1]:3773",
-          wsBaseUrl: "ws://[::1]:3773",
-        }),
-      },
-    ],
-  ] as const) {
-    it.effect(`connects a loopback ${name} while the browser reports offline`, () =>
-      Effect.gen(function* () {
-        const harness = yield* makeHarness({ networkStatus: "offline" });
-        const supervisor = yield* EnvironmentSupervisor.make(entry, {
-          initiallyDesired: true,
-        }).pipe(Effect.provide(harness.dependencies));
-
-        const ready = yield* awaitState(supervisor.state, (state) => state.phase === "connected");
-
-        expect(ready).toMatchObject({ network: "online", generation: 1, attempt: 1 });
-        expect(yield* Ref.get(harness.prepareCount)).toBe(1);
-        expect(Option.isSome(yield* SubscriptionRef.get(supervisor.session))).toBe(true);
-      }),
-    );
-  }
-
-  it.effect("keeps a loopback session connected when the browser goes offline", () =>
-    Effect.gen(function* () {
-      const goOffline = yield* Deferred.make<void>();
-      const offlineProcessed = yield* Deferred.make<void>();
-      const harness = yield* makeHarness({
-        connectivity: {
-          status: Effect.succeed("online"),
-          changes: Stream.fromEffect(
-            Deferred.await(goOffline).pipe(Effect.as("offline" as const)),
-          ).pipe(
-            Stream.concat(
-              Stream.fromEffect(Deferred.succeed(offlineProcessed, undefined)).pipe(Stream.drain),
-            ),
-          ),
-        },
-      });
-      const supervisor = yield* EnvironmentSupervisor.make(TARGET_ENTRY, {
-        initiallyDesired: true,
-      }).pipe(Effect.provide(harness.dependencies));
-
-      yield* awaitState(supervisor.state, (state) => state.phase === "connected");
-      yield* Deferred.succeed(goOffline, undefined);
-      yield* Deferred.await(offlineProcessed);
-
-      expect(yield* SubscriptionRef.get(supervisor.state)).toMatchObject({
-        phase: "connected",
-        network: "online",
-        generation: 1,
-      });
-      expect(yield* Ref.get(harness.releaseCount)).toBe(0);
-      expect(yield* Ref.get(harness.sessionCount)).toBe(1);
-      expect(Option.isSome(yield* SubscriptionRef.get(supervisor.session))).toBe(true);
-    }),
-  );
-
-  for (const [name, entry] of [
-    [
-      "remote HTTP",
-      {
-        ...TARGET_ENTRY,
-        target: new PrimaryConnectionTarget({
-          ...TARGET,
-          httpBaseUrl: "https://remote.example.test",
-        }),
-      },
-    ],
-    [
-      "remote WebSocket",
-      {
-        ...TARGET_ENTRY,
-        target: new PrimaryConnectionTarget({
-          ...TARGET,
-          wsBaseUrl: "wss://remote.example.test",
-        }),
-      },
-    ],
-    ["relay", RELAY_ENTRY],
-    ["bearer without profile", { ...BEARER_ENTRY, profile: Option.none() }],
-  ] as const) {
-    it.effect(`waits offline for a ${name} target`, () =>
-      Effect.gen(function* () {
-        const harness = yield* makeHarness({ networkStatus: "offline" });
-        const supervisor = yield* EnvironmentSupervisor.make(entry, {
-          initiallyDesired: true,
-        }).pipe(Effect.provide(harness.dependencies));
-
-        yield* awaitState(supervisor.state, (state) => state.phase === "offline");
-        expect(yield* Ref.get(harness.prepareCount)).toBe(0);
-      }),
-    );
-  }
-
   it.effect("waits while offline and connects immediately when the network returns", () =>
     Effect.gen(function* () {
       const harness = yield* makeHarness({ networkStatus: "offline" });
-      const supervisor = yield* EnvironmentSupervisor.make(REMOTE_TARGET_ENTRY, {
+      const supervisor = yield* EnvironmentSupervisor.make(TARGET_ENTRY, {
         initiallyDesired: true,
       }).pipe(Effect.provide(harness.dependencies));
 
@@ -462,7 +328,7 @@ describe("EnvironmentSupervisor", () => {
   it.effect("resets retries when activation arrives before the network returns", () =>
     Effect.gen(function* () {
       const harness = yield* makeHarness();
-      const supervisor = yield* EnvironmentSupervisor.make(REMOTE_TARGET_ENTRY, {
+      const supervisor = yield* EnvironmentSupervisor.make(TARGET_ENTRY, {
         initiallyDesired: true,
       }).pipe(Effect.provide(harness.dependencies));
 
@@ -782,7 +648,7 @@ describe("EnvironmentSupervisor", () => {
   it.effect("releases a live session while offline and starts a new generation when online", () =>
     Effect.gen(function* () {
       const harness = yield* makeHarness();
-      const supervisor = yield* EnvironmentSupervisor.make(REMOTE_TARGET_ENTRY, {
+      const supervisor = yield* EnvironmentSupervisor.make(TARGET_ENTRY, {
         initiallyDesired: true,
       }).pipe(Effect.provide(harness.dependencies));
 

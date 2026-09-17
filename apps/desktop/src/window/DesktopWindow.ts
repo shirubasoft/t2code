@@ -518,7 +518,6 @@ export const make = Effect.gen(function* () {
         event.preventDefault();
         return;
       }
-      webPreferences.spellcheck = false;
       webPreferences.sandbox = true;
       webPreferences.nodeIntegration = false;
       webPreferences.nodeIntegrationInSubFrames = false;

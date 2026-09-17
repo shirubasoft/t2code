@@ -13,15 +13,15 @@ import {
 const TARGET = new PrimaryConnectionTarget({
   environmentId: EnvironmentId.make("environment-1"),
   label: "Test environment",
-  httpBaseUrl: "https://127.0.0.1:9444/base",
-  wsBaseUrl: "wss://127.0.0.1:9444",
+  httpBaseUrl: "https://environment.example.test/base",
+  wsBaseUrl: "wss://environment.example.test",
 });
 
 const PREPARED: PreparedConnection = {
   environmentId: TARGET.environmentId,
   label: TARGET.label,
   httpBaseUrl: TARGET.httpBaseUrl,
-  socketUrl: "wss://127.0.0.1:9444/ws",
+  socketUrl: "wss://environment.example.test/ws",
   httpAuthorization: null,
   target: TARGET,
 };
@@ -59,7 +59,7 @@ describe("fetchEnvironmentPullRequestDiff", () => {
       });
       expect(calls).toHaveLength(1);
       const [request, init] = calls[0]!;
-      expect(String(request)).toBe("https://127.0.0.1:9444/api/pull-requests/diff");
+      expect(String(request)).toBe("https://environment.example.test/api/pull-requests/diff");
       expect(init.method).toBe("POST");
       expect(init.credentials).toBe("include");
 
@@ -78,35 +78,6 @@ describe("fetchEnvironmentPullRequestDiff", () => {
         number: 42,
         cursor: "next-page",
       });
-    }),
-  );
-
-  it.effect("rejects an external diff endpoint before sending its input or credentials", () =>
-    Effect.gen(function* () {
-      let requests = 0;
-      const error = yield* fetchEnvironmentPullRequestDiff({
-        prepared: {
-          ...PREPARED,
-          httpBaseUrl: "https://external-environment.example.test",
-          httpAuthorization: { _tag: "Bearer", token: "private-diff-token" },
-        },
-        signer: Option.none(),
-        diff: {
-          projectId: ProjectId.make("private-project"),
-          repository: "private/repository",
-          number: 42,
-        },
-      }).pipe(
-        Effect.provide(
-          remoteHttpClientLayer(async () => {
-            requests++;
-            throw new Error("An external endpoint must not reach fetch");
-          }),
-        ),
-        Effect.flip,
-      );
-      expect(error).toMatchObject({ _tag: "RemoteEnvironmentAuthFetchError" });
-      expect(requests).toBe(0);
     }),
   );
 

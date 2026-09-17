@@ -98,6 +98,12 @@ const makeCliTestServerConfig = (baseDir: string) =>
       traceBatchWindowMs: 200,
       traceMaxBytes: 10 * 1024 * 1024,
       traceMaxFiles: 10,
+      otlpTracesUrl: undefined,
+      otlpMetricsUrl: undefined,
+      otlpExportIntervalMs: 10_000,
+      otlpServiceName: "t3-server",
+      otlpHeaders: undefined,
+      otlpProtocol: "http/json",
       mode: "web",
       port: 0,
       host: "127.0.0.1",
@@ -796,42 +802,6 @@ it.layer(NodeServices.layer)("bin cli parsing", (it) => {
         (afterRemove.threads.find((thread) => thread.id === "thread-cli-force-remove")?.deletedAt ??
           null) !== null,
       );
-    }),
-  );
-
-  it.effect("ignores an external persisted server origin without sending project credentials", () =>
-    Effect.gen(function* () {
-      const baseDir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t2-cli-local-origin-"));
-      const workspaceRoot = NodeFS.mkdtempSync(
-        NodePath.join(NodeOS.tmpdir(), "t2-cli-local-project-"),
-      );
-      const config = yield* makeCliTestServerConfig(baseDir);
-      yield* persistServerRuntimeState({
-        path: config.serverRuntimeStatePath,
-        state: {
-          ...(yield* makePersistedServerRuntimeState({ config, port: 7777 })),
-          origin: "https://external.test",
-        },
-      });
-      let requests = 0;
-      yield* Effect.acquireUseRelease(
-        Effect.sync(() => {
-          const original = globalThis.fetch;
-          globalThis.fetch = async () => {
-            requests++;
-            throw new Error("Unexpected network request");
-          };
-          return original;
-        }),
-        () => runCliWithRuntime(["project", "add", workspaceRoot, "--base-dir", baseDir]),
-        (original) =>
-          Effect.sync(() => {
-            globalThis.fetch = original;
-          }),
-      );
-      assert.equal(requests, 0);
-      const snapshot = yield* readPersistedSnapshot(baseDir);
-      assert.isTrue(snapshot.projects.some((project) => project.workspaceRoot === workspaceRoot));
     }),
   );
 

@@ -19,11 +19,15 @@ import * as DesktopUpdates from "./DesktopUpdates.ts";
 import { flushCallbacks, makeHarness } from "./updatesTestHarness.ts";
 
 describe("DesktopUpdates", () => {
-  it("preserves complete causes for update event failures", () => {
+  it("preserves complete causes for update poller and event failures", () => {
     const cause = Cause.combine(
       Cause.fail(new Error("updater failed")),
       Cause.die(new Error("updater defect")),
     );
+    const pollerError = new DesktopUpdates.DesktopUpdatePollerError({
+      poller: "startup",
+      cause,
+    });
     const eventError = new DesktopUpdates.DesktopUpdateEventHandlingError({
       event: "download-progress",
       cause,
@@ -37,6 +41,9 @@ describe("DesktopUpdates", () => {
       cause,
     });
 
+    assert.strictEqual(pollerError.cause, cause);
+    assert.equal(pollerError.poller, "startup");
+    assert.equal(pollerError.message, "Desktop update startup poller failed.");
     assert.strictEqual(eventError.cause, cause);
     assert.equal(eventError.event, "download-progress");
     assert.equal(eventError.message, "Failed to handle desktop update download-progress event.");
@@ -51,7 +58,7 @@ describe("DesktopUpdates", () => {
     );
   });
 
-  it.effect("configures the updater without background network checks", () => {
+  it.effect("configures the updater and runs startup checks on the test clock", () => {
     const harness = makeHarness();
 
     return Effect.gen(function* () {
@@ -69,9 +76,7 @@ describe("DesktopUpdates", () => {
           assert.equal(harness.listenerCount(), 6);
           assert.equal(harness.checkCount(), 0);
 
-          yield* TestClock.adjust(Duration.hours(24));
-          assert.equal(harness.checkCount(), 0);
-          yield* updates.check("manual");
+          yield* TestClock.adjust(Duration.millis(15_000));
           assert.equal(harness.checkCount(), 1);
         }),
       );

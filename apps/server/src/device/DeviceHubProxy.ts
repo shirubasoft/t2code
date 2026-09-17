@@ -16,7 +16,6 @@ import {
   AuthOrchestrationOperateScope,
   type AuthEnvironmentScope,
 } from "@t3tools/contracts";
-import { isLoopbackUrl } from "@t3tools/shared/localNetwork";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import {
@@ -200,11 +199,6 @@ const handler = Effect.gen(function* () {
   const ready = yield* devices.currentReadiness(url.value.searchParams.get("hostId") ?? undefined);
   if (!ready) {
     return HttpServerResponse.text("Device hub is not running", { status: 503 });
-  }
-  if (!isLoopbackUrl(ready.hub.origin)) {
-    return HttpServerResponse.text("Remote device hubs are unavailable in the local edition", {
-      status: 403,
-    });
   }
   // The hub runs in standalone mode at its origin root; the panel builds every
   // stream and socket URL itself, so nothing depends on the hub knowing the

@@ -1,70 +1,76 @@
-# Install T2 Code
+# Install T3 Code
 
-Download T2 Code from [this fork's releases](https://github.com/shirubasoft/t2code/releases/latest).
-It runs locally without a T2 Code account. Provider authentication belongs to the
-provider you choose.
+T3 Code runs coding agents on your computer and lets you control them from its
+desktop, web, or mobile app. Set up the machine where the agents will work first.
 
-The `t3.codes` install scripts, `npx t3`, and T3 Code package-manager entries
-install the upstream product. Use this fork's release assets to install T2 Code.
+## Requirements
+
+You need an installed, authenticated provider before starting a thread. You can
+launch T3 Code and configure providers afterwards.
+
+## Command line
+
+```bash
+curl -fsSL https://t3.codes/install.sh | sh
+```
+
+On Windows, in PowerShell:
+
+```powershell
+irm https://t3.codes/install.ps1 | iex
+```
+
+This puts `t3` in `~/.local/bin`. If your shell reports `command not found`
+afterwards, that directory is not on your `PATH` yet; the installer prints the
+line to add. Set `T3CODE_CHANNEL=nightly` to install the nightly train, or
+`T3CODE_VERSION` to pin an exact version.
+
+| Task                                             | Command                                                   |
+| ------------------------------------------------ | --------------------------------------------------------- |
+| Start the server and open the web app            | `t3`                                                      |
+| Start the server without a browser               | `t3 serve`                                                |
+| Keep it running in the background (macOS, Linux) | `t3 service install` ([details](./background-service.md)) |
+| Move to the newest release                       | `t3 update`                                               |
+| Remove it again                                  | `t3 uninstall`                                            |
+
+Run `t3 --help` for the full reference.
+
+To try T3 Code once without installing it, run `npx t3@latest` instead (needs
+Node.js for `npx`).
+
+### Intel Macs
+
+There is no `t3` executable for Intel Macs (the desktop app is available). To
+run a server there, build it from source with Node.js 24 and `vp`
+([Install vp](https://github.com/pingdotgg/t3code#install-vp)):
+
+```bash
+git clone https://github.com/pingdotgg/t3code
+cd t3code && vp i && vp run build:desktop
+node apps/server/dist/bin.mjs
+```
+
+`t3 update` and the background service do not apply to a server run this way;
+update it with `git pull` and a rebuild.
 
 ## Desktop app
 
-Choose the installer matching your operating system and processor. In these
-filenames, `<version>` is the release version. Replace `<arch>` with `arm64` for
-Apple Silicon or an ARM PC, or `x64` for an Intel or AMD processor.
+Download a release from [GitHub Releases](https://github.com/pingdotgg/t3code/releases),
+or use a package manager:
 
-| Platform            | Release asset                       | Install                                            |
-| ------------------- | ----------------------------------- | -------------------------------------------------- |
-| macOS               | `T2-Code-<version>-<arch>.dmg`      | Open the DMG and copy T2 Code to Applications.     |
-| Windows             | `T2-Code-<version>-<arch>.exe`      | Run the installer.                                 |
-| Linux, Intel or AMD | `T2-Code-<version>-x86_64.AppImage` | Mark the downloaded file executable, then open it. |
-| Linux, ARM          | `T2-Code-<version>-arm64.AppImage`  | Mark the downloaded file executable, then open it. |
-
-For Linux, you can set the executable permission in the file manager or run
-`chmod +x` followed by the downloaded AppImage's path.
-
-Builds are unsigned. macOS and Windows may require an operating-system approval
-before opening the app. Each release includes `SHA256SUMS` and `provenance.json`
-for checking the download and its source commit.
-
-Launch the app to finish local setup. Install and authenticate a provider before
-starting a thread; you can configure providers after opening T2 Code.
+| Platform           | Install                         |
+| ------------------ | ------------------------------- |
+| Windows            | `winget install T3Tools.T3Code` |
+| macOS              | `brew install --cask t3-code`   |
+| Arch Linux         | `yay -S t3code-bin`             |
+| Arch Linux nightly | `yay -S t3code-nightly-bin`     |
 
 ### Windows Subsystem for Linux
 
 Choose a WSL distro in **Settings → Connections** to run agents and projects
-there. Install provider CLIs inside that distro. The desktop app installs its
-bundled server runtime there automatically; the first launch after an app update
-can take longer.
-
-## Command line
-
-The same release page provides standalone CLI archives:
-
-| Platform             | Release asset                      |
-| -------------------- | ---------------------------------- |
-| macOS, Apple Silicon | `t3-<version>-darwin-arm64.tar.gz` |
-| Linux                | `t3-<version>-linux-<arch>.tar.gz` |
-| Windows              | `t3-<version>-win32-<arch>.zip`    |
-
-The CLI command is `t3`. Download these archives from `shirubasoft/t2code` to get
-this edition. Use the desktop DMG on Intel Macs.
-
-Extract the entire archive and open its `t3-<version>-<platform>-<arch>`
-directory. Keep `t3` (or `t3.exe`) with the archive's other files. Run `./t3` from
-that directory on macOS or Linux, or `.\t3.exe` in PowerShell. Add the directory
-to your `PATH` to use the commands below from another directory.
-
-| Task                                                | Command                                |
-| --------------------------------------------------- | -------------------------------------- |
-| Start the local server and open the web app         | `t3`                                   |
-| Start the local server without a browser            | `t3 serve`                             |
-| Keep it running in the background on macOS or Linux | `t3 service install`                   |
-| Download a newer fork release                       | `t3 update` ([details](./updating.md)) |
-| Remove a managed CLI installation                   | `t3 uninstall`                         |
-
-Run `t3 --help` for the full command reference. For a manually extracted archive,
-remove its directory when you no longer need it.
+there. Install the provider CLIs inside that distro. T3 Code installs its own
+server runtime there automatically; the first launch after an app update can
+take longer.
 
 ### Open a project from a terminal
 
@@ -75,20 +81,30 @@ t3 app
 ```
 
 This opens a new thread for the current directory, adding the project if needed.
-Pass a path, such as `t3 app ../my-project`, to open another directory. If the
+Pass a path, such as `t3 app ../my-project`, to open another directory. It requires
+the desktop app, so a standalone server or an SSH session is not enough. If the
 command cannot reach the app, start or update the desktop app and try again.
 
-## Connection support
+## Mobile app
 
-This edition supports the local desktop or web client and local WSL environments.
-The App Store and Google Play listings distribute upstream T3 Code. Remote
-environments and T3 Connect are unavailable in this edition.
+Install T3 Code from the
+[App Store](https://apps.apple.com/us/app/t3-code-remote-claude-more/id6787819824) or
+[Google Play](https://play.google.com/store/apps/details?id=com.t3tools.t3code).
+The phone connects to a server on another machine. Follow
+[remote access](./remote-access.md) to link it through T3 Connect or a pairing URL.
+
+If the app crashes during launch, open Settings → Diagnostics on the next launch
+that succeeds. It lists startup crashes from the last 7 days with the error and
+component stack that store crash reports leave out. Copy the report and paste it
+into a GitHub issue. Error messages can quote values from the app, so read it over
+before sharing.
 
 ## Providers
 
-Open **Settings → Providers** in the web or desktop app and enable the provider
-you want. Install and authenticate providers on the computer where they run, or
-inside the selected WSL distro.
+Open **Settings → Providers** in the web or desktop app, select the environment,
+and enable the provider you want. Installation, login, and configuration belong
+to that environment's machine, even when you connect from a phone or another
+computer.
 
 | Provider    | Install and authenticate                                                                     |
 | ----------- | -------------------------------------------------------------------------------------------- |
@@ -97,20 +113,23 @@ inside the selected WSL distro.
 | Cursor      | Install [Cursor CLI](https://cursor.com/cli), then run `agent login`.                        |
 | Grok Build  | Install [Grok Build CLI](https://x.ai/cli), then run `grok login`.                           |
 | OpenCode    | Install [OpenCode](https://opencode.ai), then run `opencode auth login`.                     |
-| Antigravity | Install and sign in with Google from T2 Code's provider settings.                            |
+| Antigravity | Install and sign in with Google from T3 Code's provider settings.                            |
 
-Provider CLIs must be on the server's `PATH`. If T2 Code cannot find one, set its
+Provider CLIs must be on the server's `PATH`. If T3 Code cannot find one, set its
 **Binary path** in provider settings, especially when using a version manager.
 Cursor's executable is `cursor-agent`, although its login command is
 `agent login`. Antigravity can use its managed runtime without a `PATH` entry.
 
-Update provider CLIs with the installer you used. When **Update now** is
-available on a provider card, it runs that provider's installer after you request
-it.
+When a provider CLI is behind its latest release, its provider card shows the
+available version. **Update now** appears only when T3 Code can tell which
+installer owns the CLI (its own update command, Homebrew, or a global npm, pnpm,
+bun, or Vite+ install) and runs that installer. Otherwise update the CLI the same
+way you installed it. Homebrew installs compare against the version Homebrew
+offers, which can trail the npm release by a few hours.
 
 Add another provider instance for a separate account or configuration. Each
 instance can have its own environment variables, such as API keys or a custom
-base URL. Mark secret values as sensitive; after saving, T2 Code does not display
+base URL. Mark secret values as sensitive; after saving, T3 Code does not display
 their original values.
 
 For provider-specific setup and accounts, see [Codex](./providers-codex.md),
@@ -121,4 +140,6 @@ For provider-specific setup and accounts, see [Codex](./providers-codex.md),
 
 - [Working with threads](./thread-sidebar.md): start tasks and organize parallel work.
 - [Permission modes](./permission-modes.md): choose when agents ask before acting.
-- [Updating T2 Code](./updating.md): update the desktop app or CLI.
+- [Remote access](./remote-access.md): connect from another device.
+- [Running in the background](./background-service.md): keep a Linux or macOS host available.
+- [Updating T3 Code](./updating.md): update the app and connected servers.

@@ -79,7 +79,7 @@ describe("iOS input startup", () => {
     vi.unstubAllGlobals();
   });
 
-  const setup = (base = "http://127.0.0.1") => {
+  const setup = () => {
     vi.useFakeTimers();
     const sockets: FakeSocket[] = [];
     class FakeSocket {
@@ -118,8 +118,8 @@ describe("iOS input startup", () => {
         platform: "ios",
         deviceId: "test-device",
         access: {
-          httpBase: `${base}/api/device-hub`,
-          wsBase: `${base.replace(/^http/, "ws")}/api/device-hub`,
+          httpBase: "http://test/api/device-hub",
+          wsBase: "ws://test/api/device-hub",
           credentials: true,
           query: {},
         },
@@ -135,14 +135,6 @@ describe("iOS input startup", () => {
     );
     return { client, sockets, signals };
   };
-
-  it("blocks remote streams before fetching video or opening input sockets", async () => {
-    const { client, sockets, signals } = setup("https://example.com");
-    client.start();
-    await vi.advanceTimersByTimeAsync(2_000);
-    expect(signals).toHaveLength(0);
-    expect(sockets).toHaveLength(0);
-  });
 
   it("connects input when the MJPEG prime never produces a frame", async () => {
     const { client, sockets, signals } = setup();

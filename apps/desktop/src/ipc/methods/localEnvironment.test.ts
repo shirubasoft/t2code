@@ -29,7 +29,7 @@ const unusedLifecycleRuntimeLayer = Layer.mergeAll(
 );
 
 describe("local environment IPC", () => {
-  it.effect("keeps local execution enabled without relaunching", () => {
+  it.effect("relaunches only when the setting changes and keeps other settings", () => {
     const relaunchReasons: Array<string> = [];
     const layer = Layer.mergeAll(
       DesktopAppSettings.layerTest({
@@ -46,15 +46,18 @@ describe("local environment IPC", () => {
     );
     return Effect.gen(function* () {
       yield* setLocalEnvironmentEnabled.handler(false);
-      assert.isTrue(yield* getLocalEnvironmentEnabled.handler());
+      assert.isFalse(yield* getLocalEnvironmentEnabled.handler());
       yield* setLocalEnvironmentEnabled.handler(false);
-      assert.deepEqual(relaunchReasons, []);
+      assert.deepEqual(relaunchReasons, ["localEnvironmentEnabled=false"]);
 
       yield* setLocalEnvironmentEnabled.handler(true);
       assert.isTrue(yield* getLocalEnvironmentEnabled.handler());
       const appSettings = yield* DesktopAppSettings.DesktopAppSettings;
       assert.isTrue((yield* appSettings.get).wslBackendEnabled);
-      assert.deepEqual(relaunchReasons, []);
+      assert.deepEqual(relaunchReasons, [
+        "localEnvironmentEnabled=false",
+        "localEnvironmentEnabled=true",
+      ]);
     }).pipe(Effect.provide(layer));
   });
 });

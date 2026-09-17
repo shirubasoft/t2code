@@ -1,4 +1,3 @@
-import { isLoopbackUrl } from "@t3tools/shared/localNetwork";
 import { withRelayClientTracing } from "@t3tools/shared/relayTracing";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
@@ -221,21 +220,6 @@ export const make = Effect.fn("EnvironmentSupervisor.make")(function* (
   | ConnectionWakeups.ConnectionWakeups
 > {
   const target = entry.target;
-  const endpoints =
-    target._tag === "PrimaryConnectionTarget"
-      ? target
-      : target._tag === "BearerConnectionTarget" &&
-          Option.isSome(entry.profile) &&
-          entry.profile.value._tag === "BearerConnectionProfile"
-        ? entry.profile.value
-        : undefined;
-  const isLoopback =
-    endpoints !== undefined &&
-    isLoopbackUrl(endpoints.httpBaseUrl) &&
-    isLoopbackUrl(endpoints.wsBaseUrl);
-  // Browser connectivity describes external interfaces; loopback remains reachable offline.
-  const connectionNetwork = (network: NetworkStatus): NetworkStatus =>
-    isLoopback ? "online" : network;
   const setupTimeoutDetail = `${target.label} did not respond during connection setup.${
     target._tag === "RelayConnectionTarget" ? ` ${NETWORK_BLOCKING_HINT}` : ""
   }`;
@@ -246,7 +230,7 @@ export const make = Effect.fn("EnvironmentSupervisor.make")(function* (
   const wakeups = yield* ConnectionWakeups.ConnectionWakeups;
   const initialIntent: SupervisorIntent = {
     desired: options?.initiallyDesired ?? false,
-    network: connectionNetwork(yield* connectivity.status),
+    network: yield* connectivity.status,
   };
   const intent = yield* Ref.make(initialIntent);
   const signals = yield* Queue.unbounded<SupervisorSignal>();
@@ -763,7 +747,6 @@ export const make = Effect.fn("EnvironmentSupervisor.make")(function* (
   });
 
   yield* connectivity.changes.pipe(
-    Stream.map(connectionNetwork),
     Stream.runForEach((network) =>
       Ref.modify(intent, (current) =>
         current.network === network ? [false, current] : ([true, { ...current, network }] as const),

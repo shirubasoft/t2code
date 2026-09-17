@@ -23,8 +23,8 @@ import * as TokenStore from "./tokenStore.ts";
 
 const ENVIRONMENT_ID = EnvironmentId.make("environment-1");
 const ENDPOINT = {
-  httpBaseUrl: "http://127.0.0.1:3773",
-  wsBaseUrl: "ws://127.0.0.1:3773",
+  httpBaseUrl: "https://environment.example.test",
+  wsBaseUrl: "wss://environment.example.test",
   providerKind: "cloudflare_tunnel" as const,
 };
 const DESCRIPTOR = {
@@ -335,7 +335,7 @@ describe("RemoteEnvironmentAuthorization", () => {
       expect(yield* Ref.get(harness.bootstrapCalls)).toBe(0);
       expect(harness.fetch.calls).toHaveLength(1);
       expect(String(harness.fetch.calls[0]?.[0])).toBe(
-        "http://127.0.0.1:3773/api/auth/websocket-ticket",
+        "https://environment.example.test/api/auth/websocket-ticket",
       );
     }),
   );

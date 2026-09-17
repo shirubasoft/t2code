@@ -21,7 +21,7 @@ const decodeRelayError = Schema.decodeUnknownEffect(ManagedRelay.ManagedRelayCli
 
 function managedRelayTestLayer(
   fetchFn: typeof globalThis.fetch,
-  relayUrl = "https://localhost:9443",
+  relayUrl = "https://relay.example.test",
   accessTokenStore?: ManagedRelay.ManagedRelayAccessTokenStore,
 ) {
   const httpClientLayer = remoteHttpClientLayer(fetchFn);
@@ -73,8 +73,8 @@ describe("ManagedRelayClient", () => {
         Response.json({
           environmentId: "env-1",
           endpoint: {
-            httpBaseUrl: "https://127.0.0.1:9555/",
-            wsBaseUrl: "wss://127.0.0.1:9555/ws",
+            httpBaseUrl: "https://desktop.example.test/",
+            wsBaseUrl: "wss://desktop.example.test/ws",
             providerKind: "cloudflare_tunnel",
           },
           status: "online",
@@ -139,22 +139,6 @@ describe("ManagedRelayClient", () => {
     }).pipe(Effect.provide(managedRelayTestLayer(fetchFn, "http://relay.example.test")));
   });
 
-  it.effect("rejects an external HTTPS relay without passing credentials to fetch", () => {
-    const requests: Array<RequestInfo | URL> = [];
-    const fetchFn: typeof globalThis.fetch = async (request) => {
-      requests.push(request);
-      throw new Error("An external relay must not reach fetch");
-    };
-    return Effect.gen(function* () {
-      const relayClient = yield* ManagedRelay.ManagedRelayClient;
-      const error = yield* relayClient
-        .listEnvironments({ clerkToken: "private-relay-token" })
-        .pipe(Effect.flip);
-      expect(error).toMatchObject({ _tag: "ManagedRelayRequestFailedError" });
-      expect(requests).toEqual([]);
-    }).pipe(Effect.provide(managedRelayTestLayer(fetchFn, "https://external-relay.example.test")));
-  });
-
   it.effect("reuses usable DPoP tokens and refreshes cleared or expiring cache entries", () => {
     let tokenExchangeCount = 0;
     const fetchFn = ((input) => {
@@ -175,8 +159,8 @@ describe("ManagedRelayClient", () => {
         Response.json({
           environmentId: "env-1",
           endpoint: {
-            httpBaseUrl: "https://127.0.0.1:9555/",
-            wsBaseUrl: "wss://127.0.0.1:9555/ws",
+            httpBaseUrl: "https://desktop.example.test/",
+            wsBaseUrl: "wss://desktop.example.test/ws",
             providerKind: "cloudflare_tunnel",
           },
           status: "online",
@@ -223,7 +207,7 @@ describe("ManagedRelayClient", () => {
       {
         accountId: "user-1",
         clientId: "t3-mobile",
-        relayUrl: "https://localhost:9443",
+        relayUrl: "https://relay.example.test",
         thumbprint: "client-thumbprint",
         scopes: [RelayEnvironmentStatusScope],
         accessToken: "cached-status-token",
@@ -259,8 +243,8 @@ describe("ManagedRelayClient", () => {
         Response.json({
           environmentId: "env-1",
           endpoint: {
-            httpBaseUrl: "https://127.0.0.1:9555/",
-            wsBaseUrl: "wss://127.0.0.1:9555/ws",
+            httpBaseUrl: "https://desktop.example.test/",
+            wsBaseUrl: "wss://desktop.example.test/ws",
             providerKind: "cloudflare_tunnel",
           },
           status: "online",
@@ -341,8 +325,8 @@ describe("ManagedRelayClient", () => {
         Response.json({
           environmentId: "env-1",
           endpoint: {
-            httpBaseUrl: "https://127.0.0.1:9555/",
-            wsBaseUrl: "wss://127.0.0.1:9555/ws",
+            httpBaseUrl: "https://desktop.example.test/",
+            wsBaseUrl: "wss://desktop.example.test/ws",
             providerKind: "cloudflare_tunnel",
           },
           status: "online",
@@ -389,7 +373,7 @@ describe("ManagedRelayClient", () => {
       {
         accountId: "user-1",
         clientId: "t3-mobile",
-        relayUrl: "https://localhost:9443",
+        relayUrl: "https://relay.example.test",
         thumbprint: "client-thumbprint",
         scopes: [RelayEnvironmentStatusScope],
         accessToken: "stale-relay-token",
@@ -440,8 +424,8 @@ describe("ManagedRelayClient", () => {
         Response.json({
           environmentId: "env-1",
           endpoint: {
-            httpBaseUrl: "https://127.0.0.1:9555/",
-            wsBaseUrl: "wss://127.0.0.1:9555/ws",
+            httpBaseUrl: "https://desktop.example.test/",
+            wsBaseUrl: "wss://desktop.example.test/ws",
             providerKind: "cloudflare_tunnel",
           },
           status: "online",
@@ -503,8 +487,8 @@ describe("ManagedRelayClient", () => {
         Response.json({
           environmentId: "env-1",
           endpoint: {
-            httpBaseUrl: "https://127.0.0.1:9555/",
-            wsBaseUrl: "wss://127.0.0.1:9555/ws",
+            httpBaseUrl: "https://desktop.example.test/",
+            wsBaseUrl: "wss://desktop.example.test/ws",
             providerKind: "cloudflare_tunnel",
           },
           status: "online",
@@ -654,7 +638,7 @@ describe("ManagedRelayClient", () => {
 
   it.effect("lists account devices through the v2 Clerk bearer client endpoint", () => {
     const fetchFn = ((input, init) => {
-      expect(String(input)).toBe("https://localhost:9443/v2/client/devices");
+      expect(String(input)).toBe("https://relay.example.test/v2/client/devices");
       expect(init?.headers).toMatchObject({
         authorization: "Bearer clerk-token",
       });

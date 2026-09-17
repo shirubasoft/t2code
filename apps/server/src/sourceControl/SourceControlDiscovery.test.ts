@@ -14,7 +14,6 @@ import { VcsProcessSpawnError } from "@t3tools/contracts";
 import * as ServerConfig from "../config.ts";
 import * as VcsDriverRegistry from "../vcs/VcsDriverRegistry.ts";
 import * as VcsProcess from "../vcs/VcsProcess.ts";
-import { UserNetworkAccess } from "../networkPolicy.ts";
 import * as AzureDevOpsCli from "./AzureDevOpsCli.ts";
 import * as BitbucketApi from "./BitbucketApi.ts";
 import * as GitHubCli from "./GitHubCli.ts";
@@ -1625,6 +1624,5 @@ it.effect(
     }).pipe(
       Effect.scoped,
       Effect.provide(VcsProcess.layer.pipe(Layer.provideMerge(NodeServices.layer))),
-      Effect.provideService(UserNetworkAccess, true),
     ),
 );

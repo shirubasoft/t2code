@@ -32,6 +32,10 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -64,6 +68,7 @@ jobs:
         with:
           ref: ${{ needs.metadata.outputs.sha }}
           persist-credentials: false
+          fetch-depth: 0
           sparse-checkout: |
             /*
             !/.repos/
@@ -83,12 +88,9 @@ jobs:
         env:
           RELEASE_VERSION: ${{ needs.metadata.outputs.version }}
         run: |
-          node scripts/verify-private-build.mjs --source .
+          node .github/t2code/overlay.mjs verify
           node scripts/update-release-package-versions.ts "$RELEASE_VERSION"
           vp run build:desktop
-          node scripts/verify-private-build.mjs --source . --artifacts apps/web/dist
-          node scripts/verify-private-build.mjs --source . --artifacts apps/server/dist
-          node scripts/verify-private-build.mjs --source . --artifacts apps/desktop/dist-electron
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: js-bundle
@@ -222,6 +224,10 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4

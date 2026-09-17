@@ -7,7 +7,6 @@ import {
   ProjectId,
   type ClientOrchestrationCommand,
 } from "@t3tools/contracts";
-import { isLoopbackUrl } from "@t3tools/shared/localNetwork";
 import * as Console from "effect/Console";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
@@ -20,11 +19,10 @@ import * as Path from "effect/Path";
 import * as References from "effect/References";
 import * as Schema from "effect/Schema";
 import { Argument, Command, Flag, GlobalFlag } from "effect/unstable/cli";
-import { HttpClient, HttpClientError } from "effect/unstable/http";
+import { FetchHttpClient, HttpClient, HttpClientError } from "effect/unstable/http";
 import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
 
 import * as EnvironmentAuth from "../auth/EnvironmentAuth.ts";
-import * as NetworkPolicy from "../networkPolicy.ts";
 
 import * as ServerConfig from "../config.ts";
 import * as OrchestrationEngine from "../orchestration/Services/OrchestrationEngine.ts";
@@ -349,7 +347,7 @@ const tryResolveLiveProjectExecutionMode = Effect.fn("tryResolveLiveProjectExecu
     config: ServerConfig.ServerConfig["Service"],
   ) {
     const runtimeState = yield* readPersistedServerRuntimeState(config.serverRuntimeStatePath);
-    if (Option.isNone(runtimeState) || !isLoopbackUrl(runtimeState.value.origin)) {
+    if (Option.isNone(runtimeState)) {
       return Option.none<{ readonly origin: string }>();
     }
 
@@ -434,7 +432,7 @@ const runProjectMutation = Effect.fn("runProjectMutation")(function* (
   }).pipe(
     Effect.provide(
       Layer.mergeAll(EnvironmentAuth.runtimeLayer, WorkspacePaths.layer).pipe(
-        Layer.provideMerge(NetworkPolicy.layer),
+        Layer.provideMerge(FetchHttpClient.layer),
         Layer.provide(ServerConfig.layer(config)),
         Layer.provide(Layer.succeed(References.MinimumLogLevel, minimumLogLevel)),
       ),

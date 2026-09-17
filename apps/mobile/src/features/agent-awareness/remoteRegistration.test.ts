@@ -9,15 +9,18 @@ import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
-import { Cookies, HttpClientRequest, HttpClientResponse } from "effect/unstable/http";
+import {
+  Cookies,
+  FetchHttpClient,
+  HttpClientRequest,
+  HttpClientResponse,
+} from "effect/unstable/http";
 import { ManagedRelay } from "@t3tools/client-runtime/relay";
-import { remoteHttpClientLayer } from "@t3tools/client-runtime/rpc";
 
 import type { EnvironmentId } from "@t3tools/contracts";
 import { verifyDpopProof } from "@t3tools/shared/dpop";
 import type { SavedRemoteConnection } from "../../lib/connection";
 import { cryptoLayer } from "../cloud/dpop";
-import * as PublicConfig from "../cloud/publicConfig";
 import { managedRelayClientLayer } from "../cloud/managedRelayLayer";
 import {
   clearAgentAwarenessRegistrationRecord,
@@ -216,21 +219,16 @@ function savedConnection(): SavedRemoteConnection {
   return {
     environmentId: "env-1" as EnvironmentId,
     environmentLabel: "Desktop",
-    pairingUrl: "https://127.0.0.1:3773/pair",
-    displayUrl: "https://127.0.0.1:3773",
-    httpBaseUrl: "https://127.0.0.1:3773",
-    wsBaseUrl: "wss://127.0.0.1:3773/ws",
+    pairingUrl: "https://desktop.example/pair",
+    displayUrl: "https://desktop.example",
+    httpBaseUrl: "https://desktop.example",
+    wsBaseUrl: "wss://desktop.example/ws",
     bearerToken: "bearer-token",
   };
 }
 
-const relayTestLayer = managedRelayClientLayer("https://localhost:9443").pipe(
-  Layer.provide(
-    Layer.mergeAll(
-      remoteHttpClientLayer((input, init) => globalThis.fetch(input, init)),
-      cryptoLayer,
-    ),
-  ),
+const relayTestLayer = managedRelayClientLayer("https://relay.example.test").pipe(
+  Layer.provide(Layer.mergeAll(FetchHttpClient.layer, cryptoLayer)),
 );
 
 const runBackgroundOperations = Effect.fn("TestRemoteRegistration.runBackgroundOperations")(
@@ -266,36 +264,9 @@ describe("makeRelayDeviceRegistrationRequest", () => {
     });
     vi.unstubAllGlobals();
     vi.stubGlobal("__DEV__", false);
-    vi.stubGlobal(
-      "fetch",
-      vi.fn((request: RequestInfo | URL) => {
-        const url = request instanceof Request ? request.url : String(request);
-        return Promise.resolve(
-          Response.json(
-            url.endsWith("/v1/client/dpop-token")
-              ? {
-                  access_token: "relay-dpop-token",
-                  issued_token_type: "urn:ietf:params:oauth:token-type:access_token",
-                  token_type: "DPoP",
-                  expires_in: 300,
-                  scope: "mobile:registration",
-                }
-              : { ok: true },
-          ),
-        );
-      }),
-    );
     secureStore.clear();
     backgroundRuntime.pending.length = 0;
     Constants.expoConfig!.extra = {};
-    const disabledConfig = PublicConfig.resolveCloudPublicConfig();
-    vi.spyOn(PublicConfig, "resolveCloudPublicConfig").mockImplementation(() => {
-      const relayUrl: unknown = Constants.expoConfig?.extra?.relay?.url;
-      return {
-        ...disabledConfig,
-        relay: { url: typeof relayUrl === "string" ? relayUrl : null },
-      };
-    });
     __resetAgentAwarenessRemoteRegistrationForTest();
     appStateMock.listeners.length = 0;
     registrationRecordStore.current = null;
@@ -307,23 +278,6 @@ describe("makeRelayDeviceRegistrationRequest", () => {
     widgetMocks.getInstances.mockReturnValue([]);
     widgetMocks.start.mockClear();
     environmentConfigsMock.configs.clear();
-  });
-
-  it.effect("keeps hosted registration disabled even when Expo config supplies a relay", () => {
-    vi.mocked(PublicConfig.resolveCloudPublicConfig).mockRestore();
-    Constants.expoConfig!.extra = { relay: { url: "https://blocked-relay.example.test" } };
-    const tokenProvider = vi.fn(() => Promise.resolve("private-token"));
-    setAgentAwarenessRelayTokenProvider(tokenProvider, "user-a");
-
-    return Effect.gen(function* () {
-      yield* runBackgroundOperations();
-
-      expect(getAgentAwarenessRegistrationStatus()).toBe("unknown");
-      expect(globalThis.fetch).not.toHaveBeenCalled();
-      expect(tokenProvider).not.toHaveBeenCalled();
-      expect(secureStore.size).toBe(0);
-      expect(saveAgentAwarenessRegistrationRecord).not.toHaveBeenCalled();
-    }).pipe(Effect.provide(relayTestLayer));
   });
 
   it("preserves disabled Live Activity preferences in relay registrations", () => {
@@ -601,7 +555,7 @@ describe("makeRelayDeviceRegistrationRequest", () => {
     vi.stubGlobal("fetch", fetchMock);
     Constants.expoConfig!.extra = {
       relay: {
-        url: "https://localhost:9443/",
+        url: "https://relay.example.test/",
       },
     };
 
@@ -619,7 +573,7 @@ describe("makeRelayDeviceRegistrationRequest", () => {
       const method = request instanceof Request ? request.method : init?.method;
       const headers = request instanceof Request ? request.headers : new Headers(init?.headers);
       const dpop = headers.get("dpop");
-      expect(url).toBe("https://localhost:9443/v1/mobile/devices");
+      expect(url).toBe("https://relay.example.test/v1/mobile/devices");
       expect(method).toBe("POST");
       expect(headers.get("authorization")).toBe("DPoP relay-dpop-token");
       expect(dpop).toEqual(expect.any(String));
@@ -630,7 +584,7 @@ describe("makeRelayDeviceRegistrationRequest", () => {
         verifyDpopProof({
           proof: dpop,
           method: "POST",
-          url: "https://localhost:9443/v1/mobile/devices",
+          url: "https://relay.example.test/v1/mobile/devices",
           expectedAccessToken: "relay-dpop-token",
           nowEpochSeconds: proofIat(dpop),
         }),
@@ -642,7 +596,7 @@ describe("makeRelayDeviceRegistrationRequest", () => {
   it.effect("marks registration failed when device registration cannot complete", () => {
     Constants.expoConfig!.extra = {
       relay: {
-        url: "https://localhost:9443/",
+        url: "https://relay.example.test/",
       },
     };
     vi.mocked(loadOrCreateAgentAwarenessDeviceId).mockRejectedValueOnce(
@@ -701,7 +655,7 @@ describe("makeRelayDeviceRegistrationRequest", () => {
   it.effect("keeps a registered status when a later refresh fails", () => {
     Constants.expoConfig!.extra = {
       relay: {
-        url: "https://localhost:9443/",
+        url: "https://relay.example.test/",
       },
     };
     setAgentAwarenessRelayTokenProvider(() => Promise.resolve("clerk-token-user-a"));
@@ -723,7 +677,7 @@ describe("makeRelayDeviceRegistrationRequest", () => {
   it.effect("does not re-register the same account when nothing has changed", () => {
     Constants.expoConfig!.extra = {
       relay: {
-        url: "https://localhost:9443/",
+        url: "https://relay.example.test/",
       },
     };
     setAgentAwarenessRelayTokenProvider(() => Promise.resolve("clerk-token-user-a"));
@@ -744,8 +698,10 @@ describe("makeRelayDeviceRegistrationRequest", () => {
   });
 
   it.effect("dedupes rapid activity-token re-registrations within the replay window", () => {
-    // A registration attempt loads the device id; deduplication stops before
-    // that step, independently of the relay's token exchange cache.
+    // Fetch counts are unreliable here (the module-level relay layer captures
+    // the first test's fetch), so assert on the flow's own seams: a real
+    // registration attempt loads the device id, a deduped one short-circuits
+    // before it.
     const fetchMock = vi.fn((request: RequestInfo | URL) => {
       const url = request instanceof Request ? request.url : String(request);
       return Promise.resolve(
@@ -765,7 +721,7 @@ describe("makeRelayDeviceRegistrationRequest", () => {
     vi.stubGlobal("fetch", fetchMock);
     Constants.expoConfig!.extra = {
       relay: {
-        url: "https://localhost:9443/",
+        url: "https://relay.example.test/",
       },
     };
     const activity = {
@@ -792,7 +748,7 @@ describe("makeRelayDeviceRegistrationRequest", () => {
   it.effect("re-registers when the stored account identity differs", () => {
     Constants.expoConfig!.extra = {
       relay: {
-        url: "https://localhost:9443/",
+        url: "https://relay.example.test/",
       },
     };
     registrationRecordStore.current = { identity: "someone-else", signature: "stale" };
@@ -824,7 +780,7 @@ describe("makeRelayDeviceRegistrationRequest", () => {
     vi.stubGlobal("fetch", fetchMock);
     Constants.expoConfig!.extra = {
       relay: {
-        url: "https://localhost:9443/",
+        url: "https://relay.example.test/",
       },
     };
 
@@ -841,7 +797,7 @@ describe("makeRelayDeviceRegistrationRequest", () => {
   it.effect("continues queued device registration after a failed auth lookup", () => {
     Constants.expoConfig!.extra = {
       relay: {
-        url: "https://localhost:9443/",
+        url: "https://relay.example.test/",
       },
     };
 
@@ -889,7 +845,7 @@ describe("makeRelayDeviceRegistrationRequest", () => {
     vi.stubGlobal("fetch", fetchMock);
     Constants.expoConfig!.extra = {
       relay: {
-        url: "https://localhost:9443/",
+        url: "https://relay.example.test/",
       },
     };
 
@@ -928,7 +884,7 @@ describe("makeRelayDeviceRegistrationRequest", () => {
       vi.stubGlobal("fetch", fetchMock);
       Constants.expoConfig!.extra = {
         relay: {
-          url: "https://localhost:9443/",
+          url: "https://relay.example.test/",
         },
       };
 
@@ -1020,7 +976,7 @@ describe("makeRelayDeviceRegistrationRequest", () => {
           registrations.push(await request.json());
           return Response.json({ ok: true });
         });
-        Constants.expoConfig!.extra = { relay: { url: "https://localhost:9444" } };
+        Constants.expoConfig!.extra = { relay: { url: "https://permission-relay.example.test" } };
         setAgentAwarenessRelayTokenProvider(() => Promise.resolve("clerk"), "user-a");
         return Effect.gen(function* () {
           yield* runBackgroundOperations();
@@ -1038,14 +994,10 @@ describe("makeRelayDeviceRegistrationRequest", () => {
           });
           expect(registrations.at(-1)).not.toHaveProperty("pushToken");
         }).pipe(
+          Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch),
           Effect.provide(
-            managedRelayClientLayer("https://localhost:9444").pipe(
-              Layer.provide(
-                Layer.mergeAll(
-                  remoteHttpClientLayer((input, init) => globalThis.fetch(input, init)),
-                  cryptoLayer,
-                ),
-              ),
+            managedRelayClientLayer("https://permission-relay.example.test").pipe(
+              Layer.provide(Layer.mergeAll(FetchHttpClient.layer, cryptoLayer)),
             ),
           ),
         );
@@ -1074,13 +1026,13 @@ describe("makeRelayDeviceRegistrationRequest", () => {
       Object.defineProperty(response.headers, "getSetCookie", { value: undefined });
       return Promise.resolve(response);
     });
-    Constants.expoConfig!.extra = { relay: { url: "https://localhost:9443" } };
+    Constants.expoConfig!.extra = { relay: { url: "https://relay.example.test" } };
     setAgentAwarenessRelayTokenProvider(() => Promise.resolve("clerk-token-user-a"), "user-a");
 
     return Effect.gen(function* () {
       // Hermes' compiled error hashing reads the response's cookie getter.
       const httpResponse = HttpClientResponse.fromWeb(
-        HttpClientRequest.post("https://localhost:9443/v1/mobile/devices"),
+        HttpClientRequest.post("https://relay.example.test/v1/mobile/devices"),
         rejectedResponse,
       );
       expect(httpResponse.cookies).toEqual(Cookies.empty);
@@ -1125,7 +1077,7 @@ describe("makeRelayDeviceRegistrationRequest", () => {
         );
       }),
     );
-    Constants.expoConfig!.extra = { relay: { url: "https://localhost:9443" } };
+    Constants.expoConfig!.extra = { relay: { url: "https://relay.example.test" } };
     setAgentAwarenessRelayTokenProvider(() => Promise.resolve("clerk-token-user-a"), "user-a");
     return Effect.gen(function* () {
       yield* refreshAgentAwarenessRegistration();
@@ -1149,7 +1101,7 @@ describe("makeRelayDeviceRegistrationRequest", () => {
         type: "android",
         data: "fcm-token",
       });
-      Constants.expoConfig!.extra = { relay: { url: "https://localhost:9443" } };
+      Constants.expoConfig!.extra = { relay: { url: "https://relay.example.test" } };
       const now = vi.spyOn(Date, "now").mockReturnValue(1000000);
       vi.mocked(clearAndroidAgentNotifications).mockClear();
       setAgentAwarenessRelayTokenProvider(() => Promise.resolve("clerk-token"), "user-a");
@@ -1185,7 +1137,7 @@ describe("makeRelayDeviceRegistrationRequest", () => {
     () => {
       vi.spyOn(Platform, "OS", "get").mockReturnValue("android");
       vi.spyOn(Platform, "Version", "get").mockReturnValue(36);
-      Constants.expoConfig!.extra = { relay: { url: "https://localhost:9443" } };
+      Constants.expoConfig!.extra = { relay: { url: "https://relay.example.test" } };
       setAgentAwarenessRelayTokenProvider(() => Promise.resolve("clerk-token"), "user-a");
       releaseAgentAwarenessRelayTokenProvider();
       vi.mocked(configureAndroidAgentNotifications).mockClear();

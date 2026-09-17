@@ -1,14 +1,9 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
-import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
-import { Command } from "effect/unstable/cli";
-import { FetchHttpClient } from "effect/unstable/http";
-import * as NetService from "@t3tools/shared/Net";
 import {
   HostProcessEnvironment,
   HostProcessInvokedAs,
@@ -16,40 +11,7 @@ import {
   HostProcessWorkingDirectory,
 } from "@t3tools/shared/hostProcess";
 
-import { repointLauncher, resolveLauncherPath, updateCommand } from "./update.ts";
-
-it.effect("lists CLI releases without exporting trace headers", () =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const baseDir = yield* fs.makeTempDirectoryScoped({ prefix: "t2-private-update-" });
-    const requests: Request[] = [];
-    const error = yield* Command.runWith(updateCommand, { version: "0.0.0" })([
-      "--base-dir",
-      baseDir,
-      "--channel",
-      "stable",
-    ]).pipe(
-      Effect.provideService(FetchHttpClient.Fetch, (input, init) => {
-        requests.push(new Request(input, init));
-        return Promise.resolve(Response.json([]));
-      }),
-      Effect.provideService(HostProcessEnvironment, {}),
-      Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: {} }))),
-      Effect.flip,
-    );
-    assert.equal(error._tag, "CliUpdateError");
-    assert.equal(error.message, "No published stable release was found.");
-    assert.equal(requests.length, 1);
-    assert.equal(
-      requests[0]?.url,
-      "https://api.github.com/repos/shirubasoft/t2code/releases?per_page=100&page=1",
-    );
-    assert.equal(requests[0]?.headers.get("accept"), "application/vnd.github+json");
-    for (const header of ["b3", "traceparent", "tracestate"]) {
-      assert.isFalse(requests[0]?.headers.has(header));
-    }
-  }).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, NetService.layer))),
-);
+import { repointLauncher, resolveLauncherPath } from "./update.ts";
 
 it.layer(NodeServices.layer)("t3 update launcher", (it) => {
   it.effect("repoints a symlink that lives in a runtime versions tree", () =>

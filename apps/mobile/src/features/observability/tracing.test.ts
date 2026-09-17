@@ -17,7 +17,7 @@ vi.mock("expo-constants", () => ({
   },
 }));
 
-it.effect("does not send spans to a configured collector", () => {
+it.effect("does not export spans through the configured mobile OTLP layer", () => {
   const fetchFn = vi.fn<typeof fetch>(async () => new Response(null, { status: 202 }));
   const tracingLayer = makeTracingLayer(
     {
@@ -48,7 +48,7 @@ it.effect("does not send spans to a configured collector", () => {
   );
 });
 
-it.effect("preserves original failures without sending spans", () => {
+it.effect("preserves application failures without exporting them", () => {
   const fetchFn = vi.fn<typeof fetch>(async () => new Response(null, { status: 202 }));
   const tracingLayer = makeTracingLayer(
     {

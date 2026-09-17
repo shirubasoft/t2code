@@ -165,7 +165,7 @@ describe("WSL runtime cache", () => {
       "b".repeat(64),
     );
 
-    expect(script).toContain('runtime_parent="$HOME/.t2/wsl-runtime"');
+    expect(script).toContain('runtime_parent="$HOME/.t3/wsl-runtime"');
     expect(script).toContain('  [ -f "$ready_marker" ] &&');
     expect(script).toContain('    runtime_entry_runs "$runtime_root" &&');
     expect(script).toContain("if runtime_is_ready; then");
@@ -327,8 +327,8 @@ describe("WSL runtime cache", () => {
   });
 
   it("parses only absolute Linux runtime paths", () => {
-    expect(parseWslRuntimeRoot("runtimeRoot:/home/josh/.t2/wsl-runtime/1.2.3-x64\n")).toBe(
-      "/home/josh/.t2/wsl-runtime/1.2.3-x64",
+    expect(parseWslRuntimeRoot("runtimeRoot:/home/josh/.t3/wsl-runtime/1.2.3-x64\n")).toBe(
+      "/home/josh/.t3/wsl-runtime/1.2.3-x64",
     );
     expect(parseWslRuntimeRoot("runtimeRoot:relative/path\n")).toBeNull();
     expect(parseWslRuntimeRoot("noise\n")).toBeNull();
@@ -383,7 +383,7 @@ describe("WSL runtime cache", () => {
 
     // Readiness is a presence check, so a tree whose pty.node is present but
     // unloadable stays ready forever unless the probe can revoke the marker.
-    expect(script).toContain('rm -f "$HOME/.t2/wsl-runtime/1.2.3_x64/.t3code-wsl-runtime-ready"');
+    expect(script).toContain('rm -f "$HOME/.t3/wsl-runtime/1.2.3_x64/.t3code-wsl-runtime-ready"');
     // Deleting the tree here would pull it out from under any backend still
     // running from it; the next install moves an unready root aside instead.
     expect(script).not.toContain("rm -rf");
@@ -439,9 +439,9 @@ describe.skipIf(posixShellRunner === null)("WSL runtime install script (executed
       archivePath,
       archiveSha,
       runtimeId,
-      runtimeParent: `${work}/home/.t2/wsl-runtime`,
-      runtimeRoot: `${work}/home/.t2/wsl-runtime/${runtimeId}`,
-      serverEntry: `${work}/home/.t2/wsl-runtime/${runtimeId}/t3`,
+      runtimeParent: `${work}/home/.t3/wsl-runtime`,
+      runtimeRoot: `${work}/home/.t3/wsl-runtime/${runtimeId}`,
+      serverEntry: `${work}/home/.t3/wsl-runtime/${runtimeId}/t3`,
       installScript,
       install: (archive?: string, sha?: string) => runShell(installScript(archive, sha)),
     };
@@ -712,7 +712,7 @@ describe.skipIf(posixShellRunner === null)("WSL runtime install script (executed
         `runtime_root=${sh(fixture.runtimeRoot)}`,
         `runtime_parent=${sh(fixture.runtimeParent)}`,
         'rm "$runtime_root/.t3code-wsl-runtime-ready"',
-        'sh -c "sleep 30; :" "$runtime_root/t3" >/dev/null 2>&1 &',
+        'sh -c "sleep 30" "$runtime_root/t3" >/dev/null 2>&1 &',
         "active_pid=$!",
         "sleep 0.1",
         fixture.installScript(),
@@ -737,7 +737,7 @@ describe.skipIf(posixShellRunner === null)("WSL runtime install script (executed
         "set -eu",
         "work=$(mktemp -d)",
         'home="$work/home"',
-        'runtime_parent="$home/.t2/wsl-runtime"',
+        'runtime_parent="$home/.t3/wsl-runtime"',
         'mkdir -p "$runtime_parent"',
         'make_ready() { mkdir -p "$runtime_parent/$1"; printf ready > "$runtime_parent/$1/.t3code-wsl-runtime-ready"; }',
         "make_ready sha256-current",
@@ -750,7 +750,7 @@ describe.skipIf(posixShellRunner === null)("WSL runtime install script (executed
         'touch -d "4 minutes ago" "$runtime_parent/sha256-active"',
         'touch -d "3 minutes ago" "$runtime_parent/sha256-old"',
         'touch -d "2 minutes ago" "$runtime_parent/sha256-locked"',
-        'sh -c "sleep 30; :" "$runtime_parent/sha256-active/t3" >/dev/null 2>&1 &',
+        'sh -c "sleep 30" "$runtime_parent/sha256-active/t3" >/dev/null 2>&1 &',
         "active_pid=$!",
         "(",
         '  exec 9> "$runtime_parent/.sha256-locked.install.lock"',

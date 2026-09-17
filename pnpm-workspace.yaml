@@ -157,6 +157,7 @@ packageExtensions:
       vite: "catalog:"
 
 patchedDependencies:
+  "@clerk/expo@4.6.8": patches/@clerk__expo@4.6.8.patch
   "@effect/vitest@4.0.0-rc.112": patches/@effect__vitest@4.0.0-rc.112.patch
   "@expo/metro-config@57.0.12": patches/@expo__metro-config@57.0.12.patch
   "@ff-labs/fff-node@0.9.4": patches/@ff-labs__fff-node@0.9.4.patch
@@ -167,7 +168,6 @@ patchedDependencies:
   "@react-navigation/native-stack@7.17.6": patches/@react-navigation%2Fnative-stack@7.17.6.patch
   dbus-next@0.10.2: patches/dbus-next@0.10.2.patch
   effect@4.0.0-rc.112: patches/effect@4.0.0-rc.112.patch
-  electron-updater@6.8.3: patches/electron-updater@6.8.3.patch
   expo-audio@57.0.4: patches/expo-audio@57.0.4.patch
   expo-sharing@57.0.17: patches/expo-sharing@57.0.17.patch
   expo-widgets@57.0.15: patches/expo-widgets@57.0.15.patch

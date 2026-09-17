@@ -25,8 +25,10 @@ import {
 import { formatEnvironmentQueryError } from "./query";
 
 export const pullRequestEnvironment = createPullRequestEnvironmentAtoms(connectionAtomRuntime);
-export const linkedPullRequestDetailAtom =
-  createLinkedPullRequestSummaryAtomFamily(connectionAtomRuntime);
+export const linkedPullRequestDetailAtom = createLinkedPullRequestSummaryAtomFamily(
+  connectionAtomRuntime,
+  pullRequestEnvironment.refreshes,
+);
 
 const observedPullRequestSummaryAtom = Atom.family((key: string) =>
   Atom.make<PullRequestSummary | null>(null).pipe(
@@ -72,7 +74,10 @@ export function useSharedPullRequestSummary(
   }, [atom, current, environmentId]);
   return newestPullRequestSummary(current, observed);
 }
-export const pullRequestStackAtom = createPullRequestStackAtomFamily(connectionAtomRuntime);
+export const pullRequestStackAtom = createPullRequestStackAtomFamily(
+  connectionAtomRuntime,
+  pullRequestEnvironment.refreshes,
+);
 
 export interface EnvironmentQueryTarget<Input> {
   readonly environmentId: EnvironmentId;
@@ -150,6 +155,25 @@ const usePullRequestStatsQuery = createMergedEnvironmentQuery(
   "web-pull-requests:list-stats",
   pullRequestEnvironment.listStats,
 );
+
+const usePullRequestTurnRefreshQuery = createMergedEnvironmentQuery(
+  "web-pull-requests:turn-refreshes",
+  ({ environmentId }: EnvironmentQueryTarget<Readonly<Record<string, never>>>) =>
+    pullRequestEnvironment.refreshes({ environmentId, input: {} }),
+);
+
+export function usePullRequestTurnRefreshes(
+  environmentIds: ReadonlyArray<EnvironmentId>,
+): ReadonlyArray<readonly [EnvironmentId, number]> {
+  return usePullRequestTurnRefreshQuery(
+    environmentIds.map((environmentId) => ({ environmentId, input: {} })),
+  ).values;
+}
+
+export function usePullRequestTurnRefresh(environmentId: EnvironmentId): number | null {
+  const result = useAtomValue(pullRequestEnvironment.refreshes({ environmentId, input: {} }));
+  return Option.getOrNull(AsyncResult.value(result));
+}
 
 export interface MergedPullRequestListView {
   readonly data: MergedPullRequestList | null;

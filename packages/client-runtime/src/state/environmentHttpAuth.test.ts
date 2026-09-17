@@ -42,13 +42,13 @@ const TARGET = new RelayConnectionTarget({
 const PREPARED: PreparedConnection = {
   environmentId: TARGET.environmentId,
   label: TARGET.label,
-  httpBaseUrl: "https://127.0.0.1:9441",
-  socketUrl: "wss://127.0.0.1:9441/ws",
+  httpBaseUrl: "https://previous.example.test",
+  socketUrl: "wss://previous.example.test/ws",
   httpAuthorization: { _tag: "Dpop", accessToken: "expired-token", expiresAtEpochMs: 0 },
   target: TARGET,
 };
-const CURRENT_ORIGIN = "https://127.0.0.1:9442";
-const RENEWED_ORIGIN = "https://127.0.0.1:9443";
+const CURRENT_ORIGIN = "https://current.example.test";
+const RENEWED_ORIGIN = "https://renewed.example.test";
 const DIFF = {
   projectId: ProjectId.make("project-1"),
   repository: "owner/repository",
@@ -210,6 +210,7 @@ const LOADERS: ReadonlyArray<{
         ...input,
         threadId: THREAD.thread.id,
         window: { turnLimit: 20, beforeCursor: "older-page" },
+        reasoningMessages: true,
       }),
   },
 ];
@@ -252,6 +253,7 @@ describe("authenticated environment HTTP requests", () => {
       if (loader.name === "older thread history") {
         expect(url.searchParams.get("turnLimit")).toBe("20");
         expect(url.searchParams.get("beforeCursor")).toBe("older-page");
+        expect(url.searchParams.get("reasoningMessages")).toBe("true");
       }
       expect(PREPARED.httpAuthorization).toMatchObject({ accessToken: "expired-token" });
     }),
@@ -431,24 +433,6 @@ describe("authenticated environment HTTP requests", () => {
           authorization === null ? "include" : undefined,
         );
       }),
-  );
-
-  it.effect("rejects a saved external environment before credentials reach fetch", () =>
-    Effect.gen(function* () {
-      const harness = makeHarness(() => Response.json(SESSION));
-      const error = yield* fetchEnvironmentSessionState({
-        prepared: {
-          ...PREPARED,
-          httpBaseUrl: "https://external-environment.example.test",
-          httpAuthorization: { _tag: "Bearer", token: "private-environment-token" },
-        },
-        signer: Option.none(),
-      }).pipe(Effect.provide(harness.httpLayer), Effect.flip);
-      expect(error).toMatchObject({ _tag: "RemoteEnvironmentAuthFetchError" });
-      expect(harness.calls).toEqual([]);
-      expect(harness.authorizations).toEqual([]);
-      expect(harness.proofs).toEqual([]);
-    }),
   );
 
   it.effect("keeps the caller's timeout while waiting for renewal", () =>

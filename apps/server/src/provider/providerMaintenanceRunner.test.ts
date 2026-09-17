@@ -21,7 +21,6 @@ import { HostProcessEnvironment, HostProcessPlatform } from "@t3tools/shared/hos
 import { SpawnExecutableResolution } from "@t3tools/shared/shell";
 
 import { ProviderRegistry, type ProviderRegistryShape } from "./Services/ProviderRegistry.ts";
-import { UserNetworkAccess } from "../networkPolicy.ts";
 import * as ProviderMaintenanceRunner from "./providerMaintenanceRunner.ts";
 import {
   makeProviderMaintenanceCapabilities,
@@ -620,9 +619,7 @@ describe("providerMaintenanceRunner", () => {
         });
         const updater = yield* makeTestRunner(registry);
 
-        const result = yield* updater
-          .updateProvider(CODEX_DRIVER)
-          .pipe(Effect.provideService(UserNetworkAccess, true));
+        const result = yield* updater.updateProvider(CODEX_DRIVER);
 
         assert.strictEqual(result.providers[0]?.updateState?.status, "unchanged");
         assert.include(result.providers[0]?.updateState?.message ?? "", "still detects");

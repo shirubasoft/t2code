@@ -13,7 +13,7 @@ import {
 } from "./projectFaviconCache.ts";
 
 const target = { environmentId: EnvironmentId.make("remote"), cwd: "/workspace" };
-const url = "http://127.0.0.1:7777/api/assets/token-a/vabc-icon.svg";
+const url = "https://remote.test/api/assets/token-a/vabc-icon.svg";
 const image = "data:image/png;base64,aWNvbg==";
 const replacement = "data:image/png;base64,bmV3";
 const signal = () => new AbortController().signal;
@@ -62,11 +62,7 @@ describe("persistent project favicon cache", () => {
     const { cache, load } = fixture();
     await cache.resolve(target, url, signal());
     expect(
-      await cache.resolve(
-        target,
-        "http://localhost:7778/api/assets/token-b/vabc-icon.svg",
-        signal(),
-      ),
+      await cache.resolve(target, "https://new.test/api/assets/token-b/vabc-icon.svg", signal()),
     ).toBe(image);
     expect(load).toHaveBeenCalledTimes(1);
   });
@@ -104,7 +100,7 @@ describe("persistent project favicon cache", () => {
     expect(
       await cache.resolve(
         target,
-        "http://127.0.0.1:7777/api/assets/token/project-favicon-missing",
+        "https://remote.test/api/assets/token/project-favicon-missing",
         signal(),
       ),
     ).toBeNull();
@@ -281,7 +277,7 @@ describe("project favicon image loader", () => {
   it("downscales large bitmaps and refuses large vector icons", async () => {
     const bytes = new Uint8Array(PROJECT_FAVICON_MAX_DATA_URL_LENGTH);
     const bitmap = loader(new Response(bytes, { headers: { "content-type": "image/png" } }));
-    expect(await bitmap.load("http://127.0.0.1:7777/api/assets/t/v1-icon.png", signal())).toBe(
+    expect(await bitmap.load("https://remote.test/api/assets/t/v1-icon.png", signal())).toBe(
       replacement,
     );
     expect(bitmap.downscale).toHaveBeenCalledWith(
@@ -321,21 +317,7 @@ describe("project favicon image loader", () => {
     await expect(failed.load(url, signal())).rejects.toThrow("404");
     const html = loader(new Response("<html/>", { headers: { "content-type": "text/html" } }));
     await expect(
-      html.load("http://127.0.0.1:7777/api/assets/t/v1-favicon", signal()),
+      html.load("https://remote.test/api/assets/t/v1-favicon", signal()),
     ).rejects.toThrow("no image type");
   });
-});
-
-it("rejects external favicon URLs before fetch and refuses HTTP redirects", async () => {
-  const fetchImage = vi.fn(
-    async () => new Response("icon", { headers: { "content-type": "image/png" } }),
-  );
-  const load = createProjectFaviconImageLoader({ fetch: fetchImage, downscale: vi.fn() });
-  await expect(load("https://external.test/icon.png", signal())).rejects.toThrow("local URL");
-  expect(fetchImage).not.toHaveBeenCalled();
-  await load("http://127.0.0.1:7777/icon.png", signal());
-  expect(fetchImage).toHaveBeenCalledWith(
-    "http://127.0.0.1:7777/icon.png",
-    expect.objectContaining({ redirect: "error" }),
-  );
 });

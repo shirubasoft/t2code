@@ -3,6 +3,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./t2Analytics": {
+      "types": "./src/t2Analytics.ts",
+      "import": "./src/t2Analytics.ts"
+    },
     "./legacyCliLauncher": {
       "types": "./src/legacyCliLauncher.ts",
       "import": "./src/legacyCliLauncher.ts"
@@ -42,6 +46,10 @@
     "./git": {
       "types": "./src/git.ts",
       "import": "./src/git.ts"
+    },
+    "./githubMedia": {
+      "types": "./src/githubMedia.ts",
+      "import": "./src/githubMedia.ts"
     },
     "./sourceControl": {
       "types": "./src/sourceControl.ts",
@@ -334,8 +342,7 @@
     "./cliRelease": {
       "types": "./src/cliRelease.ts",
       "import": "./src/cliRelease.ts"
-    },
-    "./localNetwork": "./src/localNetwork.ts"
+    }
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

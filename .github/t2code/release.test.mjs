@@ -34,6 +34,22 @@ function fixture() {
     "-m",
     "Bootstrap",
   );
+  const upstream = git("rev-parse", "HEAD");
+  NodeFS.mkdirSync(NodePath.join(directory, ".github/t2code"), { recursive: true });
+  NodeFS.writeFileSync(
+    NodePath.join(directory, ".github/t2code/upstream.json"),
+    JSON.stringify({ commit: upstream }),
+  );
+  git("add", ".github/t2code/upstream.json");
+  git(
+    "-c",
+    "user.name=Test",
+    "-c",
+    "user.email=test@example.invalid",
+    "commit",
+    "-m",
+    "Pin upstream",
+  );
   const sha = git("rev-parse", "HEAD");
   const assets = NodePath.join(directory, "assets");
   NodeFS.mkdirSync(assets);
@@ -66,6 +82,7 @@ function fixture() {
     directory,
     assets,
     sha,
+    upstream,
     assemble: () =>
       NodeChildProcess.spawnSync(process.execPath, [script, "assemble", assets], {
         cwd: directory,
@@ -82,16 +99,16 @@ function fixture() {
 }
 
 NodeTest.test(
-  "release assembly accepts a bootstrap commit and hashes each published artifact",
+  "release assembly records the pinned upstream and hashes each published artifact",
   () => {
-    const { assets, sha, assemble } = fixture();
+    const { assets, sha, upstream, assemble } = fixture();
     const result = assemble();
     NodeAssert.equal(result.status, 0, result.stderr);
     const provenance = JSON.parse(
       NodeFS.readFileSync(NodePath.join(assets, "provenance.json"), "utf8"),
     );
     NodeAssert.equal(provenance.commit, sha);
-    NodeAssert.equal(provenance.upstream, null);
+    NodeAssert.equal(provenance.upstream, upstream);
     NodeAssert.equal(provenance.signing, "unsigned");
     const checksums = NodeFS.readFileSync(NodePath.join(assets, "SHA256SUMS"), "utf8")
       .trim()
