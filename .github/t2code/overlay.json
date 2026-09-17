@@ -254,6 +254,36 @@
       "path": "apps/web/src/components/sidebar/SidebarUpdateReleaseNotes.test.tsx",
       "before": "    expect(preventDefault).toHaveBeenCalledOnce();\n    await vi.waitFor(() => {\n      expect(openExternal).toHaveBeenCalledWith(\n        \"https://github.com/pingdotgg/t3code/releases/tag/v0.0.36-nightly.3\",\n      );\n      expect(testState.addToast).toHaveBeenCalledWith({\n        type: \"error\",\n",
       "after": "    expect(preventDefault).toHaveBeenCalledOnce();\n    await vi.waitFor(() => {\n      expect(openExternal).toHaveBeenCalledWith(\n        \"https://github.com/shirubasoft/t2code/releases/tag/v0.0.36-nightly.3\",\n      );\n      expect(testState.addToast).toHaveBeenCalledWith({\n        type: \"error\",\n"
+    },
+    {
+      "path": "scripts/install.sh",
+      "before": "channel=\"${T3CODE_CHANNEL:-stable}\"",
+      "after": "channel=\"${T3CODE_CHANNEL:-nightly}\""
+    },
+    {
+      "path": "scripts/install.sh",
+      "before": "(default: stable;",
+      "after": "(default: nightly;"
+    },
+    {
+      "path": "scripts/install.sh",
+      "before": "T3CODE_CHANNEL=stable (the default)",
+      "after": "T3CODE_CHANNEL=nightly (the default)"
+    },
+    {
+      "path": "scripts/install.ps1",
+      "before": "else { \"stable\" }",
+      "after": "else { \"nightly\" }"
+    },
+    {
+      "path": "scripts/install.ps1",
+      "before": "(default: stable;",
+      "after": "(default: nightly;"
+    },
+    {
+      "path": "scripts/install.ps1",
+      "before": "T3CODE_CHANNEL=stable (the default)",
+      "after": "T3CODE_CHANNEL=nightly (the default)"
     }
   ],
   "files": [

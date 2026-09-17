@@ -6,7 +6,17 @@ import * as NodeChildProcess from "node:child_process";
 const { execFileSync } = NodeChildProcess;
 import { apply, verify, git, readJson, assertSha, controlRoot } from "./overlay.mjs";
 
-const repository = "shirubasoft/t2code";
+import {
+  forkRepository,
+  nextNightly,
+  resolveNightly,
+  verifyNightly,
+  forkRelease,
+  releaseInProgress,
+  nightlyVersion,
+} from "./nightly.mjs";
+
+const repository = forkRepository;
 const branch = "codex/analytics-sync";
 function gh(args) {
   return execFileSync("gh", args, { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 }).trim();
@@ -28,9 +38,20 @@ function output(values) {
       .join(""),
   );
 }
-function fetchUpstream() {
-  git(["fetch", "--no-tags", "https://github.com/pingdotgg/t3code.git", "main"]);
-  return assertSha(git(["rev-parse", "FETCH_HEAD"]).trim());
+function dispatchRelease(sha, tag) {
+  gh([
+    "workflow",
+    "run",
+    "release.yml",
+    "--repo",
+    repository,
+    "--ref",
+    "main",
+    "-f",
+    `sha=${assertSha(sha)}`,
+    "-f",
+    `tag=${tag}`,
+  ]);
 }
 function plan() {
   const base = assertSha(git(["rev-parse", "HEAD"]).trim());
@@ -38,18 +59,45 @@ function plan() {
     output({ ready: false });
     return;
   }
-  const from = assertSha(readJson(".github/t2code/upstream.json").commit);
-  const upstream = fetchUpstream();
-  if (upstream === from) {
+  const pin = readJson(".github/t2code/upstream.json");
+  const from = assertSha(pin.commit);
+  if (pin.tag) {
+    verifyNightly(pin);
+    const released = forkRelease(pin.tag);
+    if (!released || released.draft) {
+      const releaseSha = assertSha(
+        git([
+          "log",
+          "-1",
+          "--first-parent",
+          "--format=%H",
+          base,
+          "--",
+          ".github/t2code/upstream.json",
+        ]).trim(),
+      );
+      output({ ready: false, release_sha: releaseSha, tag: pin.tag });
+      return;
+    }
+  }
+  const release = nextNightly(pin);
+  if (!release) {
     output({ ready: false });
     return;
   }
-  git(["merge-base", "--is-ancestor", from, upstream]);
+  const nightly = resolveNightly(release);
+  const upstream = nightly.commit;
+  // Initial migration may return from an unreleased main snapshot to its last
+  // nightly. Subsequent nightlies must retain the accepted source ancestry.
+  if (pin.tag) git(["merge-base", "--is-ancestor", from, upstream]);
   mkdirSync("review", { recursive: true });
-  writeFileSync("review/plan.json", JSON.stringify({ base, from, upstream }, null, 2) + "\n");
+  writeFileSync(
+    "review/plan.json",
+    JSON.stringify({ base, from, upstream, nightly }, null, 2) + "\n",
+  );
   writeFileSync(
     "review/commits.txt",
-    git(["log", "--reverse", "--format=fuller", `${from}..${upstream}`]),
+    git(["log", "--reverse", "--format=fuller", `${from}...${upstream}`]),
   );
   writeFileSync(
     "review/upstream.diff",
@@ -60,7 +108,7 @@ function plan() {
     mkdirSync(resolve("review/fork-files", path, ".."), { recursive: true });
     cpSync(path, resolve("review/fork-files", path));
   }
-  output({ ready: true, base, upstream });
+  output({ ready: true, base, upstream, tag: nightly.tag });
 }
 export function validateOverlay(candidate, accepted) {
   if (JSON.stringify(candidate.files) !== JSON.stringify(accepted.files))
@@ -91,6 +139,8 @@ function propose() {
   if (result.decision !== "ready") throw new Error(`Analytics review blocked: ${result.summary}`);
   if (api("git/ref/heads/main").object.sha !== base)
     throw new Error("Main advanced; retry against its new state");
+  verifyNightly(state.nightly);
+  if (state.nightly.commit !== upstream) throw new Error("Nightly source mismatch");
   const accepted = readJson(resolve(controlRoot, ".github/t2code/overlay.json"));
   if (!Array.isArray(result.edits) || result.edits.length > 1)
     throw new Error("Expected at most one overlay edit");
@@ -117,16 +167,13 @@ function propose() {
     mkdirSync(resolve(path, ".."), { recursive: true });
     cpSync(resolve(controlRoot, path), path);
   }
-  writeFileSync(
-    ".github/t2code/upstream.json",
-    JSON.stringify({ repository: "pingdotgg/t3code", commit: upstream }, null, 2) + "\n",
-  );
+  writeFileSync(".github/t2code/upstream.json", JSON.stringify(state.nightly, null, 2) + "\n");
   writeFileSync(".github/t2code/overlay.json", JSON.stringify(overlay, null, 2) + "\n");
   apply();
   git(["add", "--all"]);
   verify();
   const tree = git(["write-tree"]).trim();
-  const message = `chore(sync): follow upstream ${upstream.slice(0, 12)}\n\n${result.summary}\n\nUpstream: ${upstream}\n`;
+  const message = `chore(sync): follow ${state.nightly.tag}\n\n${result.summary}\n\nUpstream: ${upstream}\n`;
   const sha = git([
     "-c",
     "user.name=github-actions[bot]",
@@ -145,17 +192,17 @@ function propose() {
   // The branch is dedicated to generated snapshots; never rewrite main or a human branch.
   git(["push", "--force-with-lease", "origin", `${sha}:refs/heads/${branch}`]);
   const existing = api(`pulls?state=open&head=shirubasoft:${branch}`)[0];
-  const body = `Follow upstream through https://github.com/pingdotgg/t3code/commit/${upstream}.\n\n${result.summary}\n\nApplication changes are limited to the recorded analytics patches and installer metadata. Full CI must pass before merging.\n\nModel: Codex configured model, high reasoning. Harness: isolated Codex CLI.`;
+  const body = `Follow upstream nightly https://github.com/pingdotgg/t3code/releases/tag/${state.nightly.tag}, source ${upstream}.\n\n${result.summary}\n\nApplication changes are limited to the recorded analytics patches and installer metadata. Full CI must pass before merging.\n\nModel: Codex configured model, high reasoning. Harness: isolated Codex CLI.`;
   const pr = existing
     ? api(
         `pulls/${existing.number}`,
-        { body, title: `chore(sync): follow upstream ${upstream.slice(0, 12)}` },
+        { body, title: `chore(sync): follow ${state.nightly.tag}` },
         "PATCH",
       )
     : api("pulls", {
         base: "main",
         head: branch,
-        title: `chore(sync): follow upstream ${upstream.slice(0, 12)}`,
+        title: `chore(sync): follow ${state.nightly.tag}`,
         body,
       });
   output({ sha, pr: pr.number });
@@ -183,22 +230,18 @@ function merge() {
   });
   const merged = api(`pulls/${number}/merge`, { sha, merge_method: "merge" }, "PUT");
   if (!merged.merged) throw new Error(`Merge failed: ${merged.message}`);
-  gh([
-    "workflow",
-    "run",
-    "release.yml",
-    "--repo",
-    repository,
-    "--ref",
-    "main",
-    "-f",
-    `sha=${assertSha(merged.sha)}`,
-  ]);
-  console.log(`Merged ${pr.html_url}; dispatched release for ${merged.sha}`);
+  const tag = process.env.T2_NIGHTLY_TAG;
+  nightlyVersion(tag);
+  dispatchRelease(merged.sha, tag);
+  console.log(`Merged ${pr.html_url}; dispatched ${tag} for ${merged.sha}`);
 }
 if (process.argv[1] === new URL(import.meta.url).pathname) {
   if (process.argv[2] === "plan") plan();
   else if (process.argv[2] === "propose") propose();
   else if (process.argv[2] === "merge") merge();
-  else throw new Error("Expected plan, propose or merge");
+  else if (process.argv[2] === "retry-release") {
+    const tag = process.env.T2_NIGHTLY_TAG;
+    nightlyVersion(tag);
+    if (!releaseInProgress(tag)) dispatchRelease(process.env.T2_RELEASE_SHA, tag);
+  } else throw new Error("Expected plan, propose, merge or retry-release");
 }

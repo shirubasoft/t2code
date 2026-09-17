@@ -1,11 +1,13 @@
 name: Release
-run-name: T2 release ${{ inputs.sha || github.sha }}
+run-name: T2 nightly ${{ inputs.tag }}
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
     inputs:
+      tag:
+        description: Exact accepted upstream nightly tag
+        required: true
+        type: string
       sha:
         description: Complete merged main commit SHA
         required: true
@@ -28,6 +30,7 @@ jobs:
     outputs:
       sha: ${{ steps.meta.outputs.sha }}
       version: ${{ steps.meta.outputs.version }}
+      tag: ${{ steps.meta.outputs.tag }}
       ready: ${{ steps.meta.outputs.ready }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -45,7 +48,8 @@ jobs:
         run: node .github/t2code/release.mjs metadata
         env:
           GH_TOKEN: ${{ github.token }}
-          T2_RELEASE_SHA: ${{ inputs.sha || github.sha }}
+          T2_RELEASE_SHA: ${{ inputs.sha }}
+          T2_NIGHTLY_TAG: ${{ inputs.tag }}
 
   quality:
     needs: metadata
@@ -115,7 +119,7 @@ jobs:
       cli_archive: true
       version: ${{ needs.metadata.outputs.version }}
       ref: ${{ needs.metadata.outputs.sha }}
-      release_channel: stable
+      release_channel: nightly
 
   desktop_mac_x64:
     name: macOS x64
@@ -132,7 +136,7 @@ jobs:
       cli_archive: false
       version: ${{ needs.metadata.outputs.version }}
       ref: ${{ needs.metadata.outputs.sha }}
-      release_channel: stable
+      release_channel: nightly
 
   desktop_linux_x64:
     name: Linux x64
@@ -149,7 +153,7 @@ jobs:
       cli_archive: true
       version: ${{ needs.metadata.outputs.version }}
       ref: ${{ needs.metadata.outputs.sha }}
-      release_channel: stable
+      release_channel: nightly
 
   desktop_linux_arm64:
     name: Linux arm64
@@ -166,7 +170,7 @@ jobs:
       cli_archive: true
       version: ${{ needs.metadata.outputs.version }}
       ref: ${{ needs.metadata.outputs.sha }}
-      release_channel: stable
+      release_channel: nightly
 
   desktop_win_x64:
     name: Windows x64
@@ -183,7 +187,7 @@ jobs:
       cli_archive: true
       version: ${{ needs.metadata.outputs.version }}
       ref: ${{ needs.metadata.outputs.sha }}
-      release_channel: stable
+      release_channel: nightly
 
   desktop_win_arm64:
     name: Windows arm64
@@ -200,7 +204,7 @@ jobs:
       cli_archive: true
       version: ${{ needs.metadata.outputs.version }}
       ref: ${{ needs.metadata.outputs.sha }}
-      release_channel: stable
+      release_channel: nightly
 
   publish:
     needs:
@@ -221,6 +225,7 @@ jobs:
     env:
       T2_RELEASE_SHA: ${{ needs.metadata.outputs.sha }}
       T2_RELEASE_VERSION: ${{ needs.metadata.outputs.version }}
+      T2_NIGHTLY_TAG: ${{ needs.metadata.outputs.tag }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:

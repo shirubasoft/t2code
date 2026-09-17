@@ -9,7 +9,7 @@ import * as NodeURL from "node:url";
 import { parseUpdateManifest, serializeUpdateManifest } from "../../scripts/lib/update-manifest.ts";
 
 const script = NodeURL.fileURLToPath(new URL("release.mjs", import.meta.url));
-const version = "0.1.42";
+const version = "0.0.43-nightly.20260917.1866";
 const directories = [];
 NodeTest.afterEach(() => {
   for (const path of directories.splice(0)) NodeFS.rmSync(path, { recursive: true, force: true });
@@ -38,7 +38,12 @@ function fixture() {
   NodeFS.mkdirSync(NodePath.join(directory, ".github/t2code"), { recursive: true });
   NodeFS.writeFileSync(
     NodePath.join(directory, ".github/t2code/upstream.json"),
-    JSON.stringify({ commit: upstream }),
+    JSON.stringify({
+      repository: "pingdotgg/t3code",
+      commit: upstream,
+      tag: `v${version}`,
+      releaseId: 42,
+    }),
   );
   git("add", ".github/t2code/upstream.json");
   git(
@@ -66,12 +71,12 @@ function fixture() {
     NodeFS.writeFileSync(NodePath.join(assets, `T2-Code-${version}-${arch}.${ext}`), bytes);
   }
   for (const [name, arch, ext] of [
-    ["latest-mac.yml", "arm64", "dmg"],
-    ["latest-mac-x64.yml", "x64", "dmg"],
-    ["latest-win-x64.yml", "x64", "exe"],
-    ["latest-win-arm64.yml", "arm64", "exe"],
-    ["latest-linux.yml", "x86_64", "AppImage"],
-    ["latest-linux-arm64.yml", "arm64", "AppImage"],
+    ["nightly-mac.yml", "arm64", "dmg"],
+    ["nightly-mac-x64.yml", "x64", "dmg"],
+    ["nightly-win-x64.yml", "x64", "exe"],
+    ["nightly-win-arm64.yml", "arm64", "exe"],
+    ["nightly-linux.yml", "x86_64", "AppImage"],
+    ["nightly-linux-arm64.yml", "arm64", "AppImage"],
   ]) {
     NodeFS.writeFileSync(
       NodePath.join(assets, name),
@@ -83,16 +88,18 @@ function fixture() {
     assets,
     sha,
     upstream,
-    assemble: () =>
+    assemble: (env = {}) =>
       NodeChildProcess.spawnSync(process.execPath, [script, "assemble", assets], {
         cwd: directory,
         encoding: "utf8",
         env: {
           ...process.env,
           T2_RELEASE_VERSION: version,
+          T2_NIGHTLY_TAG: `v${version}`,
           T2_RELEASE_SHA: sha,
           GITHUB_REPOSITORY: "shirubasoft/t2code",
           GITHUB_RUN_ID: "42",
+          ...env,
         },
       }),
   };
@@ -109,6 +116,8 @@ NodeTest.test(
     );
     NodeAssert.equal(provenance.commit, sha);
     NodeAssert.equal(provenance.upstream, upstream);
+    NodeAssert.equal(provenance.upstreamTag, `v${version}`);
+    NodeAssert.equal(provenance.version, version);
     NodeAssert.equal(provenance.signing, "unsigned");
     const checksums = NodeFS.readFileSync(NodePath.join(assets, "SHA256SUMS"), "utf8")
       .trim()
@@ -124,16 +133,16 @@ NodeTest.test(
       );
     }
     NodeAssert.match(
-      NodeFS.readFileSync(NodePath.join(assets, "latest.yml"), "utf8"),
+      NodeFS.readFileSync(NodePath.join(assets, "nightly.yml"), "utf8"),
       /arm64\.exe/,
     );
-    NodeAssert.match(NodeFS.readFileSync(NodePath.join(assets, "latest.yml"), "utf8"), /x64\.exe/);
+    NodeAssert.match(NodeFS.readFileSync(NodePath.join(assets, "nightly.yml"), "utf8"), /x64\.exe/);
   },
 );
 
 NodeTest.test("release assembly rejects external update URLs", () => {
   const { assets, assemble } = fixture();
-  const path = NodePath.join(assets, "latest-linux.yml");
+  const path = NodePath.join(assets, "nightly-linux.yml");
   NodeFS.writeFileSync(
     path,
     NodeFS.readFileSync(path, "utf8").replace("url: T2", "url: https://example.invalid/T2"),
@@ -145,8 +154,8 @@ NodeTest.test("release assembly rejects external update URLs", () => {
 
 NodeTest.test("the actual AppImage manifest shape retains its embedded block map size", () => {
   const { assets } = fixture();
-  const raw = NodeFS.readFileSync(NodePath.join(assets, "latest-linux.yml"), "utf8");
-  const parsed = parseUpdateManifest(raw, "latest-linux.yml", "Linux");
+  const raw = NodeFS.readFileSync(NodePath.join(assets, "nightly-linux.yml"), "utf8");
+  const parsed = parseUpdateManifest(raw, "nightly-linux.yml", "Linux");
   NodeAssert.equal(parsed.files[0].url, `T2-Code-${version}-x86_64.AppImage`);
   NodeAssert.equal(parsed.files[0].blockMapSize, 4);
   NodeAssert.deepEqual(
@@ -172,4 +181,22 @@ NodeTest.test("release assembly rejects modified installer bytes and missing arc
       remove ? /Missing arm64 exe installer/ : /Updater checksum mismatch/,
     );
   }
+});
+
+NodeTest.test("release assembly rejects stable feeds and mismatched nightly identities", () => {
+  const { assemble } = fixture();
+  const wrongVersion = assemble({ T2_RELEASE_VERSION: "0.1.42" });
+  NodeAssert.notEqual(wrongVersion.status, 0);
+  NodeAssert.match(wrongVersion.stderr, /Version must match/);
+  const wrongTag = assemble({
+    T2_RELEASE_VERSION: "0.0.43-nightly.20260917.1867",
+    T2_NIGHTLY_TAG: "v0.0.43-nightly.20260917.1867",
+  });
+  NodeAssert.notEqual(wrongTag.status, 0);
+  NodeAssert.match(wrongTag.stderr, /accepted upstream nightly/);
+  const fresh = fixture();
+  NodeFS.writeFileSync(NodePath.join(fresh.assets, "latest.yml"), "stable feed");
+  const stable = fresh.assemble();
+  NodeAssert.notEqual(stable.status, 0);
+  NodeAssert.match(stable.stderr, /Stable updater feed/);
 });
