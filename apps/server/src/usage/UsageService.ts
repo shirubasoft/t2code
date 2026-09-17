@@ -39,6 +39,8 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
+import * as Semaphore from "effect/Semaphore";
+import { HttpClient, HttpClientResponse } from "effect/unstable/http";
 
 import { ServerConfig } from "../config.ts";
 import { expandHomePath } from "../pathExpansion.ts";
@@ -60,7 +62,15 @@ import {
   type ScanCache,
 } from "./usageScanCache.ts";
 import type { UsageRecord } from "./usageTranscripts.ts";
-import bundledRates from "./model-rates.json" with { type: "json" };
+
+const LITELLM_RATES_URL =
+  "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json";
+
+/** Rates move rarely; a day-old table keeps the page working offline. */
+const RATES_TTL_MS = 24 * 60 * 60 * 1000;
+
+/** An explicit refresh ignores the TTL, but not a table fetched this recently. */
+const RATES_REFRESH_FLOOR_MS = 60 * 1000;
 
 /**
  * Files are filtered by mtime before opening. The slack covers a session whose
@@ -75,6 +85,18 @@ const CACHE_RETENTION_DAYS = 90;
 const decodeCodexSettings = Schema.decodeOption(CodexSettings);
 const decodeClaudeSettings = Schema.decodeOption(ClaudeSettings);
 
+/** On-disk shape of the rate snapshot. */
+const RatesCacheFile = Schema.Struct({
+  fetchedAtMs: Schema.Number,
+  document: Schema.Unknown,
+});
+const decodeRatesCache = Schema.decodeUnknownEffect(
+  Schema.fromJsonString(RatesCacheFile as unknown as Schema.Codec<typeof RatesCacheFile.Type>),
+);
+const encodeRatesCache = Schema.encodeEffect(
+  Schema.fromJsonString(RatesCacheFile as unknown as Schema.Codec<typeof RatesCacheFile.Type>),
+);
+
 /** The scan cache is narrowed by hand in `usageScanCache`, so JSON is enough here. */
 const ScanCacheJson = Schema.fromJsonString(Schema.Unknown as unknown as Schema.Codec<unknown>);
 const decodeScanCacheFile = Schema.decodeUnknownEffect(ScanCacheJson);
@@ -84,14 +106,14 @@ export class UsageService extends Context.Service<
   UsageService,
   {
     readonly readSummary: (input: UsageSummaryInput) => Effect.Effect<UsageSummary, UsageReadError>;
-    /** Returns the rate snapshot shipped with this release. */
+    /** Refetches the rate table ahead of its TTL. See `ensureRates`. */
     readonly refreshRates: Effect.Effect<UsagePricing>;
   }
 >()("t3/usage/UsageService") {}
 
 const EMPTY_PRICING: UsagePricing = {
   status: "unavailable",
-  source: "Bundled LiteLLM snapshot",
+  source: LITELLM_RATES_URL,
   fetchedAt: null,
   knownModels: 0,
 };
@@ -121,20 +143,88 @@ export const make = Effect.gen(function* () {
   const path = yield* Path.Path;
   const config = yield* ServerConfig;
   const settingsService = yield* ServerSettings.ServerSettingsService;
+  const httpClient = yield* HttpClient.HttpClient;
   const hostEnvironment = yield* HostProcessEnvironment;
 
   const fileCache: ScanCache = new Map();
   let cacheDirty = false;
 
+  const ratesCachePath = path.join(config.stateDir, "usage-model-rates.json");
   const scanCachePath = path.join(config.stateDir, "usage-scan-cache.json");
-  const rates: RateTable = parseRateTable(bundledRates.rates);
+  let rates: RateTable = new Map();
+  let ratesFetchedAtMs: number | null = null;
+  let ratesStatus: UsagePricing["status"] = "unavailable";
+  // One fetch at a time. A burst of refreshes from several clients waits on
+  // the first fetch and then sees a table young enough to skip its own.
+  const ratesLock = yield* Semaphore.make(1);
+
   const pricing = (): UsagePricing => ({
-    status: "cached",
-    source: "Bundled LiteLLM snapshot",
-    fetchedAt: bundledRates.updatedAt,
+    status: ratesStatus,
+    source: LITELLM_RATES_URL,
+    fetchedAt:
+      ratesFetchedAtMs === null ? null : DateTime.formatIso(DateTime.makeUnsafe(ratesFetchedAtMs)),
     knownModels: rates.size,
   });
-  const refreshRates = Effect.sync(pricing);
+
+  /**
+   * Loads the LiteLLM rate table, preferring a fresh copy and falling back to
+   * the on-disk snapshot. With neither, every model reports as unpriced rather
+   * than the page failing. `force` refetches inside the TTL so a model that
+   * LiteLLM added since the last fetch gets priced now.
+   */
+  const loadRates = Effect.fn("UsageService.loadRates")(function* (force: boolean) {
+    const now = yield* Clock.currentTimeMillis;
+    const maxAgeMs = force ? RATES_REFRESH_FLOOR_MS : RATES_TTL_MS;
+    if (ratesFetchedAtMs !== null && now - ratesFetchedAtMs < maxAgeMs) return;
+
+    if (ratesFetchedAtMs === null) {
+      const fromDisk = yield* fileSystem.readFileString(ratesCachePath).pipe(
+        Effect.flatMap((raw) => decodeRatesCache(raw)),
+        Effect.catchCause(() => Effect.succeed(null)),
+      );
+      if (fromDisk !== null) {
+        const parsed = parseRateTable(fromDisk.document);
+        if (parsed.size > 0) {
+          rates = parsed;
+          ratesFetchedAtMs = fromDisk.fetchedAtMs;
+          ratesStatus = "cached";
+          if (now - fromDisk.fetchedAtMs < maxAgeMs) return;
+        }
+      }
+    }
+
+    const fetched = yield* httpClient.get(LITELLM_RATES_URL).pipe(
+      Effect.flatMap(HttpClientResponse.filterStatusOk),
+      Effect.flatMap((response) => response.json),
+      Effect.timeout(10_000),
+      Effect.catchCause(() => Effect.succeed(null)),
+    );
+    if (fetched === null) {
+      // The refresh failed; whatever we are serving is now past its TTL and
+      // must not keep claiming to be fresh.
+      if (rates.size > 0) ratesStatus = "cached";
+      return;
+    }
+
+    const parsed = parseRateTable(fetched);
+    if (parsed.size === 0) return;
+
+    rates = parsed;
+    ratesFetchedAtMs = now;
+    ratesStatus = "fresh";
+
+    yield* encodeRatesCache({ fetchedAtMs: now, document: fetched }).pipe(
+      Effect.flatMap((serialized) => fileSystem.writeFileString(ratesCachePath, serialized)),
+      Effect.catchCause(() => Effect.void),
+    );
+  });
+
+  const ensureRates = (force: boolean) => ratesLock.withPermit(loadRates(force));
+
+  const refreshRates = ensureRates(true).pipe(
+    Effect.map(pricing),
+    Effect.withSpan("UsageService.refreshRates"),
+  );
 
   // A settings failure must not silently discard custom rates or transcript homes.
   const readSettings = settingsService.getSettings.pipe(
@@ -391,7 +481,13 @@ export const make = Effect.gen(function* () {
     const windowStartMs =
       (hourlyWindow?.sinceTimeMs ?? DateTime.toEpochMillis(windowStart.value)) - MTIME_SLACK_MS;
 
-    const scannedDirs = yield* collectDirs(windowStartMs, settings);
+    // Pricing only matters once records are aggregated, so the rate table
+    // loads while transcripts stream instead of gating them: a cold rates
+    // fetch on a slow network no longer delays the scan by its own timeout.
+    const [, scannedDirs] = yield* Effect.all(
+      [ensureRates(false), collectDirs(windowStartMs, settings)],
+      { concurrency: 2 },
+    );
 
     const aggregator = new UsageAggregator({
       timeZone: input.timeZone,

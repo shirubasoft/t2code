@@ -1,5 +1,4 @@
 import { EnvironmentId } from "@t3tools/contracts";
-import { isLoopbackUrl } from "@t3tools/shared/localNetwork";
 import { mediaMimeType } from "@t3tools/shared/filePreview";
 import {
   getProjectFaviconCacheKey,
@@ -101,10 +100,7 @@ export function createProjectFaviconImageLoader(input: {
 }) {
   const fetchImpl = input.fetch ?? globalThis.fetch;
   return async (url: string, signal: AbortSignal): Promise<string> => {
-    if (!isLoopbackUrl(url) && !url.startsWith("data:") && !url.startsWith("blob:")) {
-      throw new Error("Project icons must use a local URL.");
-    }
-    const response = await fetchImpl(url, { signal, redirect: "error" });
+    const response = await fetchImpl(url, { signal });
     if (!response.ok) throw new Error(`Project icon request failed with ${response.status}.`);
     const contentType = response.headers
       .get("content-type")

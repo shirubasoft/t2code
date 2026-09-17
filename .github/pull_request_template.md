@@ -1,17 +1,33 @@
-## What changed
+<!--
+⚠️ READ BEFORE OPENING ⚠️
 
-Describe the behavior and any deliberate local-edition limitation.
+We are not actively accepting contributions right now.
+
+You can still open a PR, but please do so knowing there is a high chance
+we may close it without merging it, or never review it.
+
+- Small, focused PRs are strongly preferred. Bug fixes are most likely to be merged.
+- New features will most likely just annoy us.
+- 1,000+ line PRs with a bunch of new features will probably get you banned from the repo.
+-->
+
+## What Changed
+
+<!-- Describe the change clearly and keep scope tight. -->
 
 ## Why
 
-Explain the problem or upstream compatibility change.
+<!-- Explain the problem being solved and why this approach is the right one. -->
 
-## Validation
+## UI Changes
 
-Record the checks run against this commit. Privacy or networking changes need a focused regression test and review of the accepted policy.
+<!-- If this PR changes UI, include clear before/after screenshots.
+     If the change involves motion or interaction, include a short video.
+     Delete this section if not applicable. -->
 
-## UI changes
+## Checklist
 
-Include before/after screenshots when the interface changes. Use a short video for motion or timing changes. Upload evidence to GitHub; do not commit it to the repository.
-
-Agent/model and harness:
+- [ ] This PR is small and focused
+- [ ] I explained what changed and why
+- [ ] I included before/after screenshots for any UI changes
+- [ ] I included a video for animation/interaction changes

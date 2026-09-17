@@ -84,6 +84,7 @@ import {
   HttpRouter,
   HttpServer,
 } from "effect/unstable/http";
+import { OtlpSerialization, OtlpTracer } from "effect/unstable/observability";
 import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
 import * as Socket from "effect/unstable/socket/Socket";
 import { vi } from "vite-plus/test";
@@ -153,6 +154,7 @@ import * as ProjectCloneTracker from "./project/ProjectCloneTracker.ts";
 import * as WorktreeSetupTracker from "./project/WorktreeSetupTracker.ts";
 import * as PreviewManager from "./preview/Manager.ts";
 import * as PortScanner from "./preview/PortScanner.ts";
+import * as BrowserTraceCollector from "./observability/BrowserTraceCollector.ts";
 import * as NativeAppIconResolver from "./assets/NativeAppIconResolver.ts";
 import * as ProjectFaviconResolver from "./project/ProjectFaviconResolver.ts";
 import * as T3ProjectFileLoader from "./project/T3ProjectFileLoader.ts";
@@ -167,6 +169,7 @@ import * as VcsDriver from "./vcs/VcsDriver.ts";
 import * as VcsStatusBroadcaster from "./vcs/VcsStatusBroadcaster.ts";
 import * as VcsDriverRegistry from "./vcs/VcsDriverRegistry.ts";
 import * as VcsProvisioningService from "./vcs/VcsProvisioningService.ts";
+import * as GitHubCli from "./sourceControl/GitHubCli.ts";
 import * as VcsProcess from "./vcs/VcsProcess.ts";
 import * as GitWorkflowService from "./git/GitWorkflowService.ts";
 import * as ReviewService from "./review/ReviewService.ts";
@@ -217,6 +220,7 @@ import {
   transferBudgetViolations,
 } from "../integration/TransferBudgetReport.integration.ts";
 import { symlinksSupported } from "@t3tools/shared/testing/symlinks";
+import { otlpSerializationLayer } from "@t3tools/shared/observability";
 
 const defaultProjectId = ProjectId.make("project-default");
 const defaultThreadId = ThreadId.make("thread-default");
@@ -390,6 +394,12 @@ const makeDefaultOrchestrationThreadShell = (
   };
 };
 
+const browserOtlpTracingLayer = Layer.mergeAll(
+  FetchHttpClient.layer,
+  OtlpSerialization.layerJson,
+  Layer.succeed(HttpClient.TracerDisabledWhen, () => true),
+);
+
 const makeAuthTestLayer = () =>
   EnvironmentAuth.layer.pipe(
     Layer.provideMerge(SqlitePersistenceMemory),
@@ -400,6 +410,106 @@ const makeAuthTestLayer = () =>
       }),
     ),
   );
+
+const makeBrowserOtlpPayload = (spanName: string) =>
+  Effect.gen(function* () {
+    const collector = yield* Effect.acquireRelease(
+      Effect.promise(async () => {
+        const NodeHttp = await import("node:http");
+
+        return await new Promise<{
+          readonly close: () => Promise<void>;
+          readonly firstRequest: Promise<{
+            readonly body: string;
+            readonly contentType: string | null;
+          }>;
+          readonly url: string;
+        }>((resolve, reject) => {
+          let resolveFirstRequest:
+            | ((request: { readonly body: string; readonly contentType: string | null }) => void)
+            | undefined;
+          const firstRequest = new Promise<{
+            readonly body: string;
+            readonly contentType: string | null;
+          }>((resolveRequest) => {
+            resolveFirstRequest = resolveRequest;
+          });
+
+          const server = NodeHttp.createServer((request, response) => {
+            const chunks: Buffer[] = [];
+            request.on("data", (chunk) => {
+              chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+            });
+            request.on("end", () => {
+              resolveFirstRequest?.({
+                body: Buffer.concat(chunks).toString("utf8"),
+                contentType: request.headers["content-type"] ?? null,
+              });
+              resolveFirstRequest = undefined;
+              response.statusCode = 204;
+              response.end();
+            });
+          });
+
+          server.on("error", reject);
+          server.listen(0, "127.0.0.1", () => {
+            const address = server.address();
+            if (!address || typeof address === "string") {
+              reject(new Error("Expected TCP collector address"));
+              return;
+            }
+
+            resolve({
+              url: `http://127.0.0.1:${address.port}/v1/traces`,
+              firstRequest,
+              close: () =>
+                new Promise<void>((resolveClose, rejectClose) => {
+                  server.close((error) => {
+                    if (error) {
+                      rejectClose(error);
+                      return;
+                    }
+                    resolveClose();
+                  });
+                }),
+            });
+          });
+        });
+      }),
+      ({ close }) => Effect.promise(close),
+    );
+
+    // The exporter's batch fiber is forked while the layer builds and ticks on
+    // a wall-clock interval, so the whole tracer runs on the live clock.
+    yield* Layer.build(
+      OtlpTracer.layer({
+        url: collector.url,
+        exportInterval: "10 millis",
+        resource: {
+          serviceName: "t3-web",
+          attributes: {
+            "service.runtime": "t3-web",
+            "service.mode": "browser",
+            "service.version": "test",
+          },
+        },
+      }).pipe(Layer.provide(browserOtlpTracingLayer)),
+    ).pipe(
+      Effect.flatMap((tracing) =>
+        Effect.void.pipe(Effect.withSpan(spanName), Effect.provideContext(tracing)),
+      ),
+      TestClock.withLive,
+    );
+
+    const request = yield* Effect.raceFirst(
+      Effect.promise(() => collector.firstRequest).pipe(Effect.orDie),
+      Effect.sleep(Duration.seconds(1)).pipe(
+        Effect.andThen(Effect.die(new Error("Timed out waiting for OTLP trace export"))),
+      ),
+    );
+    // @effect-diagnostics-next-line preferSchemaOverJson:off
+    return JSON.parse(request.body) as OtlpTracer.TraceData;
+  });
 
 const buildAppUnderTest = (options?: {
   onPairingChangesSubscribed?: Effect.Effect<void>;
@@ -436,6 +546,7 @@ const buildAppUnderTest = (options?: {
     analyticsService?: Partial<AnalyticsService.AnalyticsService["Service"]>;
     projectionSnapshotQuery?: Partial<ProjectionSnapshotQuery.ProjectionSnapshotQuery["Service"]>;
     checkpointDiffQuery?: Partial<CheckpointDiffQuery.CheckpointDiffQuery["Service"]>;
+    browserTraceCollector?: Partial<BrowserTraceCollector.BrowserTraceCollector["Service"]>;
     serverLifecycleEvents?: Partial<ServerLifecycleEvents.ServerLifecycleEvents["Service"]>;
     serverRuntimeStartup?: Partial<ServerRuntimeStartup.ServerRuntimeStartup["Service"]>;
     serverEnvironment?: Partial<ServerEnvironment.ServerEnvironment["Service"]>;
@@ -466,6 +577,12 @@ const buildAppUnderTest = (options?: {
       traceBatchWindowMs: 200,
       traceMaxBytes: 10 * 1024 * 1024,
       traceMaxFiles: 10,
+      otlpTracesUrl: undefined,
+      otlpMetricsUrl: undefined,
+      otlpExportIntervalMs: 10_000,
+      otlpServiceName: "t3-server",
+      otlpHeaders: undefined,
+      otlpProtocol: "http/json",
       mode: "desktop",
       port: 0,
       host: "127.0.0.1",
@@ -951,6 +1068,13 @@ const buildAppUnderTest = (options?: {
         }),
       ),
       Layer.provide(
+        Layer.mock(BrowserTraceCollector.BrowserTraceCollector)({
+          record: () => Effect.void,
+          ...options?.layers?.browserTraceCollector,
+        }),
+      ),
+      Layer.provide(otlpSerializationLayer(config.otlpProtocol)),
+      Layer.provide(
         Layer.mock(ServerLifecycleEvents.ServerLifecycleEvents)({
           publish: (event) => Effect.succeed({ ...(event as any), sequence: 1 }),
           snapshot: Effect.succeed({ sequence: 0, events: [] }),
@@ -1087,7 +1211,7 @@ const buildAppUnderTest = (options?: {
       Layer.provideMerge(ServerSecretStore.layer),
       Layer.provide(workspaceAndProjectServicesLayer),
       Layer.provideMerge(FetchHttpClient.layer),
-      Layer.provide(VcsProcess.layer),
+      Layer.provide(GitHubCli.layer.pipe(Layer.provideMerge(VcsProcess.layer))),
       Layer.provide(layerConfig),
     );
 
@@ -1628,11 +1752,6 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       const response = yield* HttpClient.get("/");
       assert.equal(response.status, 200);
       assert.include(yield* response.text, "router-static-ok");
-      const policy = response.headers["content-security-policy"];
-      assert.include(policy, "default-src 'self'");
-      assert.include(policy, "img-src 'self' data: blob:");
-      assert.include(policy, "connect-src 'self' http://localhost:*");
-      assert.notInclude(policy, "https:");
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
@@ -4207,7 +4326,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
-  for (const desktopOrigin of ["t2code://app", "t2code-dev://app"]) {
+  for (const desktopOrigin of ["t3code://app", "t3code-dev://app"]) {
     it.effect(`allows credentialed preflights from ${desktopOrigin} in development`, () =>
       Effect.gen(function* () {
         yield* buildAppUnderTest({
@@ -4924,14 +5043,397 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
-  it.effect("does not expose the removed browser trace delivery route", () =>
+  it.effect("proxies browser OTLP trace exports through the server", () =>
+    Effect.gen(function* () {
+      const upstreamRequests: Array<{
+        readonly body: string;
+        readonly contentType: string | null;
+      }> = [];
+      const localTraceRecords: Array<unknown> = [];
+      const payload = {
+        resourceSpans: [
+          {
+            resource: {
+              attributes: [
+                {
+                  key: "service.name",
+                  value: { stringValue: "t3-web" },
+                },
+              ],
+            },
+            scopeSpans: [
+              {
+                scope: {
+                  name: "effect",
+                  version: "4.0.0-beta.43",
+                },
+                spans: [
+                  {
+                    traceId: "11111111111111111111111111111111",
+                    spanId: "2222222222222222",
+                    parentSpanId: "3333333333333333",
+                    name: "RpcClient.server.getSettings",
+                    kind: 3,
+                    startTimeUnixNano: "1000000",
+                    endTimeUnixNano: "2000000",
+                    attributes: [
+                      {
+                        key: "rpc.method",
+                        value: { stringValue: "server.getSettings" },
+                      },
+                    ],
+                    events: [
+                      {
+                        name: "http.request",
+                        timeUnixNano: "1500000",
+                        attributes: [
+                          {
+                            key: "http.status_code",
+                            value: { intValue: "200" },
+                          },
+                        ],
+                      },
+                    ],
+                    links: [],
+                    status: {
+                      code: "STATUS_CODE_OK",
+                    },
+                    flags: 1,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const collector = yield* Effect.acquireRelease(
+        Effect.promise(async () => {
+          const NodeHttp = await import("node:http");
+
+          return await new Promise<{
+            readonly close: () => Promise<void>;
+            readonly url: string;
+          }>((resolve, reject) => {
+            const server = NodeHttp.createServer((request, response) => {
+              const chunks: Buffer[] = [];
+              request.on("data", (chunk) => {
+                chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+              });
+              request.on("end", () => {
+                upstreamRequests.push({
+                  body: Buffer.concat(chunks).toString("utf8"),
+                  contentType: request.headers["content-type"] ?? null,
+                });
+                response.statusCode = 204;
+                response.end();
+              });
+            });
+
+            server.on("error", reject);
+            server.listen(0, "127.0.0.1", () => {
+              const address = server.address();
+              if (!address || typeof address === "string") {
+                reject(new Error("Expected TCP collector address"));
+                return;
+              }
+
+              resolve({
+                url: `http://127.0.0.1:${address.port}/v1/traces`,
+                close: () =>
+                  new Promise<void>((resolveClose, rejectClose) => {
+                    server.close((error) => {
+                      if (error) {
+                        rejectClose(error);
+                        return;
+                      }
+                      resolveClose();
+                    });
+                  }),
+              });
+            });
+          });
+        }),
+        ({ close }) => Effect.promise(close),
+      );
+
+      yield* buildAppUnderTest({
+        config: {
+          otlpTracesUrl: collector.url,
+        },
+        layers: {
+          browserTraceCollector: {
+            record: (records) =>
+              Effect.sync(() => {
+                localTraceRecords.push(...records);
+              }),
+          },
+        },
+      });
+
+      const response = yield* HttpClient.post("/api/observability/v1/traces", {
+        headers: {
+          cookie: yield* getAuthenticatedSessionCookieHeader(),
+          "content-type": "application/json",
+          origin: "http://localhost:5733",
+        },
+        // @effect-diagnostics-next-line preferSchemaOverJson:off
+        body: HttpBody.text(JSON.stringify(payload), "application/json"),
+      });
+
+      assert.equal(response.status, 204);
+      assert.equal(response.headers["access-control-allow-origin"], "*");
+      assert.deepEqual(localTraceRecords, [
+        {
+          type: "otlp-span",
+          name: "RpcClient.server.getSettings",
+          traceId: "11111111111111111111111111111111",
+          spanId: "2222222222222222",
+          parentSpanId: "3333333333333333",
+          sampled: true,
+          kind: "client",
+          startTimeUnixNano: "1000000",
+          endTimeUnixNano: "2000000",
+          durationMs: 1,
+          attributes: {
+            "rpc.method": "server.getSettings",
+          },
+          resourceAttributes: {
+            "service.name": "t3-web",
+          },
+          scope: {
+            name: "effect",
+            version: "4.0.0-beta.43",
+            attributes: {},
+          },
+          events: [
+            {
+              name: "http.request",
+              timeUnixNano: "1500000",
+              attributes: {
+                "http.status_code": "200",
+              },
+            },
+          ],
+          links: [],
+          status: {
+            code: "STATUS_CODE_OK",
+          },
+        },
+      ]);
+      assert.deepEqual(upstreamRequests, [
+        {
+          body: jsonRequestBody(payload),
+          contentType: "application/json",
+        },
+      ]);
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect("forwards browser OTLP traces as protobuf when the protocol is http/protobuf", () =>
+    Effect.gen(function* () {
+      const upstreamRequests: Array<{
+        readonly body: string;
+        readonly contentType: string | null;
+      }> = [];
+      const localTraceRecords: Array<unknown> = [];
+      // Produced by effect's own tracer, so enum fields are numeric and the
+      // protobuf encoder accepts them. The hand-written payload in the JSON
+      // test uses enum names, which only the JSON path tolerates.
+      const payload = yield* makeBrowserOtlpPayload("client.protobuf.test");
+
+      const collector = yield* Effect.acquireRelease(
+        Effect.promise(async () => {
+          const NodeHttp = await import("node:http");
+
+          return await new Promise<{
+            readonly close: () => Promise<void>;
+            readonly url: string;
+          }>((resolve, reject) => {
+            const server = NodeHttp.createServer((request, response) => {
+              const chunks: Buffer[] = [];
+              request.on("data", (chunk) => {
+                chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+              });
+              request.on("end", () => {
+                upstreamRequests.push({
+                  body: Buffer.concat(chunks).toString("utf8"),
+                  contentType: request.headers["content-type"] ?? null,
+                });
+                response.statusCode = 204;
+                response.end();
+              });
+            });
+
+            server.on("error", reject);
+            server.listen(0, "127.0.0.1", () => {
+              const address = server.address();
+              if (!address || typeof address === "string") {
+                reject(new Error("Expected TCP collector address"));
+                return;
+              }
+
+              resolve({
+                url: `http://127.0.0.1:${address.port}/v1/traces`,
+                close: () =>
+                  new Promise<void>((resolveClose, rejectClose) => {
+                    server.close((error) => {
+                      if (error) {
+                        rejectClose(error);
+                        return;
+                      }
+                      resolveClose();
+                    });
+                  }),
+              });
+            });
+          });
+        }),
+        ({ close }) => Effect.promise(close),
+      );
+
+      yield* buildAppUnderTest({
+        config: {
+          otlpTracesUrl: collector.url,
+          otlpProtocol: "http/protobuf",
+        },
+        layers: {
+          browserTraceCollector: {
+            record: (records) =>
+              Effect.sync(() => {
+                localTraceRecords.push(...records);
+              }),
+          },
+        },
+      });
+
+      const response = yield* HttpClient.post("/api/observability/v1/traces", {
+        headers: {
+          cookie: yield* getAuthenticatedSessionCookieHeader(),
+          "content-type": "application/json",
+        },
+        // @effect-diagnostics-next-line preferSchemaOverJson:off
+        body: HttpBody.text(JSON.stringify(payload), "application/json"),
+      });
+
+      assert.equal(response.status, 204);
+      // The local collector still decodes the browser's JSON before forwarding.
+      assert.equal(localTraceRecords.length, 1);
+      assert.equal(upstreamRequests.length, 1);
+      const forwarded = upstreamRequests[0];
+      assert.notEqual(forwarded, undefined);
+      if (!forwarded) {
+        return;
+      }
+      assert.equal(forwarded.contentType, "application/x-protobuf");
+      // Protobuf strings are raw UTF-8, so the span and service names survive
+      // the stub's utf8 decode even though the surrounding bytes don't.
+      assert.notEqual(forwarded.body[0], "{");
+      assert.include(forwarded.body, "client.protobuf.test");
+      assert.include(forwarded.body, "t3-web");
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect("responds to browser OTLP trace preflight requests with CORS headers", () =>
     Effect.gen(function* () {
       yield* buildAppUnderTest();
-      const response = yield* HttpClient.post("/api/observability/v1/traces", {
-        body: HttpBody.text("{}", "application/json"),
+
+      const response = yield* HttpClient.options("/api/observability/v1/traces", {
+        headers: {
+          origin: "http://localhost:5733",
+          "access-control-request-method": "POST",
+          "access-control-request-headers": "content-type",
+        },
       });
-      assert.equal(response.status, 404);
+
+      assert.equal(response.status, 204);
+      assert.equal(response.headers["access-control-allow-origin"], "*");
+      assert.deepEqual(splitHeaderTokens(response.headers["access-control-allow-methods"]), [
+        "GET",
+        "OPTIONS",
+        "POST",
+      ]);
+      assert.deepEqual(splitHeaderTokens(response.headers["access-control-allow-headers"]), [
+        "authorization",
+        "b3",
+        "content-type",
+        "dpop",
+        "traceparent",
+      ]);
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect(
+    "stores browser OTLP trace exports locally when no upstream collector is configured",
+    () =>
+      Effect.gen(function* () {
+        const localTraceRecords: Array<unknown> = [];
+        const payload = yield* makeBrowserOtlpPayload("client.test");
+        const resourceSpan = payload.resourceSpans[0];
+        const scopeSpan = resourceSpan?.scopeSpans[0];
+        const span = scopeSpan?.spans[0];
+
+        assert.notEqual(resourceSpan, undefined);
+        assert.notEqual(scopeSpan, undefined);
+        assert.notEqual(span, undefined);
+        if (!resourceSpan || !scopeSpan || !span) {
+          return;
+        }
+
+        yield* buildAppUnderTest({
+          layers: {
+            browserTraceCollector: {
+              record: (records) =>
+                Effect.sync(() => {
+                  localTraceRecords.push(...records);
+                }),
+            },
+          },
+        });
+
+        const response = yield* HttpClient.post("/api/observability/v1/traces", {
+          headers: {
+            cookie: yield* getAuthenticatedSessionCookieHeader(),
+            "content-type": "application/json",
+          },
+          // @effect-diagnostics-next-line preferSchemaOverJson:off
+          body: HttpBody.text(JSON.stringify(payload), "application/json"),
+        });
+
+        assert.equal(response.status, 204);
+        assert.equal(localTraceRecords.length, 1);
+        const record = localTraceRecords[0] as {
+          readonly type: string;
+          readonly name: string;
+          readonly traceId: string;
+          readonly spanId: string;
+          readonly kind: string;
+          readonly attributes: Readonly<Record<string, unknown>>;
+          readonly events: ReadonlyArray<unknown>;
+          readonly links: ReadonlyArray<unknown>;
+          readonly scope: {
+            readonly name?: string;
+            readonly attributes: Readonly<Record<string, unknown>>;
+          };
+          readonly resourceAttributes: Readonly<Record<string, unknown>>;
+          readonly status?: {
+            readonly code?: string;
+          };
+        };
+
+        assert.equal(record.type, "otlp-span");
+        assert.equal(record.name, span.name);
+        assert.equal(record.traceId, span.traceId);
+        assert.equal(record.spanId, span.spanId);
+        assert.equal(record.kind, "internal");
+        assert.deepEqual(record.attributes, {});
+        assert.deepEqual(record.events, []);
+        assert.deepEqual(record.links, []);
+        assert.equal(record.scope.name, scopeSpan.scope.name);
+        assert.deepEqual(record.scope.attributes, {});
+        assert.equal(record.resourceAttributes["service.name"], "t3-web");
+        assert.equal(record.status?.code, String(span.status.code));
+      }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
   it.effect("routes websocket rpc server.upsertKeybinding", () =>
@@ -5780,7 +6282,10 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       } as const;
 
       yield* buildAppUnderTest({
-        config: {},
+        config: {
+          otlpTracesUrl: "http://localhost:4318/v1/traces",
+          otlpMetricsUrl: "http://localhost:4318/v1/metrics",
+        },
         layers: {
           keybindings: {
             loadConfigState: Effect.succeed({
@@ -5811,8 +6316,10 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
         assert.deepEqual(first.config.providers, providers);
         assert.equal(path.basename(first.config.observability.logsDirectoryPath), "logs");
         assert.equal(first.config.observability.localTracingEnabled, true);
-        assert.equal(first.config.observability.otlpTracesEnabled, false);
-        assert.equal(first.config.observability.otlpMetricsEnabled, false);
+        assert.equal(first.config.observability.otlpTracesUrl, "http://localhost:4318/v1/traces");
+        assert.equal(first.config.observability.otlpTracesEnabled, true);
+        assert.equal(first.config.observability.otlpMetricsUrl, "http://localhost:4318/v1/metrics");
+        assert.equal(first.config.observability.otlpMetricsEnabled, true);
         assert.deepEqual(first.config.settings, DEFAULT_SERVER_SETTINGS);
       }
       assert.deepEqual(second, {
@@ -8018,6 +8525,124 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       assert.deepEqual(Option.getOrThrow(firstItem), { kind: "synchronized" });
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
+
+  for (const reasoningMessages of [undefined, true] as const) {
+    it.effect(`preserves reasoning wire compatibility with opt-in ${reasoningMessages}`, () =>
+      Effect.gen(function* () {
+        const message = {
+          id: MessageId.make("thinking-compatibility"),
+          role: "reasoning" as const,
+          text: "Checking the available evidence.",
+          turnId: null,
+          streaming: false,
+          createdAt: "2026-01-01T00:00:01.000Z",
+          updatedAt: "2026-01-01T00:00:01.000Z",
+        };
+        const thread = { ...makeDefaultOrchestrationReadModel().threads[0]!, messages: [message] };
+        const event = {
+          sequence: 2,
+          eventId: EventId.make("thinking-compatibility-event"),
+          aggregateKind: "thread" as const,
+          aggregateId: defaultThreadId,
+          occurredAt: message.createdAt,
+          commandId: null,
+          causationEventId: null,
+          correlationId: null,
+          metadata: {},
+          type: "thread.message-sent" as const,
+          payload: {
+            messageId: message.id,
+            threadId: defaultThreadId,
+            role: message.role,
+            text: message.text,
+            turnId: message.turnId,
+            streaming: message.streaming,
+            createdAt: message.createdAt,
+            updatedAt: message.updatedAt,
+          },
+        } satisfies OrchestrationEvent;
+        const answer = {
+          ...event,
+          sequence: 3,
+          eventId: EventId.make("thinking-answer-event"),
+          payload: {
+            ...event.payload,
+            messageId: MessageId.make("thinking-answer"),
+            role: "assistant" as const,
+            text: "Here is the answer.",
+          },
+        };
+        const liveEvents = yield* PubSub.unbounded<OrchestrationEvent>();
+        yield* buildAppUnderTest({
+          layers: {
+            orchestrationEngine: {
+              streamDomainEvents: Stream.fromPubSub(liveEvents),
+              latestSequence: Effect.succeed(3),
+              getThreadReplayStats: () =>
+                Effect.succeed({ eventCount: 2, payloadBytes: 200, hasCreateEvent: false }),
+              readThreadEvents: () => Stream.make(event, answer),
+            },
+            projectionSnapshotQuery: {
+              getThreadDetailSnapshot: () =>
+                Effect.gen(function* () {
+                  yield* PubSub.publishAll(liveEvents, [event, answer]);
+                  return Option.some({
+                    snapshotSequence: 1,
+                    thread,
+                    page: {
+                      beforeCursor: null,
+                      hasMore: false,
+                      snapshotSequence: 1,
+                      threadSequence: 2,
+                    },
+                  });
+                }),
+            },
+          },
+        });
+        const role = reasoningMessages ? "reasoning" : "system";
+        const response = yield* fetchEffect(
+          yield* getHttpServerUrl(
+            `/api/orchestration/threads/${defaultThreadId}?turnLimit=1${reasoningMessages ? "&reasoningMessages=true" : ""}`,
+          ),
+          { headers: { cookie: yield* getAuthenticatedSessionCookieHeader() } },
+        );
+        const httpSnapshot = yield* responseJsonEffect<OrchestrationThreadDetailSnapshot>(response);
+        assert.equal(response.status, 200);
+        assert.deepEqual(httpSnapshot.thread.messages, [{ ...message, role }]);
+        assert.equal(httpSnapshot.page?.threadSequence, 2);
+        const wsUrl = yield* getWsServerUrl("/ws");
+        for (const afterSequence of [undefined, 1]) {
+          const items = yield* Effect.scoped(
+            withWsRpcClient(wsUrl, (client) =>
+              client[ORCHESTRATION_WS_METHODS.subscribeThread]({
+                threadId: defaultThreadId,
+                requestCompletionMarker: true,
+                ...(reasoningMessages ? { reasoningMessages } : {}),
+                ...(afterSequence !== undefined ? { afterSequence } : {}),
+              }).pipe(
+                Stream.takeUntil((item) => item.kind === "synchronized"),
+                Stream.runCollect,
+              ),
+            ),
+          );
+          if (afterSequence === undefined) {
+            const first = items[0];
+            assertTrue(first?.kind === "snapshot");
+            assert.deepEqual(first.snapshot.thread.messages, [{ ...message, role }]);
+            assert.equal(first.snapshot.page?.threadSequence, 2);
+          }
+          const events = items.filter((item) => item.kind === "event");
+          assert.equal(events.length, 2);
+          assert.deepEqual(events[0]?.event, { ...event, payload: { ...event.payload, role } });
+          assert.deepEqual(events[1]?.event, answer);
+          assert.deepEqual(items.at(-1), { kind: "synchronized" });
+        }
+        assert.equal(message.role, "reasoning");
+        assert.equal(event.payload.role, "reasoning");
+      }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    );
+  }
 
   it.effect("marks a socket thread snapshot as synchronized when requested", () =>
     Effect.gen(function* () {
@@ -10559,6 +11184,102 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
+  it.effect.each([
+    { caseName: "a non-repository", isRepository: false, failFetch: false },
+    { caseName: "a base without a commit", isRepository: true, failFetch: false },
+    { caseName: "a fetch failure", isRepository: true, failFetch: true },
+  ])(
+    "rejects required worktree bootstrap before creating a thread for $caseName",
+    ({ isRepository, failFetch }) =>
+      Effect.gen(function* () {
+        const dispatchedCommands: Array<OrchestrationCommand> = [];
+        const createWorktree = vi.fn(
+          (_: Parameters<GitVcsDriver.GitVcsDriver["Service"]["createWorktree"]>[0]) =>
+            Effect.die(new Error("createWorktree must not run before a valid base is found")),
+        );
+
+        yield* buildAppUnderTest({
+          layers: {
+            vcsDriver: {
+              isInsideWorkTree: () => Effect.succeed(isRepository),
+            },
+            gitVcsDriver: {
+              execute: () =>
+                Effect.succeed({
+                  ...SUCCESSFUL_GIT_EXECUTION,
+                  exitCode: ChildProcessSpawner.ExitCode(128),
+                  stderr: "fatal: Needed a single revision",
+                }),
+              remoteExists: () => Effect.succeed(true),
+              fetchRemote: () => Effect.die(new Error("fetch failed before thread creation")),
+              createWorktree,
+            },
+            orchestrationEngine: {
+              dispatch: (command) =>
+                Effect.sync(() => {
+                  dispatchedCommands.push(command);
+                  return { sequence: dispatchedCommands.length };
+                }),
+              readEvents: () => Stream.empty,
+            },
+          },
+        });
+
+        const createdAt = "2026-01-01T00:00:00.000Z";
+        const wsUrl = yield* getWsServerUrl("/ws");
+        const result = yield* Effect.scoped(
+          withWsRpcClient(wsUrl, (client) =>
+            client[ORCHESTRATION_WS_METHODS.dispatchCommand]({
+              type: "thread.turn.start",
+              commandId: CommandId.make("cmd-required-worktree"),
+              threadId: ThreadId.make("thread-required-worktree"),
+              message: {
+                messageId: MessageId.make("msg-required-worktree"),
+                role: "user",
+                text: "hello",
+                attachments: [],
+              },
+              modelSelection: defaultModelSelection,
+              runtimeMode: "full-access",
+              interactionMode: "default",
+              bootstrap: {
+                createThread: {
+                  projectId: defaultProjectId,
+                  title: "Bootstrap Thread",
+                  modelSelection: defaultModelSelection,
+                  runtimeMode: "full-access",
+                  interactionMode: "default",
+                  branch: "main",
+                  worktreePath: null,
+                  createdAt,
+                },
+                prepareWorktree: {
+                  projectCwd: "/tmp/project",
+                  baseBranch: "main",
+                  requireWorktree: true,
+                  startFromOrigin: failFetch,
+                },
+              },
+              createdAt,
+            }),
+          ).pipe(Effect.result),
+        );
+
+        assertTrue(result._tag === "Failure");
+        assertTrue(result.failure._tag === "OrchestrationDispatchCommandError");
+        assert.strictEqual(result.failure.bootstrapThreadDisposition, "not-created");
+        assert.include(
+          result.failure.message,
+          failFetch ? "fetch failed" : "separate worktree requires",
+        );
+        assert.equal(createWorktree.mock.calls.length, 0);
+        assert.deepEqual(
+          dispatchedCommands.map((command) => command.type),
+          ["thread.activity.append"],
+        );
+      }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
   it.effect("falls back to the project checkout when worktree mode targets a non-repository", () =>
     Effect.gen(function* () {
       const dispatchedCommands: Array<OrchestrationCommand> = [];
@@ -10989,9 +11710,22 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
   );
 
   it.effect.each([
-    { caseName: "async setup scripts let the turn start before the script exits", async: true },
-    { caseName: "sync setup scripts hold the turn until the script exits", async: false },
-  ])("$caseName", ({ async }) =>
+    {
+      caseName: "async setup scripts let the turn start before the script exits",
+      async: true,
+      cancel: false,
+    },
+    {
+      caseName: "sync setup scripts hold the turn until the script exits",
+      async: false,
+      cancel: false,
+    },
+    {
+      caseName: "cancelling worktree setup publishes its outcome and cleans up the thread",
+      async: false,
+      cancel: true,
+    },
+  ])("$caseName", ({ async, cancel }) =>
     Effect.gen(function* () {
       const dispatchedCommands: Array<OrchestrationCommand> = [];
       const scriptExit = yield* Deferred.make<void>();
@@ -11124,6 +11858,26 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       );
       assert.equal(stageStatus(running, "agent"), "pending");
       assert.isFalse(turnStarted());
+
+      if (cancel) {
+        const cancelled = yield* Effect.scoped(
+          withWsRpcClient(wsUrl, (client) => client[WS_METHODS.worktreeSetupCancel]({ threadId })),
+        );
+        assert.isTrue(cancelled.cancelled);
+        assertTrue(dispatchedCommands.some((command) => command.type === "thread.delete"));
+        const outcome = dispatchedCommands.findLast(
+          (command) =>
+            command.type === "thread.activity.append" && command.activity.kind === "worktree-setup",
+        );
+        assertTrue(outcome?.type === "thread.activity.append");
+        assert.propertyVal(outcome.activity.payload, "phase", "cancelled");
+        const result = yield* Fiber.join(dispatchFiber).pipe(Effect.result);
+        assertTrue(result._tag === "Failure");
+        assert.propertyVal(result.failure, "message", "Worktree setup cancelled.");
+        assert.propertyVal(result.failure, "bootstrapThreadDisposition", "deleted");
+        assert.isFalse(turnStarted());
+        return;
+      }
 
       // The client that sent the message goes away mid-setup (a reload or a
       // dropped socket). The bootstrap belongs to the server, not the

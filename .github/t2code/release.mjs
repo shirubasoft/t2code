@@ -6,7 +6,7 @@ import * as NodeFS from "node:fs";
 const { appendFileSync, existsSync, readFileSync, readdirSync, rmSync, writeFileSync } = NodeFS;
 import * as NodePath from "node:path";
 const { resolve } = NodePath;
-import { assertSha } from "./sync.mjs";
+import { assertSha } from "./overlay.mjs";
 import {
   mergeUpdateManifests,
   parseUpdateManifest,
@@ -120,7 +120,7 @@ function assemble() {
   writeFileSync(resolve(directory, "SHA256SUMS"), hashes + "\n");
   writeFileSync(
     "release-notes.md",
-    `T2 Code ${version}\n\nDownload the installer for your operating system and processor. These builds are unsigned; macOS and Windows may require an installation override.\n\nThis distribution runs locally without a product account. It contains no external telemetry. Git and update requests require a user action. Provider harnesses use their own credentials.\n\nSource: https://github.com/${repo}/commit/${sha}\n${upstream ? `Upstream: https://github.com/pingdotgg/t3code/commit/${upstream}\n` : ""}\nSHA256SUMS covers the attached artifacts. provenance.json records the build source.\n`,
+    `T2 Code ${version}\n\nDownload the installer for your operating system and processor. These builds are unsigned; macOS and Windows may require an installation override.\n\nThis distribution runs locally without a product account. Analytics and external diagnostic exporters are disabled in code. Local diagnostics are retained. Provider harnesses use their own credentials. Upstream Git, update, and optional remote-connection features are retained.\n\nSource: https://github.com/${repo}/commit/${sha}\n${upstream ? `Upstream: https://github.com/pingdotgg/t3code/commit/${upstream}\n` : ""}\nSHA256SUMS covers the attached artifacts. provenance.json records the build source.\n`,
   );
 }
 

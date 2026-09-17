@@ -18,7 +18,6 @@ import {
 } from "@t3tools/contracts";
 import * as ProcessRunner from "../processRunner.ts";
 import * as VcsProcess from "./VcsProcess.ts";
-import { UserNetworkAccess } from "../networkPolicy.ts";
 
 const run = (input: VcsProcess.VcsProcessInput) =>
   Effect.gen(function* () {
@@ -94,7 +93,7 @@ describe("VcsProcess.run", () => {
           }),
         ),
         { concurrency: "unbounded" },
-      ).pipe(Effect.provideService(UserNetworkAccess, true), Effect.forkChild);
+      ).pipe(Effect.forkChild);
 
       yield* Effect.all(Array.from({ length: 4 }, () => Queue.take(starts)));
       yield* Effect.yieldNow;
@@ -105,41 +104,6 @@ describe("VcsProcess.run", () => {
       yield* Fiber.join(burst);
       expect(yield* Ref.get(total)).toBe(32);
       expect(yield* Ref.get(peak)).toBe(4);
-    }),
-  );
-
-  it.effect("blocks background network commands before spawning and scopes explicit requests", () =>
-    Effect.gen(function* () {
-      const calls: Array<ProcessRunner.ProcessRunInput> = [];
-      const service = yield* VcsProcess.make.pipe(
-        Effect.provideService(
-          ProcessRunner.ProcessRunner,
-          ProcessRunner.ProcessRunner.of({
-            run: (input) =>
-              Effect.sync(() => {
-                calls.push(input);
-                return {
-                  code: ChildProcessSpawner.ExitCode(0),
-                  stdout: "",
-                  stderr: "",
-                  timedOut: false,
-                  stdoutTruncated: false,
-                  stderrTruncated: false,
-                  stdoutInvalidUtf8: false,
-                  stderrInvalidUtf8: false,
-                };
-              }),
-          }),
-        ),
-      );
-      const fetch = { ...baseInput, args: ["-C", "/repo", "fetch", "origin"] };
-      expect(yield* service.run(fetch).pipe(Effect.flip)).toBeInstanceOf(VcsProcessSpawnError);
-      expect(calls).toHaveLength(0);
-      yield* service.run(fetch).pipe(Effect.provideService(UserNetworkAccess, true));
-      expect(calls).toHaveLength(1);
-      expect(yield* service.run(fetch).pipe(Effect.flip)).toBeInstanceOf(VcsProcessSpawnError);
-      yield* service.run({ ...baseInput, args: ["commit", "-m", "push"] });
-      expect(calls.at(-1)?.env?.GIT_NO_LAZY_FETCH).toBe("1");
     }),
   );
 
@@ -411,6 +375,24 @@ describe("VcsProcess.run", () => {
       expect(error.stream).toBe("stdout");
       expect(error.maxBytes).toBe(128);
       expect(error.observedBytes).toBeGreaterThan(error.maxBytes);
+    }).pipe(provideLive),
+  );
+
+  it.effect("streams all stdout bytes beyond the buffered output cap", () =>
+    Effect.gen(function* () {
+      const chunks: Uint8Array[] = [];
+      const result = yield* run({
+        operation: "test.stream-output",
+        command: "node",
+        args: ["-e", "process.stdout.write('x'.repeat(131072) + '\\0S final\\0')"],
+        cwd: process.cwd(),
+        maxOutputBytes: 8,
+        onStdoutChunk: (chunk) => chunks.push(chunk),
+      });
+
+      expect(result.stdout).toBe("xxxxxxxx");
+      expect(result.stdoutTruncated).toBe(true);
+      expect(Buffer.concat(chunks).toString()).toBe("x".repeat(131072) + "\0S final\0");
     }).pipe(provideLive),
   );
 

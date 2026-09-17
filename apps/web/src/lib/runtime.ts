@@ -62,7 +62,7 @@ const runtimeLayer = Layer.mergeAll(
   ),
 );
 
-const runtime: ManagedRuntime.ManagedRuntime<
+export const runtime: ManagedRuntime.ManagedRuntime<
   Layer.Success<RuntimeLayerSource>,
   Layer.Error<RuntimeLayerSource>
 > = ManagedRuntime.make(runtimeLayer);

@@ -13,6 +13,7 @@ import {
   UsageDay,
   type UsageSummaryInput,
 } from "@t3tools/contracts";
+import * as Duration from "effect/Duration";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -21,6 +22,8 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Scheduler from "effect/Scheduler";
 import * as Schema from "effect/Schema";
+import * as TestClock from "effect/testing/TestClock";
+import { HttpClient, HttpClientResponse } from "effect/unstable/http";
 
 import * as ServerConfig from "../config.ts";
 import * as ServerSettings from "../serverSettings.ts";
@@ -73,11 +76,27 @@ const serviceLayers = (input: {
   readonly prefix: string;
   readonly home: string;
   readonly settings: Parameters<typeof ServerSettings.layerTest>[0];
+  readonly onRatesFetch?: () => void;
+  /** Defaults to an unparsable document so every scan retries the fetch. */
+  readonly ratesDocument?: unknown;
   readonly environment?: NodeJS.ProcessEnv;
 }) =>
   ServerConfig.layerTest(process.cwd(), { prefix: input.prefix }).pipe(
     Layer.provideMerge(NodeServices.layer),
     Layer.provideMerge(ServerSettings.layerTest(input.settings)),
+    Layer.provideMerge(
+      Layer.succeed(
+        HttpClient.HttpClient,
+        HttpClient.make((request) =>
+          Effect.sync(() => {
+            input.onRatesFetch?.();
+            // Unparsable rates: every scan retries the fetch, which makes the
+            // fetch count a boundary-level observation of how many scans ran.
+            return HttpClientResponse.fromWeb(request, Response.json(input.ratesDocument ?? {}));
+          }),
+        ),
+      ),
+    ),
     Layer.provideMerge(
       Layer.succeed(HostProcessEnvironment, {
         GROK_HOME: NodePath.join(input.home, "grok"),
@@ -384,7 +403,7 @@ describe("UsageService", () => {
         const fileSystem = yield* FileSystem.FileSystem;
         const firstScanStarted = yield* Deferred.make<void>();
         const secondScanStarted = yield* Deferred.make<void>();
-        const releaseScans = yield* Deferred.make<void>();
+        const releaseRates = yield* Deferred.make<void>();
         let homeProbes = 0;
         const service = yield* UsageService.make.pipe(
           Effect.provideService(FileSystem.FileSystem, {
@@ -397,10 +416,18 @@ describe("UsageService", () => {
                   return Deferred.succeed(
                     homeProbes === 1 ? firstScanStarted : secondScanStarted,
                     undefined,
-                  ).pipe(Effect.andThen(Deferred.await(releaseScans)));
+                  );
                 }),
               ),
           }),
+          Effect.provideService(
+            HttpClient.HttpClient,
+            HttpClient.make((request) =>
+              Deferred.await(releaseRates).pipe(
+                Effect.as(HttpClientResponse.fromWeb(request, Response.json({}))),
+              ),
+            ),
+          ),
         );
 
         const first = yield* service.readSummary(WINDOW).pipe(Effect.forkChild);
@@ -412,7 +439,7 @@ describe("UsageService", () => {
         });
         const second = yield* service.readSummary(WINDOW).pipe(Effect.forkChild);
         yield* Deferred.await(secondScanStarted);
-        yield* Deferred.succeed(releaseScans, undefined);
+        yield* Deferred.succeed(releaseRates, undefined);
 
         const original = yield* Fiber.join(first);
         const updated = yield* Fiber.join(second);
@@ -429,24 +456,18 @@ describe("UsageService", () => {
       const { transcript, settings, home } = yield* setup;
       yield* Effect.promise(() => NodeFSP.writeFile(transcript, claudeLine(1, 5)));
 
-      let sourceScans = 0;
-      const service = yield* Effect.gen(function* () {
-        const fileSystem = yield* FileSystem.FileSystem;
-        return yield* UsageService.make.pipe(
-          Effect.provideService(FileSystem.FileSystem, {
-            ...fileSystem,
-            exists: (path) =>
-              fileSystem.exists(path).pipe(
-                Effect.tap(() =>
-                  Effect.sync(() => {
-                    if (path === NodePath.join(home, "claude", "projects")) sourceScans += 1;
-                  }),
-                ),
-              ),
+      let ratesFetches = 0;
+      const service = yield* UsageService.make.pipe(
+        Effect.provide(
+          serviceLayers({
+            prefix: "usage-service-flight-test",
+            home,
+            settings,
+            onRatesFetch: () => {
+              ratesFetches += 1;
+            },
           }),
-        );
-      }).pipe(
-        Effect.provide(serviceLayers({ prefix: "usage-service-flight-test", home, settings })),
+        ),
       );
 
       const [first, second] = yield* Effect.all(
@@ -454,32 +475,54 @@ describe("UsageService", () => {
         { concurrency: 2 },
       );
       assert.deepStrictEqual(first, second);
-      assert.strictEqual(sourceScans, 1);
+      assert.strictEqual(ratesFetches, 1);
 
       // A later request is fresh work again, not a stale cached answer.
       yield* service.readSummary(WINDOW);
-      assert.strictEqual(sourceScans, 2);
+      assert.strictEqual(ratesFetches, 2);
     }).pipe(Effect.scoped),
   );
 
-  it.live("uses bundled prices for reads and explicit refresh without an HTTP service", () =>
+  it.live("refetches a rate table inside its TTL only when the client asks", () =>
     Effect.gen(function* () {
       const { transcript, settings, home } = yield* setup;
       yield* Effect.promise(() => NodeFSP.writeFile(transcript, claudeLine(1, 5)));
+
+      let ratesFetches = 0;
       const service = yield* UsageService.make.pipe(
         Effect.provide(
-          serviceLayers({ prefix: "usage-service-bundled-rates-test", home, settings }),
+          serviceLayers({
+            prefix: "usage-service-rates-refresh-test",
+            home,
+            settings,
+            ratesDocument: {
+              "claude-fable-5": { input_cost_per_token: 1e-5, output_cost_per_token: 5e-5 },
+            },
+            onRatesFetch: () => {
+              ratesFetches += 1;
+            },
+          }),
         ),
       );
+
       const first = yield* service.readSummary(WINDOW);
-      assert.strictEqual(first.pricing.status, "cached");
-      assert.isAbove(first.pricing.knownModels, 0);
-      const refreshed = yield* service.refreshRates;
-      assert.deepStrictEqual(refreshed, first.pricing);
-      const rescanned = yield* service.readSummary(WINDOW);
-      assert.deepStrictEqual(rescanned.buckets, first.buckets);
-      assert.deepStrictEqual(rescanned.pricing, first.pricing);
-    }).pipe(Effect.scoped),
+      assert.strictEqual(ratesFetches, 1);
+      assert.strictEqual(first.pricing.status, "fresh");
+
+      // Inside the daily TTL a plain rescan keeps the cached table.
+      yield* TestClock.adjust(Duration.minutes(2));
+      yield* service.readSummary(WINDOW);
+      assert.strictEqual(ratesFetches, 1);
+
+      // An explicit refresh fetches again so a newly listed model gets priced.
+      // A burst of refreshes shares that one fetch.
+      const [refreshed] = yield* Effect.all([service.refreshRates, service.refreshRates], {
+        concurrency: 2,
+      });
+      assert.strictEqual(ratesFetches, 2);
+      assert.strictEqual(refreshed.status, "fresh");
+      assert.strictEqual(refreshed.knownModels, 1);
+    }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
   );
 
   it.live("does not orphan an in-flight scan when its first caller is interrupted", () =>

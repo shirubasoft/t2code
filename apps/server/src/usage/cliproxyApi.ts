@@ -11,7 +11,6 @@ import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http";
-import { ProviderNetworkOrigins } from "../networkPolicy.ts";
 
 import { codexPlanLabel } from "../provider/Layers/CodexProvider.ts";
 import { codexRateLimitsToLimits } from "../provider/Layers/codexUsageLimits.ts";
@@ -122,24 +121,15 @@ export const makeCliproxyApi = Effect.gen(function* () {
     body?: unknown,
   ) {
     const url = yield* Effect.try({
-      try: () => {
-        const target = new URL(`/v0/management/${path}`, config.url);
-        if (!["http:", "https:"].includes(target.protocol) || target.username || target.password) {
-          throw new Error("Invalid harness endpoint");
-        }
-        return target;
-      },
+      try: () => new URL(`/v0/management/${path}`, config.url).toString(),
       catch: () => new UsageLimitSourceError({ detail: "The hub URL is not valid." }),
     });
     const request = (
-      body === undefined
-        ? HttpClientRequest.get(url.toString())
-        : HttpClientRequest.post(url.toString())
+      body === undefined ? HttpClientRequest.get(url) : HttpClientRequest.post(url)
     ).pipe(HttpClientRequest.setHeader("Authorization", `Bearer ${config.managementKey}`));
     const response = yield* client
       .execute(body === undefined ? request : request.pipe(HttpClientRequest.bodyJsonUnsafe(body)))
       .pipe(
-        Effect.provideService(ProviderNetworkOrigins, [url.origin]),
         Effect.flatMap(HttpClientResponse.filterStatusOk),
         Effect.flatMap((response) => response.json),
         Effect.timeout("15 seconds"),

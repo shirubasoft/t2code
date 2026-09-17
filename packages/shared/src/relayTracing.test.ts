@@ -62,7 +62,7 @@ describe("withRelayClientTracing", () => {
     }),
   );
 
-  it.effect("does not export relay spans even when a collector is configured", () => {
+  it.effect("keeps error causes local even with a configured relay exporter", () => {
     const fetchFn = vi.fn<typeof fetch>(async () => new Response(null, { status: 202 }));
     const httpClientLayer = FetchHttpClient.layer.pipe(
       Layer.provide(Layer.succeed(FetchHttpClient.Fetch, fetchFn)),

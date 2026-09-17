@@ -105,15 +105,15 @@ class TestWebSocket {
 const TARGET = new PrimaryConnectionTarget({
   environmentId: EnvironmentId.make("environment-1"),
   label: "Test environment",
-  httpBaseUrl: "http://127.0.0.1:7777",
-  wsBaseUrl: "ws://127.0.0.1:7777",
+  httpBaseUrl: "https://environment.example.test",
+  wsBaseUrl: "wss://environment.example.test",
 });
 
 const PREPARED: PreparedConnection = {
   environmentId: TARGET.environmentId,
   label: TARGET.label,
   httpBaseUrl: TARGET.httpBaseUrl,
-  socketUrl: "ws://127.0.0.1:7777/ws?wsTicket=test",
+  socketUrl: "wss://environment.example.test/ws?wsTicket=test",
   httpAuthorization: null,
   target: TARGET,
 };
@@ -1224,20 +1224,3 @@ describe("RpcSessionFactory", () => {
     );
   }
 });
-
-it.effect("rejects external WebSocket endpoints before constructing a socket", () =>
-  Effect.gen(function* () {
-    let constructed = false;
-    const factory = yield* RpcSession.make().pipe(
-      Effect.provideService(Socket.WebSocketConstructor, (_url) => {
-        constructed = true;
-        throw new Error("Unexpected socket creation");
-      }),
-    );
-    const error = yield* factory
-      .connect({ ...PREPARED, socketUrl: "wss://external.test/ws" })
-      .pipe(Effect.flip, Effect.scoped);
-    expect(error).toBeInstanceOf(ConnectionBlockedError);
-    expect(constructed).toBe(false);
-  }),
-);

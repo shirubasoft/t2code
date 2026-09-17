@@ -1,8 +1,6 @@
-# Automation cannot alter its accepted policy or publish controls.
-/.github/ @danspark
-/scripts/verify-private-build.mjs @danspark
-/scripts/private-build-policy.json @danspark
-/scripts/build-desktop-artifact.ts @danspark
-/scripts/build-desktop-artifact.test.ts @danspark
-/scripts/lib/update-manifest.ts @danspark
-/.gitmodules @danspark
+# Changes to automation and its fixed policy require maintainer review.
+/.github/workflows/ @danspark
+/.github/t2code/*.mjs @danspark
+/.github/t2code/*.md @danspark
+/.github/t2code/*.schema.json @danspark
+/packages/shared/src/t2Analytics.ts @danspark

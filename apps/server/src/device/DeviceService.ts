@@ -59,10 +59,13 @@ import * as SynchronizedRef from "effect/SynchronizedRef";
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http";
 
 import * as ServerSettings from "../serverSettings.ts";
+import { isLocalSshDeviceHost, remoteSshDeviceHosts } from "./localSshDeviceHost.ts";
 
 import { readDeviceDetail, runDeviceAction } from "./DeviceActions.ts";
 import * as ProcessRunner from "../processRunner.ts";
 import * as DeviceHost from "./DeviceHost.ts";
+import * as SshDeviceHost from "./SshDeviceHost.ts";
+import * as Exit from "effect/Exit";
 import * as LocalDeviceHost from "./LocalDeviceHost.ts";
 
 /** Origin-relative prefix the hub is proxied under. See DeviceHubProxy. */
@@ -886,6 +889,8 @@ export const make = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const runner = yield* ProcessRunner.ProcessRunner;
+  const settings = yield* ServerSettings.ServerSettingsService;
+  const scope = yield* Scope.Scope;
   const hosts = new Map<DeviceHostId, DeviceHost.DeviceHost["Service"]>([
     [localHost.id, localHost],
   ]);
@@ -905,7 +910,116 @@ export const make = Effect.gen(function* () {
       Effect.as(file),
     );
   };
-  const service = yield* makeWithHosts(hosts, undefined, configureAgent);
+  const probeContext =
+    yield* Effect.context<Effect.Services<ReturnType<typeof SshDeviceHost.probe>>>();
+  const localTargetContext =
+    yield* Effect.context<Effect.Services<ReturnType<typeof isLocalSshDeviceHost>>>();
+  const service = yield* makeWithHosts(
+    hosts,
+    (host) =>
+      Effect.gen(function* () {
+        if (yield* isLocalSshDeviceHost(host).pipe(Effect.provide(localTargetContext))) {
+          return yield* localHost.summary;
+        }
+        return yield* SshDeviceHost.probe(host).pipe(Effect.provide(probeContext));
+      }).pipe(
+        Effect.mapError(
+          (error) =>
+            new DeviceOperationError({
+              operation: "probe host",
+              reason: "request_failed",
+              cause: error,
+            }),
+        ),
+      ),
+    configureAgent,
+  );
+  const hostContext =
+    yield* Effect.context<Effect.Services<ReturnType<typeof SshDeviceHost.make>>>();
+  const configured = new Map<string, { config: SshDeviceHostConfig; scope: Scope.Closeable }>();
+  const reconcile = (configuredHosts: ReadonlyArray<SshDeviceHostConfig>) =>
+    Effect.gen(function* () {
+      const next = yield* remoteSshDeviceHosts(configuredHosts).pipe(
+        Effect.provide(localTargetContext),
+      );
+      const removed = yield* service.withLifecycleLock(
+        Effect.gen(function* () {
+          const removed: Array<{ id: string; scope: Scope.Closeable }> = [];
+          for (const [id, previous] of configured) {
+            if (
+              next.some(
+                (host) =>
+                  host.id === id &&
+                  host.label === previous.config.label &&
+                  host.target === previous.config.target &&
+                  host.port === previous.config.port &&
+                  host.identityFile === previous.config.identityFile,
+              )
+            )
+              continue;
+            hosts.delete(id);
+            configured.delete(id);
+            removed.push({ id, scope: previous.scope });
+          }
+          yield* service.refreshHosts;
+          return removed;
+        }),
+      );
+      // Stop old writers before deleting config files or publishing replacements, without blocking healthy hosts.
+      yield* Effect.forEach(
+        removed,
+        ({ id, scope }) =>
+          Effect.gen(function* () {
+            yield* Scope.close(scope, Exit.void);
+            yield* fs
+              .remove(agentDeviceConfigPath(config.stateDir, id, path), { force: true })
+              .pipe(Effect.ignore);
+          }),
+        { concurrency: 4, discard: true },
+      );
+      yield* service.withLifecycleLock(
+        Effect.gen(function* () {
+          for (const host of next) {
+            if (configured.has(host.id)) continue;
+            const hostScope = yield* Scope.fork(scope);
+            const instance = yield* SshDeviceHost.make(
+              host,
+              (ready) =>
+                configureAgent(host.id, ready).pipe(
+                  Effect.asVoid,
+                  Effect.mapError(
+                    (error) =>
+                      new DeviceHost.DeviceHostError({
+                        hostId: host.id,
+                        step: "configuring agent access",
+                        cause: error,
+                      }),
+                  ),
+                ),
+              (status, detail) =>
+                service
+                  .setHostStatus(host.id, { status, ...(detail ? { detail } : {}) })
+                  .pipe(Effect.asVoid),
+            ).pipe(Effect.provideService(Scope.Scope, hostScope), Effect.provide(hostContext));
+            hosts.set(host.id, instance);
+            configured.set(host.id, { config: host, scope: hostScope });
+          }
+          yield* service.refreshHosts;
+        }),
+      );
+    });
+  const changes = yield* settings.subscribeChanges;
+  yield* reconcile((yield* settings.getSettings).deviceHosts);
+  yield* changes.pipe(
+    Stream.runForEach((value) => reconcile(value.deviceHosts)),
+    Effect.forkIn(scope),
+  );
+  yield* Effect.addFinalizer(() =>
+    Effect.forEach(configured.values(), (value) => Scope.close(value.scope, Exit.void), {
+      discard: true,
+      concurrency: 4,
+    }),
+  );
   return {
     ...service,
     agentCli: resolveNodeExecutable("Device automation").pipe(

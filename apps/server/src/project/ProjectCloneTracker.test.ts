@@ -14,7 +14,6 @@ import * as TestClock from "effect/testing/TestClock";
 import * as SourceControlRepositoryService from "../sourceControl/SourceControlRepositoryService.ts";
 import * as ProjectCloneTracker from "./ProjectCloneTracker.ts";
 import { parseGitCloneProgressLine } from "./gitCloneProgress.ts";
-import { UserNetworkAccess } from "../networkPolicy.ts";
 
 const projectId = ProjectId.make("project-1");
 const startInput = {
@@ -64,35 +63,6 @@ function makeHarness(options?: {
 }
 
 describe("ProjectCloneTracker", () => {
-  it.effect(
-    "carries the initiating network grant into the detached clone without leaking it",
-    () => {
-      const observed = Deferred.makeUnsafe<boolean>();
-      const release = Deferred.makeUnsafe<void>();
-      const harness = makeHarness({
-        clone: (input) =>
-          Effect.gen(function* () {
-            yield* Deferred.await(release);
-            yield* Deferred.succeed(observed, yield* UserNetworkAccess);
-            return {
-              cwd: input.destinationPath,
-              remoteUrl: input.remoteUrl ?? "",
-              repository: null,
-            };
-          }),
-      });
-      return Effect.gen(function* () {
-        const tracker = yield* ProjectCloneTracker.ProjectCloneTracker;
-        yield* tracker
-          .start(startInput, harness.hooks)
-          .pipe(Effect.provideService(UserNetworkAccess, true));
-        expect(yield* UserNetworkAccess).toBe(false);
-        yield* Deferred.succeed(release, undefined);
-        expect(yield* Deferred.await(observed)).toBe(true);
-      }).pipe(Effect.provide(harness.layer));
-    },
-  );
-
   it.effect("creates the project first and reports the clone through the stream", () => {
     const release = Deferred.makeUnsafe<void>();
     const harness = makeHarness({

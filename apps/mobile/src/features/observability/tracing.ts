@@ -1,6 +1,8 @@
 import Constants from "expo-constants";
 import { makeRelayClientTracingLayer } from "@t3tools/shared/relayTracing";
 
+import { hasTracingPublicConfig, resolveCloudPublicConfig } from "../cloud/publicConfig";
+
 export interface TracingConfig {
   readonly tracesUrl: string;
   readonly tracesDataset: string;
@@ -13,7 +15,12 @@ export interface TracingResource {
 }
 
 export function resolveTracingConfig(): TracingConfig | null {
-  return null;
+  const config = resolveCloudPublicConfig();
+  if (!hasTracingPublicConfig(config)) {
+    return null;
+  }
+  const { tracesUrl, tracesDataset, tracesToken } = config.observability;
+  return { tracesUrl, tracesDataset, tracesToken };
 }
 
 export function makeTracingLayer(config: TracingConfig | null, resource: TracingResource) {

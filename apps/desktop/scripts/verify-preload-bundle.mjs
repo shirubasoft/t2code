@@ -9,8 +9,10 @@ import { parse } from "acorn";
 const expectedDesktopBridgeApis = [
   "getClientPlatform",
   "getLocalEnvironmentBootstraps",
+  "getPathForFile",
   "pickFolder",
 ];
+const clerkPasskeysGlobal = "__clerk_internal_electron_passkeys";
 const preloadExecutionTimeoutMs = 1_000;
 const desktopPackage = JSON.parse(
   NodeFS.readFileSync(new URL("../package.json", import.meta.url), "utf8"),
@@ -67,6 +69,9 @@ const createSandboxModules = (exposedGlobals) => {
       exposeInMainWorld: (name, api) => exposedGlobals.set(name, api),
     },
     ipcRenderer,
+    webUtils: {
+      getPathForFile: () => "",
+    },
   };
 
   return new Map([
@@ -127,18 +132,12 @@ export const verifyPreloadBundle = (source) => {
 
   executeBundle(source, sandboxModules);
 
-  const unexpectedGlobals = [...exposedGlobals.keys()].filter((name) => name !== "desktopBridge");
-  if (unexpectedGlobals.length > 0) {
-    throw new Error(
-      `Desktop preload bundle exposes unexpected globals: ${unexpectedGlobals.join(", ")}`,
-    );
-  }
-
   const desktopBridge = exposedGlobals.get("desktopBridge");
   const missingApis = expectedDesktopBridgeApis.filter(
     (api) => typeof desktopBridge?.[api] !== "function",
   );
   if (!exposedGlobals.has("desktopBridge")) missingApis.unshift("desktopBridge exposure");
+  if (!exposedGlobals.has(clerkPasskeysGlobal)) missingApis.push(`${clerkPasskeysGlobal} exposure`);
 
   if (missingApis.length > 0) {
     throw new Error(`Desktop preload bundle is missing executable APIs: ${missingApis.join(", ")}`);

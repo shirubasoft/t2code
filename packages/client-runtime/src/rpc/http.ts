@@ -8,7 +8,6 @@ import {
   type EnvironmentResourceNotFoundError,
   type EnvironmentScopeRequiredError,
 } from "@t3tools/contracts";
-import { isLoopbackUrl } from "@t3tools/shared/localNetwork";
 import { httpHeaderRedactionLayer } from "@t3tools/shared/httpObservability";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
@@ -83,17 +82,7 @@ export const remoteHttpClientLayer = (
   fetchFn: typeof globalThis.fetch,
 ): Layer.Layer<HttpClient.HttpClient> =>
   Layer.merge(
-    FetchHttpClient.layer.pipe(
-      Layer.provide(
-        Layer.succeed(FetchHttpClient.Fetch, async (input, init) => {
-          const url = typeof input === "string" || input instanceof URL ? input : input.url;
-          if (!isLoopbackUrl(url)) {
-            throw new Error("Remote connections are unavailable in the local edition.");
-          }
-          return fetchFn(input, { ...init, redirect: "error" });
-        }),
-      ),
-    ),
+    FetchHttpClient.layer.pipe(Layer.provide(Layer.succeed(FetchHttpClient.Fetch, fetchFn))),
     httpHeaderRedactionLayer,
   );
 

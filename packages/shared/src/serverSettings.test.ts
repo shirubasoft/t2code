@@ -14,6 +14,7 @@ import { resolveProjectScripts, projectScriptsInheritDefaults } from "./projectS
 import {
   applyServerSettingsPatch,
   isModelSelectionProviderEnabled,
+  parsePersistedServerObservabilitySettings,
   resolveSourceControlWriterModelSelection,
   resolveProjectAgentBrowserAccess,
   resolveProjectAutoPull,
@@ -23,6 +24,23 @@ import {
 const FOLDED_SERVER_SETTINGS = { ...DEFAULT_SERVER_SETTINGS, projectSettingsFolded: true };
 
 describe("serverSettings helpers", () => {
+  it("changes a cleanup rule without replacing the machine's other rules", () => {
+    const enabled = applyServerSettingsPatch(DEFAULT_SERVER_SETTINGS, {
+      storageCleanup: { worktreeAfterDays: 8, worktreeOnMerge: true, logsAfterDays: 30 },
+    });
+    expect(
+      applyServerSettingsPatch(enabled, {
+        storageCleanup: { worktreeAfterDays: null },
+      }).storageCleanup,
+    ).toEqual({
+      worktreeAfterDays: null,
+      worktreeOnMerge: true,
+      worktreeOnDelete: false,
+      worktreeUnchanged: false,
+      browserArtifactsAfterDays: null,
+      logsAfterDays: 30,
+    });
+  });
   it("replaces SSH host lists when saving, editing, and removing hosts", () => {
     const host = { id: "mini", label: "Mac mini", target: "mini" };
     const saved = applyServerSettingsPatch(DEFAULT_SERVER_SETTINGS, { deviceHosts: [host] });
@@ -200,6 +218,44 @@ describe("serverSettings helpers", () => {
     expect(
       applyServerSettingsPatch(updated, { defaultModelSelection: null }).defaultModelSelection,
     ).toBeNull();
+  });
+
+  it("ignores missing and blank persisted observability URLs", () => {
+    expect(parsePersistedServerObservabilitySettings("{}")).toEqual({
+      otlpTracesUrl: undefined,
+      otlpMetricsUrl: undefined,
+    });
+    expect(
+      parsePersistedServerObservabilitySettings(
+        JSON.stringify({ observability: { otlpTracesUrl: "   ", otlpMetricsUrl: "" } }),
+      ),
+    ).toEqual({
+      otlpTracesUrl: undefined,
+      otlpMetricsUrl: undefined,
+    });
+  });
+
+  it("parses lenient persisted settings JSON and trims observability URLs", () => {
+    expect(
+      parsePersistedServerObservabilitySettings(
+        JSON.stringify({
+          observability: {
+            otlpTracesUrl: "  http://localhost:4318/v1/traces  ",
+            otlpMetricsUrl: "  http://localhost:4318/v1/metrics  ",
+          },
+        }),
+      ),
+    ).toEqual({
+      otlpTracesUrl: "http://localhost:4318/v1/traces",
+      otlpMetricsUrl: "http://localhost:4318/v1/metrics",
+    });
+  });
+
+  it("falls back cleanly when persisted settings are invalid", () => {
+    expect(parsePersistedServerObservabilitySettings("{")).toEqual({
+      otlpTracesUrl: undefined,
+      otlpMetricsUrl: undefined,
+    });
   });
 
   it("replaces text generation selection when provider/model are provided", () => {

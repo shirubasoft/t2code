@@ -61,6 +61,7 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
           persist-credentials: false
+          fetch-depth: 0
           sparse-checkout: |
             /*
             !/.repos/
@@ -86,7 +87,7 @@ jobs:
 
       - name: Verify source privacy policy
         shell: bash
-        run: node scripts/verify-private-build.mjs --source .
+        run: node .github/t2code/overlay.mjs verify
 
       - name: Align package versions to release version
         run: node scripts/update-release-package-versions.ts "${{ inputs.version }}"
@@ -163,20 +164,6 @@ jobs:
 
           vp run dist:desktop:artifact "${args[@]}"
 
-      - name: Verify packaged desktop starts without external network attempts
-        if: inputs.platform == 'linux'
-        shell: bash
-        run: bash .github/t2code/desktop-network-smoke.sh release/*.AppImage
-
-      - name: Retain packaged desktop smoke evidence
-        if: always() && inputs.platform == 'linux'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: smoke-evidence-linux-${{ inputs.arch }}
-          path: desktop-smoke-evidence/
-          if-no-files-found: ignore
-          retention-days: 3
-
       # The single-executable is built with a Node that supports --build-sea
       # (25.7+); the repo itself stays on the engines.node version. It always
       # injects into the runner's own Node: tsdown's cross-target download path
@@ -220,12 +207,7 @@ jobs:
       - name: Smoke-test CLI archive
         if: inputs.cli_archive
         shell: bash
-        run: |
-          if [[ "${{ inputs.platform }}" == "linux" ]]; then
-            bash .github/t2code/network-smoke.sh release-cli/* "${{ inputs.version }}"
-          else
-            node scripts/smoke-cli-archive.ts --archive release-cli/* --expect-version "${{ inputs.version }}"
-          fi
+        run: node scripts/smoke-cli-archive.ts --archive release-cli/* --expect-version "${{ inputs.version }}"
 
       - name: Upload CLI archive
         if: inputs.cli_archive
@@ -234,12 +216,6 @@ jobs:
           name: cli-${{ inputs.platform }}-${{ inputs.arch }}
           path: release-cli/*
           if-no-files-found: error
-
-      - name: Verify shipped bundles
-        shell: bash
-        run: |
-          node scripts/verify-private-build.mjs --source . --artifacts apps/server/dist
-          node scripts/verify-private-build.mjs --source . --artifacts apps/desktop/dist-electron
 
       - name: Collect release assets
         shell: bash

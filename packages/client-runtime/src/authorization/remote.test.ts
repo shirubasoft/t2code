@@ -90,19 +90,7 @@ const expectFetchCall = (
 };
 
 describe("remote environment authorization", () => {
-  it.effect("rejects external bootstrap before sending the pairing credential", () =>
-    Effect.gen(function* () {
-      const fetch = recordedFetch();
-      const error = yield* bootstrapRemoteBearerSession({
-        httpBaseUrl: "https://remote.example.com/",
-        credential: "private-pairing-token",
-      }).pipe(provideRemoteHttp(fetch.fetchFn), Effect.flip);
-      expect(error._tag).toBe("RemoteEnvironmentAuthFetchError");
-      expect(fetch.calls).toEqual([]);
-    }),
-  );
-
-  it.effect("bootstraps bearer auth against a loopback backend", () =>
+  it.effect("bootstraps bearer auth against a remote backend", () =>
     Effect.gen(function* () {
       const fetch = recordedFetch(
         Response.json(
@@ -119,7 +107,7 @@ describe("remote environment authorization", () => {
       );
 
       const result = yield* bootstrapRemoteBearerSession({
-        httpBaseUrl: "http://127.0.0.1:3773/",
+        httpBaseUrl: "https://remote.example.com/",
         credential: "pairing-token",
       }).pipe(provideRemoteHttp(fetch.fetchFn));
 
@@ -129,7 +117,7 @@ describe("remote environment authorization", () => {
         scope: "orchestration:read orchestration:operate terminal:operate review:write relay:read",
       });
       expectFetchCall(fetch.calls, 1, {
-        url: "http://127.0.0.1:3773/oauth/token",
+        url: "https://remote.example.com/oauth/token",
         method: "POST",
         headers: {
           "content-type": "application/x-www-form-urlencoded",
@@ -156,7 +144,7 @@ describe("remote environment authorization", () => {
       );
 
       const token = yield* exchangeRemoteDpopAccessToken({
-        httpBaseUrl: "http://127.0.0.1:3773/",
+        httpBaseUrl: "https://remote.example.com/",
         credential: "one-time-credential",
         dpopProof: "token-proof",
         clientMetadata: {
@@ -166,19 +154,19 @@ describe("remote environment authorization", () => {
         },
       }).pipe(provideRemoteHttp(fetch.fetchFn));
       yield* issueRemoteDpopWebSocketTicket({
-        httpBaseUrl: "http://127.0.0.1:3773/",
+        httpBaseUrl: "https://remote.example.com/",
         accessToken: token.access_token,
         dpopProof: "resource-proof",
       }).pipe(provideRemoteHttp(fetch.fetchFn));
 
       expectFetchCall(fetch.calls, 1, {
-        url: "http://127.0.0.1:3773/oauth/token",
+        url: "https://remote.example.com/oauth/token",
         method: "POST",
         headers: { dpop: "token-proof", "content-type": "application/x-www-form-urlencoded" },
         body: "grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Atoken-exchange&subject_token=one-time-credential&subject_token_type=urn%3At3%3Aparams%3Aoauth%3Atoken-type%3Aenvironment-bootstrap&requested_token_type=urn%3Aietf%3Aparams%3Aoauth%3Atoken-type%3Aaccess_token&client_label=T3+Code+Mobile&client_device_type=mobile&client_os=iOS",
       });
       expectFetchCall(fetch.calls, 2, {
-        url: "http://127.0.0.1:3773/api/auth/websocket-ticket",
+        url: "https://remote.example.com/api/auth/websocket-ticket",
         method: "POST",
         headers: {
           authorization: "DPoP dpop-access-token",
@@ -205,7 +193,7 @@ describe("remote environment authorization", () => {
       );
 
       yield* bootstrapRemoteBearerSession({
-        httpBaseUrl: "http://127.0.0.1:3773/",
+        httpBaseUrl: "https://remote.example.com/",
         credential: "pairing-token",
         clientMetadata: {
           label: "T3 Code Mobile",
@@ -215,7 +203,7 @@ describe("remote environment authorization", () => {
       }).pipe(provideRemoteHttp(fetch.fetchFn));
 
       expectFetchCall(fetch.calls, 1, {
-        url: "http://127.0.0.1:3773/oauth/token",
+        url: "https://remote.example.com/oauth/token",
         method: "POST",
         body: "grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Atoken-exchange&subject_token=pairing-token&subject_token_type=urn%3At3%3Aparams%3Aoauth%3Atoken-type%3Aenvironment-bootstrap&requested_token_type=urn%3Aietf%3Aparams%3Aoauth%3Atoken-type%3Aaccess_token&client_label=T3+Code+Mobile&client_device_type=mobile&client_os=iOS",
       });
@@ -239,7 +227,7 @@ describe("remote environment authorization", () => {
 
       for (const os of ["unknown", "other"] as const) {
         yield* bootstrapRemoteBearerSession({
-          httpBaseUrl: "http://127.0.0.1:3773/",
+          httpBaseUrl: "https://remote.example.com/",
           credential: "pairing-token",
           clientMetadata: {
             label: "T3 Code Web",
@@ -253,7 +241,7 @@ describe("remote environment authorization", () => {
         expect(String(init.body)).not.toContain("client_os=");
       }
 
-      const websocketUrl = new URL("ws://127.0.0.1:3773/ws");
+      const websocketUrl = new URL("wss://remote.example.com/ws");
       appendClientConnectionParams(websocketUrl, {
         surface: "web",
         deviceType: "desktop",
@@ -279,13 +267,13 @@ describe("remote environment authorization", () => {
       );
 
       yield* bootstrapRemoteBearerSession({
-        httpBaseUrl: "http://127.0.0.1:3773/",
+        httpBaseUrl: "https://remote.example.com/",
         credential: "pairing-token",
         scopes: ["orchestration:read"],
       }).pipe(provideRemoteHttp(fetch.fetchFn));
 
       expectFetchCall(fetch.calls, 1, {
-        url: "http://127.0.0.1:3773/oauth/token",
+        url: "https://remote.example.com/oauth/token",
         method: "POST",
         body: "grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Atoken-exchange&subject_token=pairing-token&subject_token_type=urn%3At3%3Aparams%3Aoauth%3Atoken-type%3Aenvironment-bootstrap&requested_token_type=urn%3Aietf%3Aparams%3Aoauth%3Atoken-type%3Aaccess_token&scope=orchestration%3Aread",
       });
@@ -341,7 +329,7 @@ describe("remote environment authorization", () => {
       );
 
       const environment = yield* fetchRemoteEnvironmentDescriptor({
-        httpBaseUrl: "http://127.0.0.1:3773/",
+        httpBaseUrl: "https://remote.example.com/",
       }).pipe(provideRemoteHttp(fetch.fetchFn));
       expect(environment).toMatchObject({
         environmentId: "environment-remote",
@@ -349,7 +337,7 @@ describe("remote environment authorization", () => {
       });
 
       const session = yield* fetchRemoteSessionState({
-        httpBaseUrl: "http://127.0.0.1:3773/",
+        httpBaseUrl: "https://remote.example.com/",
         bearerToken: "bearer-token",
       }).pipe(provideRemoteHttp(fetch.fetchFn));
       expect(session).toMatchObject({
@@ -364,7 +352,7 @@ describe("remote environment authorization", () => {
       });
 
       const ticket = yield* issueRemoteWebSocketTicket({
-        httpBaseUrl: "http://127.0.0.1:3773/",
+        httpBaseUrl: "https://remote.example.com/",
         bearerToken: "bearer-token",
       }).pipe(provideRemoteHttp(fetch.fetchFn));
       expect(ticket).toMatchObject({
@@ -372,18 +360,18 @@ describe("remote environment authorization", () => {
       });
 
       expectFetchCall(fetch.calls, 1, {
-        url: "http://127.0.0.1:3773/.well-known/t3/environment",
+        url: "https://remote.example.com/.well-known/t3/environment",
         method: "GET",
       });
       expectFetchCall(fetch.calls, 2, {
-        url: "http://127.0.0.1:3773/api/auth/session",
+        url: "https://remote.example.com/api/auth/session",
         method: "GET",
         headers: {
           authorization: "Bearer bearer-token",
         },
       });
       expectFetchCall(fetch.calls, 3, {
-        url: "http://127.0.0.1:3773/api/auth/websocket-ticket",
+        url: "https://remote.example.com/api/auth/websocket-ticket",
         method: "POST",
         headers: {
           authorization: "Bearer bearer-token",
@@ -415,13 +403,13 @@ describe("remote environment authorization", () => {
       );
 
       yield* fetchRemoteDpopSessionState({
-        httpBaseUrl: "http://127.0.0.1:3773/",
+        httpBaseUrl: "https://remote.example.com/",
         accessToken: "dpop-access-token",
         dpopProof: "dpop-proof",
       }).pipe(provideRemoteHttp(fetch.fetchFn));
 
       expectFetchCall(fetch.calls, 1, {
-        url: "http://127.0.0.1:3773/api/auth/session",
+        url: "https://remote.example.com/api/auth/session",
         method: "GET",
         headers: {
           authorization: "DPoP dpop-access-token",
@@ -436,7 +424,7 @@ describe("remote environment authorization", () => {
       const fetch = hangingFetch();
 
       const errorFiber = yield* fetchRemoteEnvironmentDescriptor({
-        httpBaseUrl: "http://127.0.0.1:3773/",
+        httpBaseUrl: "http://remote.example.com/",
         timeoutMs: 25,
       }).pipe(provideRemoteHttp(fetch.fetchFn), Effect.flip, Effect.forkScoped);
       yield* Effect.yieldNow;
@@ -445,7 +433,7 @@ describe("remote environment authorization", () => {
 
       expect(error).toBeInstanceOf(RemoteEnvironmentAuthTimeoutError);
       expect(error.message).toBe(
-        "Remote environment endpoint http://127.0.0.1:3773/.well-known/t3/environment timed out after 25ms.",
+        "Remote environment endpoint http://remote.example.com/.well-known/t3/environment timed out after 25ms.",
       );
     }).pipe(Effect.provide(TestClock.layer())),
   );
@@ -465,7 +453,7 @@ describe("remote environment authorization", () => {
       );
 
       const error = yield* issueRemoteWebSocketTicket({
-        httpBaseUrl: "http://127.0.0.1:3773/",
+        httpBaseUrl: "https://remote.example.com/",
         bearerToken: "expired-token",
       }).pipe(provideRemoteHttp(fetch.fetchFn), Effect.flip);
 
@@ -494,13 +482,13 @@ describe("remote environment authorization", () => {
       );
 
       const error = yield* bootstrapRemoteBearerSession({
-        httpBaseUrl: "http://127.0.0.1:3773/",
+        httpBaseUrl: "https://remote.example.com/",
         credential: "pairing-token",
       }).pipe(provideRemoteHttp(fetch.fetchFn), Effect.flip);
 
       expect(error).toBeInstanceOf(RemoteEnvironmentAuthInvalidJsonError);
       expect(error.message).toBe(
-        "Remote environment endpoint returned an invalid response from http://127.0.0.1:3773/oauth/token.",
+        "Remote environment endpoint returned an invalid response from https://remote.example.com/oauth/token.",
       );
     }),
   );
@@ -518,8 +506,8 @@ describe("remote environment authorization", () => {
       );
 
       const url = yield* resolveRemoteWebSocketConnectionUrl({
-        wsBaseUrl: "ws://127.0.0.1:3773/",
-        httpBaseUrl: "http://127.0.0.1:3773/",
+        wsBaseUrl: "wss://remote.example.com/",
+        httpBaseUrl: "https://remote.example.com/",
         bearerToken: "bearer-token",
         clientMetadata: {
           surface: "mobile",
@@ -533,7 +521,7 @@ describe("remote environment authorization", () => {
       }).pipe(provideRemoteHttp(fetch.fetchFn));
 
       expect(url).toBe(
-        "ws://127.0.0.1:3773/ws?wsTicket=ws-ticket&clientSurface=mobile&clientAppVersion=1.2.3&clientDeviceType=phone&clientOs=Android&clientOsMajorVersion=15&clientDeviceModel=Pixel+9&connectionMethod=relay",
+        "wss://remote.example.com/ws?wsTicket=ws-ticket&clientSurface=mobile&clientAppVersion=1.2.3&clientDeviceType=phone&clientOs=Android&clientOsMajorVersion=15&clientDeviceModel=Pixel+9&connectionMethod=relay",
       );
     }),
   );
