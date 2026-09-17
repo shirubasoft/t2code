@@ -7,8 +7,6 @@ import * as Scope from "effect/Scope";
 import { autoUpdater } from "electron-updater";
 import { disableUpdateTracking } from "./t2UpdaterPrivacy.ts";
 
-disableUpdateTracking(autoUpdater);
-
 type AutoUpdater = typeof autoUpdater;
 
 export type ElectronUpdaterFeedUrl = Parameters<AutoUpdater["setFeedURL"]>[0];
@@ -127,6 +125,7 @@ export const make = ElectronUpdater.of({
       return Effect.void;
     }),
   checkForUpdates: Effect.suspend(() => {
+    disableUpdateTracking(autoUpdater);
     const channel = autoUpdater.channel;
     return Effect.tryPromise({
       try: () => autoUpdater.checkForUpdates(),

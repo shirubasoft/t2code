@@ -5,34 +5,42 @@ import { disableUpdateTracking } from "./t2UpdaterPrivacy.ts";
 vi.mock("electron", () => ({ app: {}, net: {} }));
 
 describe("T2 updater privacy", () => {
-  it("strips the installed updater's tracking header while retaining download headers", async () => {
+  it("checks for real updates without accessing an identity or sending its header", async () => {
     const updater = new AppImageUpdater(null, {
       version: "0.1.1",
       name: "T2 Code",
       isPackaged: true,
       appUpdateConfigPath: "/not-used/app-update.yml",
-      userDataPath: "/must-not-read-user-data",
+      get userDataPath(): string {
+        throw new Error("Update checking must not access the tracking identity");
+      },
       baseCachePath: "/not-used/cache",
       whenReady: async () => {},
       onQuit: () => {},
       quit: () => {},
       relaunch: () => {},
     });
+    const request = vi.fn<(options: { headers?: Record<string, unknown> }) => Promise<string>>(
+      async () =>
+        "version: 0.1.2\nfiles:\n  - url: T2-Code.AppImage\n    sha512: AA==\n    size: 1\n",
+    );
+    Object.defineProperty(updater, "httpExecutor", { value: { request } });
+    updater.forceDevUpdateConfig = true;
+    updater.autoDownload = false;
+    updater.logger = null;
     updater.requestHeaders = {
       Authorization: "download-credential",
       "X-User-Staging-Id": "secret-id",
     };
     disableUpdateTracking(updater);
-    const headers = Reflect.get(updater, "computeFinalHeaders").call(updater, {
-      "x-user-staging-id": "another-secret-id",
-      accept: "application/octet-stream",
-    });
-    expect(headers).toEqual({
-      Authorization: "download-credential",
-      accept: "application/octet-stream",
-    });
-    await expect(Reflect.get(updater, "getOrCreateStagingUserId").call(updater)).resolves.toBe(
-      "00000000-0000-4000-8000-000000000000",
-    );
+    updater.setFeedURL({ provider: "generic", url: "https://updates.test/releases/" });
+
+    disableUpdateTracking(updater);
+    const update = await updater.checkForUpdates();
+
+    expect(update?.isUpdateAvailable).toBe(true);
+    expect(update?.updateInfo.version).toBe("0.1.2");
+    expect(request).toHaveBeenCalledOnce();
+    expect(request.mock.calls[0]?.[0].headers).toEqual({ Authorization: "download-credential" });
   });
 });

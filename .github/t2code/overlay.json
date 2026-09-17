@@ -13,7 +13,12 @@
     {
       "path": "apps/desktop/src/electron/ElectronUpdater.ts",
       "before": "import * as Layer from \"effect/Layer\";\nimport * as Schema from \"effect/Schema\";\nimport * as Scope from \"effect/Scope\";\n\nimport { autoUpdater } from \"electron-updater\";\n\ntype AutoUpdater = typeof autoUpdater;\n\nexport type ElectronUpdaterFeedUrl = Parameters<AutoUpdater[\"setFeedURL\"]>[0];\n\n",
-      "after": "import * as Layer from \"effect/Layer\";\nimport * as Schema from \"effect/Schema\";\nimport * as Scope from \"effect/Scope\";\n\nimport { autoUpdater } from \"electron-updater\";\nimport { disableUpdateTracking } from \"./t2UpdaterPrivacy.ts\";\n\ndisableUpdateTracking(autoUpdater);\n\ntype AutoUpdater = typeof autoUpdater;\n\nexport type ElectronUpdaterFeedUrl = Parameters<AutoUpdater[\"setFeedURL\"]>[0];\n\n"
+      "after": "import * as Layer from \"effect/Layer\";\nimport * as Schema from \"effect/Schema\";\nimport * as Scope from \"effect/Scope\";\n\nimport { autoUpdater } from \"electron-updater\";\nimport { disableUpdateTracking } from \"./t2UpdaterPrivacy.ts\";\n\ntype AutoUpdater = typeof autoUpdater;\n\nexport type ElectronUpdaterFeedUrl = Parameters<AutoUpdater[\"setFeedURL\"]>[0];\n\n"
+    },
+    {
+      "path": "apps/desktop/src/electron/ElectronUpdater.ts",
+      "before": "    Effect.suspend(() => {\n      autoUpdater.disableDifferentialDownload = value;\n      return Effect.void;\n    }),\n  checkForUpdates: Effect.suspend(() => {\n    const channel = autoUpdater.channel;\n    return Effect.tryPromise({\n      try: () => autoUpdater.checkForUpdates(),\n      catch: (cause) => new ElectronUpdaterCheckForUpdatesError({ channel, cause }),\n    }).pipe(Effect.asVoid);\n",
+      "after": "    Effect.suspend(() => {\n      autoUpdater.disableDifferentialDownload = value;\n      return Effect.void;\n    }),\n  checkForUpdates: Effect.suspend(() => {\n    disableUpdateTracking(autoUpdater);\n    const channel = autoUpdater.channel;\n    return Effect.tryPromise({\n      try: () => autoUpdater.checkForUpdates(),\n      catch: (cause) => new ElectronUpdaterCheckForUpdatesError({ channel, cause }),\n    }).pipe(Effect.asVoid);\n"
     },
     {
       "path": "apps/mobile/src/features/cloud/CloudAuthProvider.tsx",

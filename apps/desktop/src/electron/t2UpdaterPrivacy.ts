@@ -1,9 +1,12 @@
 import type { AppUpdater } from "electron-updater";
 
+const configuredUpdaters = new WeakSet<object>();
+
 /** Keep updater requests functional without reading or sending an installation identifier. */
 export function disableUpdateTracking(updater: {
   requestHeaders?: NonNullable<AppUpdater["requestHeaders"]> | null;
 }) {
+  if (configuredUpdaters.has(updater)) return;
   Object.defineProperties(updater, {
     getOrCreateStagingUserId: {
       value: async () => "00000000-0000-4000-8000-000000000000",
@@ -18,4 +21,5 @@ export function disableUpdateTracking(updater: {
       },
     },
   });
+  configuredUpdaters.add(updater);
 }
