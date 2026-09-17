@@ -2194,7 +2194,7 @@ function OpenCommandPaletteDialog(props: {
           existing.id,
           clientSettings.sidebarThreadSortOrder,
         );
-        if (latestThread && latestThread.settledOverride !== "settled") {
+        if (latestThread) {
           await navigate({
             to: "/$environmentId/$threadId",
             params: buildThreadRouteParams(
