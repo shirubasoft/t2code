@@ -179,6 +179,31 @@
       "path": "scripts/build-desktop-artifact.ts",
       "before": "  arch?: typeof BuildArch.Type,\n) {\n  const buildConfig: Record<string, unknown> = {\n    appId: DESKTOP_APP_ID,\n    productName: resolveDesktopProductName(version),\n    artifactName: \"T3-Code-${version}-${arch}.${ext}\",\n    electronLanguages: [...DESKTOP_ELECTRON_LANGUAGES],\n    files: [\n      ...DESKTOP_FILE_EXCLUSIONS,\n      ...(platform === \"mac\"\n        ? resolveMacFileExclusions(arch)\n",
       "after": "  arch?: typeof BuildArch.Type,\n) {\n  const buildConfig: Record<string, unknown> = {\n    appId: DESKTOP_APP_ID,\n    productName: resolveDesktopProductName(version),\n    artifactName: \"T2-Code-${version}-${arch}.${ext}\",\n    electronLanguages: [...DESKTOP_ELECTRON_LANGUAGES],\n    files: [\n      ...DESKTOP_FILE_EXCLUSIONS,\n      ...(platform === \"mac\"\n        ? resolveMacFileExclusions(arch)\n"
+    },
+    {
+      "path": "packages/shared/src/cliRelease.ts",
+      "before": "const CLI_RELEASE_REPOSITORY = \"pingdotgg/t3code\";",
+      "after": "const CLI_RELEASE_REPOSITORY = \"shirubasoft/t2code\";"
+    },
+    {
+      "path": "packages/shared/src/cliRelease.test.ts",
+      "before": "\"https://github.com/pingdotgg/t3code/releases/download/v1.2.3\"",
+      "after": "\"https://github.com/shirubasoft/t2code/releases/download/v1.2.3\""
+    },
+    {
+      "path": "packages/shared/src/cliRelease.test.ts",
+      "before": "\"https://api.github.com/repos/pingdotgg/t3code/releases?per_page=100&page=1\"",
+      "after": "\"https://api.github.com/repos/shirubasoft/t2code/releases?per_page=100&page=1\""
+    },
+    {
+      "path": "scripts/install.sh",
+      "before": "repo=\"pingdotgg/t3code\"",
+      "after": "repo=\"shirubasoft/t2code\""
+    },
+    {
+      "path": "scripts/install.ps1",
+      "before": "$repo = \"pingdotgg/t3code\"",
+      "after": "$repo = \"shirubasoft/t2code\""
     }
   ],
   "files": [
