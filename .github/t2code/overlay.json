@@ -179,6 +179,81 @@
       "path": "scripts/build-desktop-artifact.ts",
       "before": "  arch?: typeof BuildArch.Type,\n) {\n  const buildConfig: Record<string, unknown> = {\n    appId: DESKTOP_APP_ID,\n    productName: resolveDesktopProductName(version),\n    artifactName: \"T3-Code-${version}-${arch}.${ext}\",\n    electronLanguages: [...DESKTOP_ELECTRON_LANGUAGES],\n    files: [\n      ...DESKTOP_FILE_EXCLUSIONS,\n      ...(platform === \"mac\"\n        ? resolveMacFileExclusions(arch)\n",
       "after": "  arch?: typeof BuildArch.Type,\n) {\n  const buildConfig: Record<string, unknown> = {\n    appId: DESKTOP_APP_ID,\n    productName: resolveDesktopProductName(version),\n    artifactName: \"T2-Code-${version}-${arch}.${ext}\",\n    electronLanguages: [...DESKTOP_ELECTRON_LANGUAGES],\n    files: [\n      ...DESKTOP_FILE_EXCLUSIONS,\n      ...(platform === \"mac\"\n        ? resolveMacFileExclusions(arch)\n"
+    },
+    {
+      "path": "packages/shared/src/cliRelease.ts",
+      "before": "const CLI_RELEASE_REPOSITORY = \"pingdotgg/t3code\";",
+      "after": "const CLI_RELEASE_REPOSITORY = \"shirubasoft/t2code\";"
+    },
+    {
+      "path": "packages/shared/src/cliRelease.test.ts",
+      "before": "\"https://github.com/pingdotgg/t3code/releases/download/v1.2.3\"",
+      "after": "\"https://github.com/shirubasoft/t2code/releases/download/v1.2.3\""
+    },
+    {
+      "path": "packages/shared/src/cliRelease.test.ts",
+      "before": "\"https://api.github.com/repos/pingdotgg/t3code/releases?per_page=100&page=1\"",
+      "after": "\"https://api.github.com/repos/shirubasoft/t2code/releases?per_page=100&page=1\""
+    },
+    {
+      "path": "scripts/install.sh",
+      "before": "repo=\"pingdotgg/t3code\"",
+      "after": "repo=\"shirubasoft/t2code\""
+    },
+    {
+      "path": "scripts/install.ps1",
+      "before": "$repo = \"pingdotgg/t3code\"",
+      "after": "$repo = \"shirubasoft/t2code\""
+    },
+    {
+      "path": "apps/web/src/components/desktopUpdate.logic.ts",
+      "before": "const DESKTOP_RELEASE_HISTORY_URL = \"https://github.com/pingdotgg/t3code/releases\";",
+      "after": "const DESKTOP_RELEASE_HISTORY_URL = \"https://github.com/shirubasoft/t2code/releases\";"
+    },
+    {
+      "path": "apps/web/src/components/desktopUpdate.logic.test.ts",
+      "before": "\"https://github.com/pingdotgg/t3code/releases/tag/v0.0.30\"",
+      "after": "\"https://github.com/shirubasoft/t2code/releases/tag/v0.0.30\""
+    },
+    {
+      "path": "apps/web/src/components/desktopUpdate.logic.test.ts",
+      "before": "\"https://github.com/pingdotgg/t3code/releases/tag/v0.0.30-nightly.20260728.931\"",
+      "after": "\"https://github.com/shirubasoft/t2code/releases/tag/v0.0.30-nightly.20260728.931\""
+    },
+    {
+      "path": "apps/web/src/components/desktopUpdate.logic.test.ts",
+      "before": "\"https://github.com/pingdotgg/t3code/releases\"",
+      "after": "\"https://github.com/shirubasoft/t2code/releases\""
+    },
+    {
+      "path": "packages/ssh/src/tunnel.test.ts",
+      "before": "    assert.include(script, \"T3_NODE_SCRIPT_PATH=''\");\n    assert.include(\n      script,\n      \"T3_RELEASE_BASE_URL='https://github.com/pingdotgg/t3code/releases/download'\",\n    );\n    assert.include(script, 'T3_RUNTIME_DIR=\"$HOME/.t3/runtime/versions/$T3_ARCHIVE_VERSION\"');\n    assert.include(script, 'T3_ARCHIVE=\"t3-$T3_ARCHIVE_VERSION-$T3_PLATFORM-$T3_ARCH.tar.gz\"');\n",
+      "after": "    assert.include(script, \"T3_NODE_SCRIPT_PATH=''\");\n    assert.include(\n      script,\n      \"T3_RELEASE_BASE_URL='https://github.com/shirubasoft/t2code/releases/download'\",\n    );\n    assert.include(script, 'T3_RUNTIME_DIR=\"$HOME/.t3/runtime/versions/$T3_ARCHIVE_VERSION\"');\n    assert.include(script, 'T3_ARCHIVE=\"t3-$T3_ARCHIVE_VERSION-$T3_PLATFORM-$T3_ARCH.tar.gz\"');\n"
+    },
+    {
+      "path": "apps/web/src/components/desktopUpdate.toast.test.tsx",
+      "before": "    link?.props.onClick?.();\n    await vi.waitFor(() => {\n      expect(openExternal).toHaveBeenCalledWith(\n        \"https://github.com/pingdotgg/t3code/releases/tag/v0.0.30\",\n      );\n    });\n    expect(testState.addToast).toHaveBeenCalledTimes(1);\n",
+      "after": "    link?.props.onClick?.();\n    await vi.waitFor(() => {\n      expect(openExternal).toHaveBeenCalledWith(\n        \"https://github.com/shirubasoft/t2code/releases/tag/v0.0.30\",\n      );\n    });\n    expect(testState.addToast).toHaveBeenCalledTimes(1);\n"
+    },
+    {
+      "path": "apps/web/src/components/desktopUpdate.toast.test.tsx",
+      "before": "\n    await vi.waitFor(() => {\n      expect(openExternal).toHaveBeenCalledWith(\n        \"https://github.com/pingdotgg/t3code/releases/tag/v0.0.30\",\n      );\n    });\n  });\n",
+      "after": "\n    await vi.waitFor(() => {\n      expect(openExternal).toHaveBeenCalledWith(\n        \"https://github.com/shirubasoft/t2code/releases/tag/v0.0.30\",\n      );\n    });\n  });\n"
+    },
+    {
+      "path": "apps/web/src/components/sidebar/SidebarUpdateReleaseNotes.test.tsx",
+      "before": "    );\n\n    expect(anchors.map(({ props }) => props.href)).toEqual([\n      \"https://github.com/pingdotgg/t3code/releases/tag/v0.0.36-nightly.3\",\n      \"https://github.com/pingdotgg/t3code/releases/tag/v0.0.36-nightly.2\",\n      \"https://github.com/pingdotgg/t3code/releases/tag/v0.0.36-nightly.1\",\n    ]);\n    expect(anchors.map(({ props }) => textContent(props.children))).toEqual([\n      \"View release on GitHub\",\n",
+      "after": "    );\n\n    expect(anchors.map(({ props }) => props.href)).toEqual([\n      \"https://github.com/shirubasoft/t2code/releases/tag/v0.0.36-nightly.3\",\n      \"https://github.com/shirubasoft/t2code/releases/tag/v0.0.36-nightly.2\",\n      \"https://github.com/shirubasoft/t2code/releases/tag/v0.0.36-nightly.1\",\n    ]);\n    expect(anchors.map(({ props }) => textContent(props.children))).toEqual([\n      \"View release on GitHub\",\n"
+    },
+    {
+      "path": "apps/web/src/components/sidebar/SidebarUpdateReleaseNotes.test.tsx",
+      "before": "      }),\n    );\n\n    expect(anchors.at(-1)?.props.href).toBe(\"https://github.com/pingdotgg/t3code/releases\");\n    expect(textContent(anchors.at(-1)?.props.children)).toBe(\"1 older release on GitHub\");\n  });\n\n",
+      "after": "      }),\n    );\n\n    expect(anchors.at(-1)?.props.href).toBe(\"https://github.com/shirubasoft/t2code/releases\");\n    expect(textContent(anchors.at(-1)?.props.children)).toBe(\"1 older release on GitHub\");\n  });\n\n"
+    },
+    {
+      "path": "apps/web/src/components/sidebar/SidebarUpdateReleaseNotes.test.tsx",
+      "before": "    expect(preventDefault).toHaveBeenCalledOnce();\n    await vi.waitFor(() => {\n      expect(openExternal).toHaveBeenCalledWith(\n        \"https://github.com/pingdotgg/t3code/releases/tag/v0.0.36-nightly.3\",\n      );\n      expect(testState.addToast).toHaveBeenCalledWith({\n        type: \"error\",\n",
+      "after": "    expect(preventDefault).toHaveBeenCalledOnce();\n    await vi.waitFor(() => {\n      expect(openExternal).toHaveBeenCalledWith(\n        \"https://github.com/shirubasoft/t2code/releases/tag/v0.0.36-nightly.3\",\n      );\n      expect(testState.addToast).toHaveBeenCalledWith({\n        type: \"error\",\n"
     }
   ],
   "files": [
