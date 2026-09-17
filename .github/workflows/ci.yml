@@ -44,6 +44,9 @@ jobs:
     name: Trusted privacy
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -61,7 +64,7 @@ jobs:
           node-version: 24
       - name: Test accepted privacy controls
         working-directory: control
-        run: node --test .github/t2code/verify-private-build.test.mjs
+        run: node --test .github/t2code/verify-private-build.test.mjs .github/t2code/privacy-review.test.mjs
       - name: Validate using accepted policy
         working-directory: control
         run: node .github/t2code/check-candidate.mjs ../candidate
@@ -69,6 +72,7 @@ jobs:
           T2_BASE_SHA: ${{ inputs.base || github.event.pull_request.base.sha || github.sha }}
           T2_CANDIDATE_SHA: ${{ inputs.sha || github.event.pull_request.head.sha || github.sha }}
           T2_SYNC_PR: ${{ inputs.pr || 0 }}
+          GH_TOKEN: ${{ github.token }}
 
   check:
     needs: privacy

@@ -96,11 +96,20 @@ function fixture({ pullRequest = true, legacy = false, current = false } = {}) {
   chmodSync(join(bin, "gh"), 0o755);
   process.env.PATH = `${bin}:${process.env.PATH}`;
   process.env.GITHUB_REPOSITORY = repo;
+  process.env.GITHUB_SHA = base;
   process.env.GITHUB_RUN_ID = "124";
   process.env.GITHUB_OUTPUT = join(directory, "output.txt");
   process.chdir(directory);
   return { base, upstream, head, pr, issues, runs, finishes, releases, releaseRuns, calls };
 }
+
+test("planning refuses a workflow loaded before main changed", async () => {
+  const { calls } = fixture();
+  process.env.GITHUB_SHA = "f".repeat(40);
+  await plan();
+  assert.match(readFileSync("output.txt", "utf8"), /ready=false\nreason=main-changed/);
+  assert.equal(calls.length, 1);
+});
 
 test("a fully current fork recovers a missing accepted release without another migration", async () => {
   const { base, releases, calls } = fixture({ pullRequest: false, current: true });

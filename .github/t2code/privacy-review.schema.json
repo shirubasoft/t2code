@@ -1,0 +1,23 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["decision", "summary", "reviewedPaths", "findings"],
+  "properties": {
+    "decision": { "type": "string", "enum": ["approve", "reject"] },
+    "summary": { "type": "string" },
+    "reviewedPaths": { "type": "array", "items": { "type": "string" } },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "reason", "repair"],
+        "properties": {
+          "path": { "type": "string" },
+          "reason": { "type": "string" },
+          "repair": { "type": "string" }
+        }
+      }
+    }
+  }
+}
