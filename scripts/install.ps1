@@ -5,7 +5,7 @@
 #
 # Environment:
 #   T3CODE_CHANNEL           release train to follow: stable, nightly, or preview
-#                            (default: stable; preview is a maintainers' test train)
+#                            (default: nightly; preview is a maintainers' test train)
 #   T3CODE_VERSION           exact version to install (overrides T3CODE_CHANNEL)
 #   T3CODE_HOME              T3 home directory (default: ~\.t3)
 #   T3CODE_INSTALL_BIN_DIR   where t3.exe is linked (default: ~\.local\bin)
@@ -127,7 +127,7 @@ $arch = switch ($rawArch) {
   default { Fail "unsupported architecture $rawArch" }
 }
 
-$channel = if ($env:T3CODE_CHANNEL) { $env:T3CODE_CHANNEL } else { "stable" }
+$channel = if ($env:T3CODE_CHANNEL) { $env:T3CODE_CHANNEL } else { "nightly" }
 $version = $env:T3CODE_VERSION
 if (-not $version) {
   # Tags are v<semver>; the channel is the prerelease identifier, or none for
@@ -145,7 +145,7 @@ if (-not $version) {
   $version = $tag.Substring(1)
 }
 if ($version -match '-preview\.') {
-  Write-Warning "t3 $version is a preview build. Preview builds are cut by maintainers from unreleased branches to exercise the release pipeline. They can be broken, receive no fixes, and are never offered as updates. Set T3CODE_CHANNEL=stable (the default) for a supported build."
+  Write-Warning "t3 $version is a preview build. Preview builds are cut by maintainers from unreleased branches to exercise the release pipeline. They can be broken, receive no fixes, and are never offered as updates. Set T3CODE_CHANNEL=nightly (the default) for a supported build."
   if ($channel -ne "preview" -and -not $env:T3CODE_VERSION) {
     Fail "refusing a preview build that was not explicitly requested"
   }
