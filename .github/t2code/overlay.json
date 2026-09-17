@@ -204,6 +204,26 @@
       "path": "scripts/install.ps1",
       "before": "$repo = \"pingdotgg/t3code\"",
       "after": "$repo = \"shirubasoft/t2code\""
+    },
+    {
+      "path": "apps/web/src/components/desktopUpdate.logic.ts",
+      "before": "const DESKTOP_RELEASE_HISTORY_URL = \"https://github.com/pingdotgg/t3code/releases\";",
+      "after": "const DESKTOP_RELEASE_HISTORY_URL = \"https://github.com/shirubasoft/t2code/releases\";"
+    },
+    {
+      "path": "apps/web/src/components/desktopUpdate.logic.test.ts",
+      "before": "\"https://github.com/pingdotgg/t3code/releases/tag/v0.0.30\"",
+      "after": "\"https://github.com/shirubasoft/t2code/releases/tag/v0.0.30\""
+    },
+    {
+      "path": "apps/web/src/components/desktopUpdate.logic.test.ts",
+      "before": "\"https://github.com/pingdotgg/t3code/releases/tag/v0.0.30-nightly.20260728.931\"",
+      "after": "\"https://github.com/shirubasoft/t2code/releases/tag/v0.0.30-nightly.20260728.931\""
+    },
+    {
+      "path": "apps/web/src/components/desktopUpdate.logic.test.ts",
+      "before": "\"https://github.com/pingdotgg/t3code/releases\"",
+      "after": "\"https://github.com/shirubasoft/t2code/releases\""
     }
   ],
   "files": [
