@@ -46,6 +46,9 @@ jobs:
   quality:
     needs: metadata
     if: needs.metadata.outputs.ready == 'true'
+    permissions:
+      contents: read
+      actions: read
     uses: ./.github/workflows/ci.yml
     with:
       sha: ${{ needs.metadata.outputs.sha }}
