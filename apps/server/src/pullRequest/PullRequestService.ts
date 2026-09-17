@@ -3,7 +3,6 @@ import {
   isSshRemoteUrl,
   sourceControlRepositorySelector,
 } from "@t3tools/shared/sourceControl";
-import { normalizeGitRemoteUrl } from "@t3tools/shared/git";
 import * as Cache from "effect/Cache";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
@@ -36,7 +35,6 @@ import {
   type PullRequestDiffFileContentsResult,
   type PullRequestDiffStat,
   type PullRequestDiffInput,
-  type PullRequestFilesViewedResult,
   type PullRequestDiffResult,
   type PullRequestInvalidateInput,
   type PullRequestListEntry,
@@ -57,7 +55,6 @@ import {
   type PullRequestReviewerRequestInput,
   type PullRequestLabelCandidateList,
   type PullRequestLabelChangeInput,
-  type PullRequestSetFilesViewedInput,
   type PullRequestSubmitReviewInput,
   PullRequestStack,
   PullRequestSummary,
@@ -73,7 +70,6 @@ import { detectSourceControlProviderFromRemoteUrl } from "@t3tools/shared/source
 
 import { AllowGitHubReserve } from "../sourceControl/GitHubCli.ts";
 import * as ProjectionSnapshotQuery from "../orchestration/Services/ProjectionSnapshotQuery.ts";
-import * as PullRequestFilesViewed from "../persistence/PullRequestFilesViewed.ts";
 import * as SourceControlProviderRegistry from "../sourceControl/SourceControlProviderRegistry.ts";
 import * as SourceControlRateLimit from "../sourceControl/SourceControlRateLimit.ts";
 import {
@@ -84,7 +80,6 @@ import {
 } from "./PullRequestProvider.ts";
 import * as PullRequestReadCache from "./PullRequestReadCache.ts";
 import { PullRequestProviderRegistry } from "./PullRequestProviderRegistry.ts";
-import * as ViewedFiles from "./pullRequestViewedFiles.ts";
 
 export interface PullRequestMergeEvent extends PullRequestRef {
   readonly mergedAt: string;
@@ -133,12 +128,6 @@ const DIFF_CACHE_TTL = Duration.seconds(60);
 const COMMIT_DIFF_CACHE_TTL = Duration.minutes(10);
 /** Sized like the client's own stale time; a row's counts move only when somebody pushes. */
 const LIST_STATS_CACHE_TTL = Duration.seconds(60);
-/**
- * Short, and with no stale window behind it: this is the reader's own bookkeeping, and the
- * press that changes it is the same press the page is already showing optimistically. Held at
- * all only so opening a change request on two devices costs one read.
- */
-const FILES_VIEWED_CACHE_TTL = Duration.seconds(15);
 /** A diff can stay interactive while its next cached value is fetched off the critical path. */
 const DIFF_STALE_WINDOW = Duration.minutes(10);
 /** How long one host's signed-in login is believed without asking its CLI again. */
@@ -150,7 +139,6 @@ const LIST_CACHE_CAPACITY = 64;
 const LIST_STATS_CACHE_CAPACITY = 32;
 const DETAIL_CACHE_CAPACITY = 128;
 const DIFF_CACHE_CAPACITY = 128;
-const FILES_VIEWED_CACHE_CAPACITY = 128;
 const VIEWER_CACHE_CAPACITY = 32;
 
 export type PullRequestError = PullRequestUnavailableError | PullRequestOperationError;
@@ -214,12 +202,6 @@ export class PullRequestService extends Context.Service<
     readonly diffFileContents: (
       input: PullRequestDiffFileContentsInput,
     ) => Effect.Effect<PullRequestDiffFileContentsResult, PullRequestError>;
-    readonly filesViewed: (
-      input: PullRequestRef,
-    ) => Effect.Effect<PullRequestFilesViewedResult, PullRequestError>;
-    readonly setFilesViewed: (
-      input: PullRequestSetFilesViewedInput,
-    ) => Effect.Effect<void, PullRequestError>;
     readonly runAction: (input: PullRequestActionInput) => Effect.Effect<void, PullRequestError>;
     readonly update: (input: PullRequestUpdateInput) => Effect.Effect<void, PullRequestError>;
     readonly comment: (input: PullRequestCommentInput) => Effect.Effect<void, PullRequestError>;
@@ -299,18 +281,13 @@ const REVIEWER_REQUEST_REFUSAL = "You need write access on this repository to as
 const LABEL_CHANGE_REFUSAL = "You need triage access on this repository to change its labels.";
 
 /** A project this page can read: its remote is on a host with an implementation. */
-export interface SupportedProject {
+interface SupportedProject {
   readonly cursorKey: string;
   readonly project: OrchestrationProjectShell;
   readonly api: PullRequestProviderApi;
   readonly repository: string;
   /** The host the repository lives on, which is the account boundary rather than the kind. */
   readonly host: string;
-  /**
-   * The identity's canonical key, which is what this environment's own records are keyed by.
-   * Unique where `repository` is not: Azure's is a bare name that repeats across an organisation.
-   */
-  readonly remote: string;
 }
 
 /**
@@ -471,7 +448,6 @@ function withRateLimitBackoff(
   api: PullRequestProviderApi,
   host: string,
   limits: SourceControlRateLimit.SourceControlRateLimit["Service"],
-  options?: { readonly viewerAllowsPause: boolean },
 ): PullRequestProviderApi {
   const key = { provider: api.kind, host };
   const protect = <A>(
@@ -523,13 +499,7 @@ function withRateLimitBackoff(
   const wrapped = {
     kind: api.kind,
     capabilities: api.capabilities,
-    // Refused during a pause like any other read, except for the caller that asks for the
-    // bypass: a lookup that failed is not held, so letting every background read through would
-    // spawn this host's CLI on each of them and re-extend the pause it was already in.
-    getViewer:
-      options?.viewerAllowsPause === true
-        ? interactive("getViewer", api.getViewer)
-        : wrap("getViewer", api.getViewer),
+    getViewer: wrap("getViewer", api.getViewer),
     ...(api.getRoutingIdentity === undefined ? {} : { getRoutingIdentity: api.getRoutingIdentity }),
     ...(api.withVerifiedCredential === undefined
       ? {}
@@ -565,15 +535,6 @@ function withRateLimitBackoff(
     ...(api.getDiffFileContents === undefined
       ? {}
       : { getDiffFileContents: wrap("getDiffFileContents", api.getDiffFileContents) }),
-    ...(api.getFilesViewed === undefined
-      ? {}
-      : { getFilesViewed: wrap("getFilesViewed", api.getFilesViewed) }),
-    ...(api.setFilesViewed === undefined
-      ? {}
-      : { setFilesViewed: interactive("setFilesViewed", api.setFilesViewed) }),
-    ...(api.getFileRevisions === undefined
-      ? {}
-      : { getFileRevisions: wrap("getFileRevisions", api.getFileRevisions) }),
     runAction: interactive("runAction", api.runAction),
     ...(api.updateChangeRequest === undefined
       ? {}
@@ -607,7 +568,6 @@ export const make = Effect.gen(function* () {
   const projections = yield* ProjectionSnapshotQuery.ProjectionSnapshotQuery;
   const sourceControlProviders = yield* SourceControlProviderRegistry.SourceControlProviderRegistry;
   const rateLimits = yield* SourceControlRateLimit.SourceControlRateLimit;
-  const filesViewedStore = yield* PullRequestFilesViewed.PullRequestFilesViewedRepository;
   const readCache = yield* PullRequestReadCache.PullRequestReadCache;
 
   const refineUnknownProjectKinds = (
@@ -767,10 +727,6 @@ export const make = Effect.gen(function* () {
             api: withRateLimitBackoff(api, host, rateLimits),
             repository,
             host,
-            remote:
-              kind === "azure-devops"
-                ? identity.canonicalKey
-                : normalizeGitRemoteUrl(`https://${host}/${repository}`),
           });
         }
         return { supported, unimplemented, viewerRoots };
@@ -837,14 +793,7 @@ export const make = Effect.gen(function* () {
               );
             }
             return Effect.succeed(
-              route.api.kind === "azure-devops" ||
-                route.repository.toLowerCase() === repository.toLowerCase()
-                ? route
-                : {
-                    ...route,
-                    repository,
-                    remote: normalizeGitRemoteUrl(`https://${host}/${repository}`),
-                  },
+              route.api.kind === "azure-devops" ? route : { ...route, repository },
             );
           }),
         );
@@ -941,10 +890,7 @@ export const make = Effect.gen(function* () {
       if (registered === null) {
         return Effect.die(new Error(`Missing pull request provider: ${kind}`));
       }
-      // Let through a pause: a press the reader is waiting on has to be answered, and the
-      // callers that are not that press are held back at the gate below instead, before they
-      // reach this lookup at all.
-      const api = withRateLimitBackoff(registered, host, rateLimits, { viewerAllowsPause: true });
+      const api = withRateLimitBackoff(registered, host, rateLimits);
       return Effect.firstSuccessOf(roots.map((cwd) => api.getViewer({ cwd, host }))).pipe(
         Effect.map((viewer) => ({
           host,
@@ -977,7 +923,6 @@ export const make = Effect.gen(function* () {
   const resolveViewers = (
     projects: ReadonlyArray<SupportedProject>,
     viewerRoots: WorkspaceProjects["viewerRoots"],
-    options?: { readonly allowPaused: boolean },
   ) =>
     Effect.forEach(
       [...new Set(projects.map(({ host }) => host))],
@@ -993,33 +938,8 @@ export const make = Effect.gen(function* () {
           // unreadable worktree would otherwise report the whole host as signed out.
           const roots =
             viewerRoots.get(host) ?? forHost.map(({ project }) => project.workspaceRoot);
-          // Nothing about the caller is in the key. A listing and a press for the same host and
-          // roots are the same lookup, and putting them on separate flights would spawn two of
-          // this host's CLIs on a cold page load, which is the coalescing this exists for.
           const key = JSON.stringify([host, api.kind, [...new Set(roots)].sort()]);
-          if (options?.allowPaused === true) return Cache.get(viewerFlights, key);
-          // The pause is checked here rather than inside the lookup, so that it holds back the
-          // callers nobody is waiting on without splitting the flight they share with a press.
-          // A failed lookup is held nowhere, so letting a background read through would spawn
-          // this host's CLI on every refresh for as long as the pause lasted, and re-extend it.
-          return rateLimits.check({ provider: api.kind, host }).pipe(
-            Effect.flatMap(() => Cache.get(viewerFlights, key)),
-            Effect.catch((error) =>
-              Effect.succeed<ResolvedViewer>({
-                host,
-                kind: api.kind,
-                viewer: null,
-                error: new PullRequestProviderError({
-                  provider: api.kind,
-                  operation: "getViewer",
-                  reason: "rate-limited",
-                  detail: error.detail,
-                  retryAt: error.retryAt,
-                  cause: error,
-                }),
-              }),
-            ),
-          );
+          return Cache.get(viewerFlights, key);
         }),
       { concurrency: REPOSITORY_CONCURRENCY },
     );
@@ -1777,43 +1697,6 @@ export const make = Effect.gen(function* () {
       }),
     );
 
-  const context = yield* Effect.context<never>();
-  /** Runs a refresh as its own fiber, for the reads that answer from a held value first. */
-  const runFork = Effect.runForkWith(context);
-
-  /**
-   * Who the host says the reader is, for the paths whose rows are keyed by it. A lookup that
-   * failed is refused rather than answered as the unnamed reader: a momentarily signed-out CLI
-   * would otherwise hide every tick this reader has made and file the next press under rows that
-   * are orphaned once it recovers. The reader is waiting on every one of these paths, so the
-   * lookup is let through a host's backoff rather than turning a pause into a refusal, and only
-   * here, where the bypass is bounded by what the reader does.
-   */
-  const requiredViewerOf = (
-    project: SupportedProject,
-    operation: string,
-  ): Effect.Effect<string | null, PullRequestError> =>
-    resolveViewers([project], new Map(), { allowPaused: true }).pipe(
-      Effect.flatMap(([resolved]) => {
-        const error = resolved?.error ?? null;
-        return error === null
-          ? Effect.succeed(resolved?.viewer ?? null)
-          : Effect.fail(toPullRequestError(operation)(error));
-      }),
-    );
-
-  const setFilesViewed: PullRequestService["Service"]["setFilesViewed"] = (input) =>
-    canonicalRef(input).pipe(
-      Effect.flatMap((ref) =>
-        viewedFiles.setFilesViewed(input).pipe(
-          // Deliberately not `invalidatedByMutation`: ticking a file off says nothing about the
-          // change request, and dropping a 300-file diff on every checkbox is the whole cost of
-          // the feature. Only this reader's own bookkeeping is forgotten.
-          Effect.tap(() => Effect.sync(() => bumpFilesViewedEpoch(ref))),
-        ),
-      ),
-    );
-
   const runAction = (input: PullRequestActionInput): Effect.Effect<string, PullRequestError> =>
     requireProject(input).pipe(
       Effect.flatMap((project): Effect.Effect<string, PullRequestError> => {
@@ -2451,6 +2334,8 @@ export const make = Effect.gen(function* () {
       return { stats: stats.flat() };
     });
 
+  const context = yield* Effect.context<never>();
+  const runFork = Effect.runForkWith(context);
   const revalidate = <A, E>(read: Effect.Effect<A, E>) =>
     Effect.context<never>().pipe(
       Effect.flatMap((caller) =>
@@ -2609,34 +2494,14 @@ export const make = Effect.gen(function* () {
       if (oldest !== undefined) recentStats.delete(oldest);
     }
   };
-  const bumpEpoch = (epochs: Map<string, number>, ref: PullRequestRef) => {
+  const bumpRefEpoch = (ref: PullRequestRef) => {
     const scope = refScope(ref);
-    if (!epochs.has(scope) && epochs.size >= REF_EPOCH_CAPACITY) {
-      const oldest = epochs.keys().next().value;
-      if (oldest !== undefined) epochs.delete(oldest);
+    if (!refEpochs.has(scope) && refEpochs.size >= REF_EPOCH_CAPACITY) {
+      const oldest = refEpochs.keys().next().value;
+      if (oldest !== undefined) refEpochs.delete(oldest);
     }
-    epochs.set(scope, ++epochCounter);
+    refEpochs.set(scope, ++epochCounter);
   };
-  const bumpRefEpoch = (ref: PullRequestRef) => bumpEpoch(refEpochs, ref);
-  // Its own scope, so a press forgets the reader's ticks and nothing else. The read's key
-  // carries both epochs, which is what makes an ordinary refresh re-ask for these too.
-  const filesViewedEpochs = new Map<string, number>();
-  const filesViewedEpoch = (ref: PullRequestRef) => filesViewedEpochs.get(refScope(ref)) ?? 0;
-  const bumpFilesViewedEpoch = (ref: PullRequestRef) => bumpEpoch(filesViewedEpochs, ref);
-
-  /** Bumped by a whole-workspace refresh, the one drop no single reference's epoch covers. */
-  let everyFileRevisionEpoch = 0;
-  // Built after the epochs because it reads two of them: taken as an argument any higher,
-  // `refEpoch` would be read while its `const` was still in its dead zone and this would throw.
-  const viewedFiles = ViewedFiles.make({
-    filesViewedStore,
-    requireProject,
-    requiredViewerOf,
-    toPullRequestError,
-    runFork,
-    refEpoch,
-    fileRevisionsEpoch: () => everyFileRevisionEpoch,
-  });
 
   /** The positional filter slot of a cache key, back as the record `listUncached` takes. */
   const filtersOfKey = (
@@ -2920,25 +2785,6 @@ export const make = Effect.gen(function* () {
     return staleDiff(key, Cache.get(diffCache, key));
   };
 
-  const filesViewedCache = yield* Cache.makeWith(
-    (key: string) => {
-      const [referenceKey] = JSON.parse(key) as [string, number];
-      return viewedFiles.filesViewed(refOfCacheKey(referenceKey));
-    },
-    {
-      capacity: FILES_VIEWED_CACHE_CAPACITY,
-      timeToLive: (exit) => (Exit.isSuccess(exit) ? FILES_VIEWED_CACHE_TTL : Duration.zero),
-    },
-  );
-  // Canonicalised before it is keyed: both epochs are bumped against the remote's own spelling,
-  // so a reference keyed as the client spelled it would never see a refresh or a press.
-  const filesViewed: PullRequestService["Service"]["filesViewed"] = (input) =>
-    canonicalRef(input).pipe(
-      Effect.flatMap((ref) =>
-        Cache.get(filesViewedCache, JSON.stringify([refCacheKey(ref), filesViewedEpoch(ref)])),
-      ),
-    );
-
   const listStatsCache = yield* Cache.makeWith(
     (key: string) => {
       const [, refs] = JSON.parse(key) as [number, ReadonlyArray<[string, string, number, number]>];
@@ -3000,14 +2846,6 @@ export const make = Effect.gen(function* () {
     "PullRequestService.invalidate",
   )(function* (input, options) {
     const reference = input.reference;
-    if (input.filesViewedOnly === true) {
-      return yield* reference === undefined
-        ? Cache.invalidateAll(filesViewedCache)
-        : canonicalRef(reference).pipe(
-            Effect.flatMap((ref) => Effect.sync(() => bumpFilesViewedEpoch(ref))),
-            Effect.ignore,
-          );
-    }
     if (reference !== undefined) {
       yield* canonicalRef(reference).pipe(
         Effect.flatMap((ref) =>
@@ -3019,7 +2857,6 @@ export const make = Effect.gen(function* () {
       );
     } else {
       listingsEpoch = ++epochCounter;
-      everyFileRevisionEpoch = ++epochCounter;
       viewersByHost.clear();
       yield* Cache.invalidateAll(viewerFlights);
     }
@@ -3134,8 +2971,6 @@ export const make = Effect.gen(function* () {
     threadComments,
     diff: credentialCached(diff),
     diffFileContents,
-    filesViewed: credentialCached(filesViewed),
-    setFilesViewed,
     runAction: runActionAndInvalidate,
     update: invalidatedByMutation(update),
     comment: invalidatedByMutation(comment),

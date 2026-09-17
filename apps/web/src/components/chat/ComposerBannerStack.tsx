@@ -13,7 +13,6 @@ export interface ComposerBannerStackItem {
   readonly id: string;
   readonly variant: ComposerBannerVariant;
   readonly priority?: "urgent" | "activity" | "notice";
-  readonly compact?: boolean;
   readonly icon: ReactNode;
   readonly title: ReactNode;
   readonly description?: ReactNode;
@@ -271,20 +270,22 @@ function ComposerBannerStackAlert({
       variant={item.variant}
       density="comfortable"
     >
-      <ComposerBanner.Row layout={item.compact ? "wrap-actions-narrow" : "wrap-actions"}>
+      <ComposerBanner.Row layout="wrap-actions-narrow">
         <ComposerBanner.Icon className="h-(--composer-banner-icon-column) self-start">
           {item.icon}
         </ComposerBanner.Icon>
         <ComposerBanner.Content className="whitespace-nowrap">
-          <span className="min-w-0 truncate font-medium leading-7 sm:leading-6">{item.title}</span>
+          <span
+            className={cn(
+              "min-w-0 font-medium leading-7 sm:leading-6",
+              typeof item.title === "string" && "truncate",
+            )}
+          >
+            {item.title}
+          </span>
           {item.description ? (
-            <span className={item.compact ? "contents" : "flex min-w-8 flex-1 items-center gap-1"}>
-              <span
-                className={cn(
-                  "min-w-0 truncate text-muted-foreground",
-                  item.compact && "shrink-[9999] @max-[400px]:sr-only",
-                )}
-              >
+            <>
+              <span className="min-w-0 shrink-[9999] truncate text-muted-foreground @max-[400px]:sr-only">
                 {item.description}
               </span>
               <Popover>
@@ -295,27 +296,21 @@ function ComposerBannerStackAlert({
                       size="icon-xs"
                       variant="ghost"
                       aria-label="Show notice details"
-                      className={cn(
-                        "flex-none text-muted-foreground hover:text-foreground",
-                        item.compact && "hidden @max-[400px]:inline-flex",
-                      )}
+                      className="hidden flex-none text-muted-foreground hover:text-foreground @max-[400px]:inline-flex"
                     />
                   }
                 >
                   <InfoIcon className="size-3.5" />
                 </PopoverTrigger>
                 <PopoverPopup
-                  aria-label="Notice details"
                   tooltipStyle
                   side="top"
-                  className="max-w-80 whitespace-normal text-pretty wrap-anywhere"
+                  className="max-w-72 whitespace-normal text-pretty"
                 >
-                  <ComposerBanner.Scroll className="max-h-[min(var(--available-height),24rem,40dvh)]">
-                    {item.description}
-                  </ComposerBanner.Scroll>
+                  {item.description}
                 </PopoverPopup>
               </Popover>
-            </span>
+            </>
           ) : null}
         </ComposerBanner.Content>
         {item.actions || item.onDismiss ? (

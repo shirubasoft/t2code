@@ -755,11 +755,7 @@ const buildAppUnderTest = (options?: {
     );
 
     const servedRoutesLayer = HttpRouter.serve(
-      // Viewed-file marks for a host that keeps none of its own are rows, so the routes want a
-      // database. Its own, in memory: nothing here shares a table with the auth store.
-      makeRoutesLayer.pipe(
-        Layer.provide(Layer.mergeAll(serviceLauncherClientLayer, SqlitePersistenceMemory)),
-      ),
+      makeRoutesLayer.pipe(Layer.provide(serviceLauncherClientLayer)),
       {
         disableListenLog: true,
         disableLogger: true,

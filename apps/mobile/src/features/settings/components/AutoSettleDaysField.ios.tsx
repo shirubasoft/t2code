@@ -2,7 +2,6 @@ import { Button, Host, HStack, Picker, Popover, Text, VStack } from "@expo/ui/sw
 import {
   accessibilityLabel,
   buttonStyle,
-  disabled,
   font,
   foregroundStyle,
   frame,
@@ -35,13 +34,11 @@ export function AutoSettleDaysField(props: AutoSettleDaysFieldProps) {
         <Popover.Trigger>
           <Button
             onPress={() => {
-              if (props.disabled) return;
               setDraft(props.value);
               setOpen(true);
             }}
             modifiers={[
               buttonStyle("bordered"),
-              disabled(props.disabled),
               accessibilityLabel(`Days before auto-settle: ${props.value}`),
               frame({ minWidth: 64, minHeight: 44 }),
               foregroundStyle(colors["--color-primary"]),
@@ -84,7 +81,7 @@ export function AutoSettleDaysField(props: AutoSettleDaysFieldProps) {
                 label="Done"
                 onPress={() => {
                   setOpen(false);
-                  if (!props.disabled && draft !== props.value) props.onValueChange(draft);
+                  if (draft !== props.value) props.onValueChange(draft);
                 }}
                 modifiers={[foregroundStyle(colors["--color-primary"])]}
               />
