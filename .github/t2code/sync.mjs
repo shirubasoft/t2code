@@ -470,7 +470,15 @@ export async function completeCandidate(state, approval, candidateSha, number) {
   refreshBaseline(approval, state.base, process.cwd());
   git(["config", "user.name", "T2 Code sync"]);
   git(["config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com"]);
-  git(["commit", "-m", "chore(sync): record independent privacy approval", "--", baselinePath]);
+  git([
+    "commit",
+    "-m",
+    "chore(sync): record independent privacy approval",
+    "-m",
+    `Upstream: ${state.upstream}\nReviewed base: ${state.base}`,
+    "--",
+    baselinePath,
+  ]);
   const approvedSha = assertSha(git(["rev-parse", "HEAD"]).stdout);
   git([
     "push",

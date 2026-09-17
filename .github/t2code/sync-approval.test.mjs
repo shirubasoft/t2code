@@ -144,6 +144,10 @@ for (const decision of ["ready", "blocked"])
         inputs: { pr: "12", sha: finalizedSha, base: f.base },
       });
       NodeAssert.equal(f.git("rev-parse", `refs/remotes/origin/${policy.branch}`), finalizedSha);
+      NodeAssert.equal(
+        f.git("log", "--format=%B", "-1", finalizedSha).match(/^Upstream: ([0-9a-f]{40})$/m)?.[1],
+        f.state.upstream,
+      );
       process.env.T2_CANDIDATE_SHA = finalizedSha;
       await checkCandidate(f.candidate);
       NodeFS.appendFileSync(
