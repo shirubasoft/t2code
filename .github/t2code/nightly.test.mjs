@@ -1,5 +1,5 @@
-import * as Assert from "node:assert/strict";
-import * as Test from "node:test";
+import * as NodeAssert from "node:assert/strict";
+import * as NodeTest from "node:test";
 import { nightlyVersion, selectNightly, publishedNightly } from "./nightly.mjs";
 
 const release = (id, options = {}) => ({
@@ -10,11 +10,11 @@ const release = (id, options = {}) => ({
   published_at: `2026-09-17T${String(id).padStart(2, "0")}:00:00Z`,
   ...options,
 });
-Test.test(
+NodeTest.test(
   "bootstrap follows the newest published nightly, ignoring main, stable, previews and drafts",
   () => {
     const latest = release(3);
-    Assert.equal(
+    NodeAssert.equal(
       selectNightly(
         [
           release(8, { tag_name: "main" }),
@@ -32,35 +32,35 @@ Test.test(
     );
   },
 );
-Test.test("backlogs follow publication order and do not skip intermediate nightlies", () => {
+NodeTest.test("backlogs follow publication order and do not skip intermediate nightlies", () => {
   const first = release(1),
     second = release(2),
     third = release(3);
-  Assert.equal(
+  NodeAssert.equal(
     selectNightly([third, first, second], { tag: first.tag_name, releaseId: 1 }),
     second,
   );
-  Assert.equal(
+  NodeAssert.equal(
     selectNightly([third, first, second], { tag: second.tag_name, releaseId: 2 }),
     third,
   );
-  Assert.equal(
+  NodeAssert.equal(
     selectNightly([third, first, second], { tag: third.tag_name, releaseId: 3 }),
     undefined,
   );
 });
-Test.test("removed and recreated upstream releases fail closed", () => {
-  Assert.throws(
+NodeTest.test("removed and recreated upstream releases fail closed", () => {
+  NodeAssert.throws(
     () => selectNightly([release(2)], { tag: release(1).tag_name, releaseId: 1 }),
     /removed or replaced/,
   );
-  Assert.throws(
+  NodeAssert.throws(
     () => selectNightly([release(2)], { tag: release(2).tag_name, releaseId: 1 }),
     /removed or replaced/,
   );
 });
-Test.test("only exact nightly version tags can be published", () => {
-  Assert.equal(nightlyVersion("v0.0.43-nightly.20260917.1866"), "0.0.43-nightly.20260917.1866");
+NodeTest.test("only exact nightly version tags can be published", () => {
+  NodeAssert.equal(nightlyVersion("v0.0.43-nightly.20260917.1866"), "0.0.43-nightly.20260917.1866");
   for (const tag of [
     "main",
     "v0.1.42",
@@ -68,6 +68,6 @@ Test.test("only exact nightly version tags can be published", () => {
     "v0.0.43-nightly.20260917.1866\nsha=other",
     undefined,
   ])
-    Assert.throws(() => nightlyVersion(tag), /nightly version tag/);
-  Assert.equal(publishedNightly(release(1, { prerelease: false })), false);
+    NodeAssert.throws(() => nightlyVersion(tag), /nightly version tag/);
+  NodeAssert.equal(publishedNightly(release(1, { prerelease: false })), false);
 });

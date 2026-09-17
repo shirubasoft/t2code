@@ -184,7 +184,7 @@ NodeTest.test("release assembly rejects modified installer bytes and missing arc
 });
 
 NodeTest.test("release assembly rejects stable feeds and mismatched nightly identities", () => {
-  const { assets, assemble } = fixture();
+  const { assemble } = fixture();
   const wrongVersion = assemble({ T2_RELEASE_VERSION: "0.1.42" });
   NodeAssert.notEqual(wrongVersion.status, 0);
   NodeAssert.match(wrongVersion.stderr, /Version must match/);
