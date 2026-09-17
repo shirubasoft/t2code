@@ -43,9 +43,14 @@ and absence of external requests. Add focused coverage for compatibility repairs
 Do not skip tests, remove coverage, or weaken protected privacy regressions.
 A conflicting upstream expectation is a repair task, not a reason for manual
 acceptance. Hosted CI determines whether the repaired candidate works.
-If an unresolved concrete obstacle remains after investigation, return "blocked"
-with every safe partial repair and explain the remaining work. The controller
-retains those repairs in the PR for independent review and the next attempt.
+Continue until every identified repair within your permissions is implemented.
+Finding another unsafe call site or an upstream test to adapt is work to finish
+in this run, not a reason to return a partial candidate. Trace calls through the
+local-edition adapters and guards before deciding they can make external requests.
+Return "blocked" only when a specific required repair is prevented by a protected
+boundary, unavailable input, or tool failure. Explain the constraint and why you
+cannot complete that repair. Include every safe partial repair; the controller
+retains those edits in the PR for independent review and the next attempt.
 Never replace T2 with an upstream release or add upstream download fallbacks.
 
 Use the read-only shell to inspect the prepared checkout at /source and review
