@@ -52,10 +52,8 @@ test("the real overlay recreates the upstream snapshot without touching its lock
   const root = mkdtempSync(join(tmpdir(), "t2-overlay-"));
   const upstream = readJson(join(controlRoot, ".github/t2code/upstream.json")).commit;
   try {
-    git(["clone", "--shared", "--no-checkout", controlRoot, root]);
-    git(["checkout", "--detach", upstream], root);
+    git(["worktree", "add", "--detach", root, upstream], controlRoot);
     // Copy only the declarative configuration. Added source comes from trusted controlRoot.
-    git(["checkout", "HEAD", "--", ".github"], root);
     mkdirSync(join(root, ".github/t2code"), { recursive: true });
     for (const name of ["overlay.json", "upstream.json"])
       cpSync(join(controlRoot, ".github/t2code", name), join(root, ".github/t2code", name));
@@ -63,11 +61,13 @@ test("the real overlay recreates the upstream snapshot without touching its lock
     apply(root);
     git(["add", "--all"], root);
     verify(root);
+    git(["submodule", "foreach", "--recursive", "true"], root);
     assert.equal(readFileSync(join(root, "pnpm-lock.yaml"), "utf8"), lock);
     const path = join(root, "packages/shared/src/t2Analytics.ts");
     writeFileSync(path, readFileSync(path, "utf8").replace("return false", "return true"));
     assert.throws(() => verify(root), /declared patch/);
   } finally {
+    git(["worktree", "remove", "--force", root], controlRoot);
     rmSync(root, { recursive: true, force: true });
   }
 });

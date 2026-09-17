@@ -129,9 +129,9 @@ function propose() {
   const message = `chore(sync): follow upstream ${upstream.slice(0, 12)}\n\n${result.summary}\n\nUpstream: ${upstream}\n`;
   const sha = git([
     "-c",
-    "user.name=t2code-sync[bot]",
+    "user.name=github-actions[bot]",
     "-c",
-    "user.email=t2code-sync@users.noreply.github.com",
+    "user.email=41898282+github-actions[bot]@users.noreply.github.com",
     "commit-tree",
     tree,
     "-p",
