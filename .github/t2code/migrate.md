@@ -22,7 +22,8 @@ allowAnalyticsExport always returns false and cannot be enabled by settings.
 
 Only runtime source and its focused tests under apps/_/src or packages/_/src can
 be patched. Do not change the files list, installer metadata or package exports.
-The files list names fork-owned additions that are restored separately.
+The files list names fork-owned additions that are restored separately. Their
+source is available under /review/fork-files for inspecting existing protections.
 
 If no patch needs changing, return decision ready and an empty edits array.
 If a discovered sink cannot be blocked through this interface, return blocked

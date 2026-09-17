@@ -56,6 +56,10 @@ function plan() {
     git(["diff", "--no-ext-diff", from, upstream, "--", ".", ":!.repos"]),
   );
   writeFileSync("review/overlay.json", readFileSync(".github/t2code/overlay.json"));
+  for (const path of readJson(".github/t2code/overlay.json").files) {
+    mkdirSync(resolve("review/fork-files", path, ".."), { recursive: true });
+    cpSync(path, resolve("review/fork-files", path));
+  }
   output({ ready: true, base, upstream });
 }
 export function validateOverlay(candidate, accepted) {
