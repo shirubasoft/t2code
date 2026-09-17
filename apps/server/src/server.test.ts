@@ -5043,7 +5043,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
-  it.effect("proxies browser OTLP trace exports through the server", () =>
+  it.effect("keeps browser OTLP traces local with a configured JSON exporter", () =>
     Effect.gen(function* () {
       const upstreamRequests: Array<{
         readonly body: string;
@@ -5221,16 +5221,11 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
           },
         },
       ]);
-      assert.deepEqual(upstreamRequests, [
-        {
-          body: jsonRequestBody(payload),
-          contentType: "application/json",
-        },
-      ]);
+      assert.deepEqual(upstreamRequests, []);
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
-  it.effect("forwards browser OTLP traces as protobuf when the protocol is http/protobuf", () =>
+  it.effect("keeps browser OTLP traces local with a configured protobuf exporter", () =>
     Effect.gen(function* () {
       const upstreamRequests: Array<{
         readonly body: string;
@@ -5317,20 +5312,9 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       });
 
       assert.equal(response.status, 204);
-      // The local collector still decodes the browser's JSON before forwarding.
+      // The local collector still decodes the browser's JSON without forwarding it.
       assert.equal(localTraceRecords.length, 1);
-      assert.equal(upstreamRequests.length, 1);
-      const forwarded = upstreamRequests[0];
-      assert.notEqual(forwarded, undefined);
-      if (!forwarded) {
-        return;
-      }
-      assert.equal(forwarded.contentType, "application/x-protobuf");
-      // Protobuf strings are raw UTF-8, so the span and service names survive
-      // the stub's utf8 decode even though the surrounding bytes don't.
-      assert.notEqual(forwarded.body[0], "{");
-      assert.include(forwarded.body, "client.protobuf.test");
-      assert.include(forwarded.body, "t3-web");
+      assert.deepEqual(upstreamRequests, []);
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 

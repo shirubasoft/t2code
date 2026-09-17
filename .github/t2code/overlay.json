@@ -21,6 +21,16 @@
       "after": "  if (!publishableKey || !relayUrl) {\n    return props.children;\n  }\n\n  return (\n    <ClerkProvider telemetry={false} publishableKey={publishableKey} tokenCache={tokenCache}>\n      <CloudAuthBridge>{props.children}</CloudAuthBridge>\n    </ClerkProvider>\n  );\n}\n"
     },
     {
+      "path": "apps/server/src/http.ts",
+      "before": "  AuthOrchestrationReadScope,\n  EnvironmentHttpApi,\n} from \"@t3tools/contracts\";\nimport { isDevProxiedPath } from \"@t3tools/shared/devProxy\";\nimport { decodeOtlpTraceRecords } from \"@t3tools/shared/observability\";\nimport * as Data from \"effect/Data\";\nimport * as Effect from \"effect/Effect\";\nimport * as FileSystem from \"effect/FileSystem\";\nimport * as Layer from \"effect/Layer\";\nimport * as Option from \"effect/Option\";\n",
+      "after": "  AuthOrchestrationReadScope,\n  EnvironmentHttpApi,\n} from \"@t3tools/contracts\";\nimport { isDevProxiedPath } from \"@t3tools/shared/devProxy\";\nimport { decodeOtlpTraceRecords } from \"@t3tools/shared/observability\";\nimport { allowAnalyticsExport } from \"@t3tools/shared/t2Analytics\";\nimport * as Data from \"effect/Data\";\nimport * as Effect from \"effect/Effect\";\nimport * as FileSystem from \"effect/FileSystem\";\nimport * as Layer from \"effect/Layer\";\nimport * as Option from \"effect/Option\";\n"
+    },
+    {
+      "path": "apps/server/src/http.ts",
+      "before": "          bodyJson,\n        }),\n      ),\n    );\n\n    if (otlpTracesUrl === undefined) {\n      return HttpServerResponse.empty({ status: 204 });\n    }\n\n    return yield* httpClient\n      .post(otlpTracesUrl, {\n",
+      "after": "          bodyJson,\n        }),\n      ),\n    );\n\n    if (!allowAnalyticsExport() || otlpTracesUrl === undefined) {\n      return HttpServerResponse.empty({ status: 204 });\n    }\n\n    return yield* httpClient\n      .post(otlpTracesUrl, {\n"
+    },
+    {
       "path": "apps/server/src/observability/Layers/Observability.ts",
       "before": "import { httpHeaderRedactionLayer } from \"@t3tools/shared/httpObservability\";\nimport {\n  makeLocalFileTracer,\n  makeTraceSink,\n  otlpSerializationLayer,\n",
       "after": "import { allowAnalyticsExport } from \"@t3tools/shared/t2Analytics\";\nimport { httpHeaderRedactionLayer } from \"@t3tools/shared/httpObservability\";\nimport {\n  makeLocalFileTracer,\n  makeTraceSink,\n  otlpSerializationLayer,\n"
@@ -34,6 +44,21 @@
       "path": "apps/server/src/observability/Layers/Observability.ts",
       "before": "        );\n      }),\n    ).pipe(Layer.provide(OtlpExporter.layerFlusher), Layer.provideMerge(serializationLayer));\n\n    const metricsLayer =\n      config.otlpMetricsUrl === undefined\n        ? Layer.empty\n        : OtlpMetrics.layer({\n            url: config.otlpMetricsUrl,\n            exportInterval: `${config.otlpExportIntervalMs} millis`,\n            headers: config.otlpHeaders,\n",
       "after": "        );\n      }),\n    ).pipe(Layer.provide(OtlpExporter.layerFlusher), Layer.provideMerge(serializationLayer));\n\n    const metricsLayer =\n      !allowAnalyticsExport() || config.otlpMetricsUrl === undefined\n        ? Layer.empty\n        : OtlpMetrics.layer({\n            url: config.otlpMetricsUrl,\n            exportInterval: `${config.otlpExportIntervalMs} millis`,\n            headers: config.otlpHeaders,\n"
+    },
+    {
+      "path": "apps/server/src/server.test.ts",
+      "before": "        assert.equal(response.environment.environmentId, testEnvironmentDescriptor.environmentId);\n        assert.equal(response.auth.policy, \"desktop-managed-local\");\n      }).pipe(Effect.provide(NodeHttpServer.layerTest)),\n  );\n\n  it.effect(\"proxies browser OTLP trace exports through the server\", () =>\n    Effect.gen(function* () {\n      const upstreamRequests: Array<{\n        readonly body: string;\n        readonly contentType: string | null;\n      }> = [];\n",
+      "after": "        assert.equal(response.environment.environmentId, testEnvironmentDescriptor.environmentId);\n        assert.equal(response.auth.policy, \"desktop-managed-local\");\n      }).pipe(Effect.provide(NodeHttpServer.layerTest)),\n  );\n\n  it.effect(\"keeps browser OTLP traces local with a configured JSON exporter\", () =>\n    Effect.gen(function* () {\n      const upstreamRequests: Array<{\n        readonly body: string;\n        readonly contentType: string | null;\n      }> = [];\n"
+    },
+    {
+      "path": "apps/server/src/server.test.ts",
+      "before": "          status: {\n            code: \"STATUS_CODE_OK\",\n          },\n        },\n      ]);\n      assert.deepEqual(upstreamRequests, [\n        {\n          body: jsonRequestBody(payload),\n          contentType: \"application/json\",\n        },\n      ]);\n    }).pipe(Effect.provide(NodeHttpServer.layerTest)),\n  );\n\n  it.effect(\"forwards browser OTLP traces as protobuf when the protocol is http/protobuf\", () =>\n    Effect.gen(function* () {\n      const upstreamRequests: Array<{\n        readonly body: string;\n        readonly contentType: string | null;\n      }> = [];\n",
+      "after": "          status: {\n            code: \"STATUS_CODE_OK\",\n          },\n        },\n      ]);\n      assert.deepEqual(upstreamRequests, []);\n    }).pipe(Effect.provide(NodeHttpServer.layerTest)),\n  );\n\n  it.effect(\"keeps browser OTLP traces local with a configured protobuf exporter\", () =>\n    Effect.gen(function* () {\n      const upstreamRequests: Array<{\n        readonly body: string;\n        readonly contentType: string | null;\n      }> = [];\n"
+    },
+    {
+      "path": "apps/server/src/server.test.ts",
+      "before": "        // @effect-diagnostics-next-line preferSchemaOverJson:off\n        body: HttpBody.text(JSON.stringify(payload), \"application/json\"),\n      });\n\n      assert.equal(response.status, 204);\n      // The local collector still decodes the browser's JSON before forwarding.\n      assert.equal(localTraceRecords.length, 1);\n      assert.equal(upstreamRequests.length, 1);\n      const forwarded = upstreamRequests[0];\n      assert.notEqual(forwarded, undefined);\n      if (!forwarded) {\n        return;\n      }\n      assert.equal(forwarded.contentType, \"application/x-protobuf\");\n      // Protobuf strings are raw UTF-8, so the span and service names survive\n      // the stub's utf8 decode even though the surrounding bytes don't.\n      assert.notEqual(forwarded.body[0], \"{\");\n      assert.include(forwarded.body, \"client.protobuf.test\");\n      assert.include(forwarded.body, \"t3-web\");\n    }).pipe(Effect.provide(NodeHttpServer.layerTest)),\n  );\n\n  it.effect(\"responds to browser OTLP trace preflight requests with CORS headers\", () =>\n    Effect.gen(function* () {\n",
+      "after": "        // @effect-diagnostics-next-line preferSchemaOverJson:off\n        body: HttpBody.text(JSON.stringify(payload), \"application/json\"),\n      });\n\n      assert.equal(response.status, 204);\n      // The local collector still decodes the browser's JSON without forwarding it.\n      assert.equal(localTraceRecords.length, 1);\n      assert.deepEqual(upstreamRequests, []);\n    }).pipe(Effect.provide(NodeHttpServer.layerTest)),\n  );\n\n  it.effect(\"responds to browser OTLP trace preflight requests with CORS headers\", () =>\n    Effect.gen(function* () {\n"
     },
     {
       "path": "apps/server/src/telemetry/AnalyticsService.test.ts",
