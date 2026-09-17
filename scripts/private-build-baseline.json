@@ -840,7 +840,7 @@
     "scripts/sync-third-party-license-notices.ts": "7da1f5380d121dd04bf632dfa4e0de3994dc05c774d9f868ecad3e2cd57cf580",
     "scripts/tsconfig.json": "8fb473f1832cee5c2d6731fe421bafa5371b9993771a6757a0d8d67324d071f2",
     "scripts/update-release-package-versions.ts": "58ff8451ca40220e1d36c052521b1ed0e10313fe6d191dff06c1f915d9b59938",
-    "scripts/verify-private-build.mjs": "64ba95dffc84e58ffc91c81f399f97337db26d08754b2bfc5db9df1611bf9cc4",
+    "scripts/verify-private-build.mjs": "c39f9b0ff5aa127aac698c4e4b08db706f2a2648cc1738454d42a2e41c5b7978",
     "t3.json": "2d8f44f6a1c37f8f5102af01ebbd31c9fe4bd541fb653b739d50c004b68c0809",
     "third-party-licenses.config.json": "0a1b41a7a0bc7952431ed8632dee6337f3b3ea8abb0fbb3c342e8d86c02fe4ea",
     "tsconfig.base.json": "230d669e7dd60016efc4115c0e6de91f4b88c64bd2bc28d2104401303438ccdb",

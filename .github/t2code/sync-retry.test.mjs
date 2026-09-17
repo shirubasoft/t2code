@@ -216,6 +216,21 @@ test("a proposal failure before any PR retries the same upstream input", async (
   assert.equal(state.pr, 0);
 });
 
+test("the next repair retains the candidate author's unresolved work before CI exists", async () => {
+  const { pr, issues } = fixture();
+  issues.length = 0;
+  pr.body += "\nRemaining repair: classify the new local Git command.\n";
+  await plan();
+  assert.match(
+    readFileSync("validation-failure.txt", "utf8"),
+    /Prior candidate report \(untrusted\)/,
+  );
+  assert.match(
+    readFileSync("validation-failure.txt", "utf8"),
+    /classify the new local Git command/,
+  );
+});
+
 test("failed independent validation takes precedence over earlier proposal logs", async () => {
   const { base, head, runs } = fixture();
   runs.push({
@@ -240,7 +255,7 @@ test("large failure logs remain available for incremental inspection", async () 
   await plan();
   const logs = readFileSync("validation-failure.txt", "utf8");
   assert.ok(logs.length > 17 * 1024 * 1024);
-  assert.match(logs, /Final failure diagnostic\n$/);
+  assert.match(logs, /\nFinal failure diagnostic\n/);
 });
 
 test("unavailable historical logs do not prevent the next repair", async () => {

@@ -25,18 +25,28 @@ Use existing interfaces and small no-op adapters where that removes the prohibit
 implementation without spreading changes across callers.
 
 The trusted workflow has preserved its protected files from the accepted base.
-Do not modify policy, guards, workflows, packaging trust controls or their tests.
+Do not modify files listed in the automation protectedPaths or fixed privacy
+boundaries, including their tests. The fixed policy
+`scripts/private-build-policy.json` also lists reviewedBoundaries: these adapters
+may evolve under independent review while their privacy tests remain unchanged.
+For example, preserve unknown-command denial and explicit network grants when
+adding a local-only Git command to the Git classifier.
 Do not edit the generated capability baseline. Changed capability digests are
 expected during migration: an independent reviewer examines the exact repaired
 candidate and the trusted controller refreshes its hashes automatically. A digest
 mismatch alone is not a reason to block or request manual acceptance. Repair the
 actual privacy violations and compatibility problems, then return a candidate
 for independent review even though its accepted-base digests differ.
-Do not weaken, skip or rewrite a test to make a failure disappear. If a required
-policy change or unsupported upstream change prevents a safe migration after
-investigation, return "blocked" and explain the concrete obstacle and attempted
-repairs so the next run can continue. Never replace T2 with an upstream
-release or introduce a fallback to upstream download repositories.
+Preserve tests for allowed behavior. When a new upstream test expects prohibited
+external behavior, adapt that unprotected test to assert the local-edition result
+and absence of external requests. Add focused coverage for compatibility repairs.
+Do not skip tests, remove coverage, or weaken protected privacy regressions.
+A conflicting upstream expectation is a repair task, not a reason for manual
+acceptance. Hosted CI determines whether the repaired candidate works.
+If an unresolved concrete obstacle remains after investigation, return "blocked"
+with every safe partial repair and explain the remaining work. The controller
+retains those repairs in the PR for independent review and the next attempt.
+Never replace T2 with an upstream release or add upstream download fallbacks.
 
 Use the read-only shell to inspect the prepared checkout at /source and review
 files at /review. Start with changed-files.json, then inspect the diff and source

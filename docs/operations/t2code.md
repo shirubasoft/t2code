@@ -8,7 +8,10 @@ Provider programs and commands the user runs have their own network behavior. Th
 
 The trusted guard reads its policy beside its own script, from the accepted commit. A candidate cannot supply a replacement policy. The inventory fingerprints reviewed network/process code, executable build inputs, native sources, dependency patches, package manifests, and the lockfile. Package release versions are normalized; dependency versions and scripts are checked. Critical privacy boundaries and their tests have required hashes. Installer and CLI staging use frozen dependency closures from that reviewed lockfile, including transitive and optional platform packages. Release builds scan compiled JavaScript, including external dependency code, for prohibited SDKs and collectors.
 
-The independent privacy reviewer inspects changed capabilities before the trusted controller updates `scripts/private-build-baseline.json`. CI verifies approval for the exact source tree and accepted base. Hashes are never refreshed merely to make CI pass. Fixed boundaries in `scripts/private-build-policy.json` remain protected, including their regression tests. The repair agent cannot edit either file or its trusted controls.
+The independent privacy reviewer inspects changed capabilities before the trusted controller updates `scripts/private-build-baseline.json`. CI verifies approval for the exact source tree and accepted base. Hashes are never refreshed merely to make CI pass. Fixed boundaries in `scripts/private-build-policy.json` remain protected, including their regression tests. The repair agent cannot edit either file or its trusted controls. The policy also
+lists reviewed adapters whose implementation can evolve under independent review.
+Their hashes are always checked, even when the code contains no network calls,
+and their protected privacy tests remain unchanged.
 
 The inventory is a conservative tripwire for known capabilities. It is not proof that arbitrary JavaScript can never communicate. Independent review, loopback transport guards, explicit action scoping, redirect checks, and runtime network smoke tests provide separate checks. Preserve all of them when accepting upstream changes.
 

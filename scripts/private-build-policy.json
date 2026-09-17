@@ -39,7 +39,6 @@
     "apps/server/src/usage/UsageService.ts": "b3a36dc599a82b6debf5ab5ef7b8a07058cf48cca569a63106492d768d22b7a7",
     "apps/server/src/vcs/VcsProcess.test.ts": "d13b0a428525dd1ceb124101ccee575567f98c64694ec12b68c15b86ca3223eb",
     "apps/server/src/vcs/vcsNetworkPolicy.test.ts": "c6206c3a26591e4838dbcd2de455a33af88ec2c304a4f1bff28068c85fd531ef",
-    "apps/server/src/vcs/vcsNetworkPolicy.ts": "871037dc6377f5edb777f2ebb5f4cb4779b9e1feeafe59344d36939ad28b21df",
     "apps/web/src/cloud/publicConfig.ts": "8481b3b111df7438d27c8d5c831c1f84498f3ccc42883457e12e669072507ddc",
     "apps/web/src/observability/clientTracing.ts": "728bc21d941377426f59c05771d70336765760574d3210840c2b9f340fff8ae5",
     "packages/client-runtime/src/connection/resolver.test.ts": "1d1f2d35e4de5aebf566807764431877d05878dc26f838ede90eec88aee5ca78",
@@ -54,5 +53,6 @@
     "patches/electron-updater@6.8.3.patch": "9c43917f4c49d90934cb57589209e4305c4d5ae649f35ff673b7acac4aeea598",
     "scripts/lib/staging-lockfile.ts": "aab2bd30e8236532b40bc29b5ac8d948882148204b58ea7096b740c33c2ce807",
     "scripts/staging-lockfile.test.ts": "de864a0e7952c067f91f6903186ccba3d98faa9b7f2dc74e98df556023de3245"
-  }
+  },
+  "reviewedBoundaries": ["apps/server/src/vcs/vcsNetworkPolicy.ts"]
 }

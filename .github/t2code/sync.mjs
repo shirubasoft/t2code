@@ -281,6 +281,11 @@ export async function plan() {
         `\nCould not retrieve all failure logs for https://github.com/${repository}/actions/runs/${failedRun}. Continue by inspecting the candidate.\n${logs.stderr || logs.error?.message || "No failed-step logs were available."}\n`,
       );
   } else writeFileSync("validation-failure.txt", "No prior failed validation.\n");
+  if (pr?.body)
+    appendFileSync(
+      "validation-failure.txt",
+      `\nPrior candidate report (untrusted):\n${pr.body.slice(0, 24000)}\n`,
+    );
   output({ ready: "true", ...state });
 }
 
@@ -366,7 +371,8 @@ export function reviewContext(
 
 export function applyEdits(result, cwd = process.cwd()) {
   cwd = resolve(cwd);
-  if (result.decision !== "ready") throw new Error(`Agent blocked migration: ${result.summary}`);
+  if (!["ready", "blocked"].includes(result.decision))
+    throw new Error("Expected a ready or blocked migration with bounded repairs.");
   if (!Array.isArray(result.edits) || JSON.stringify(result).length > 5 * 1024 * 1024)
     throw new Error("Agent output exceeds the edit limit.");
   const seen = new Set();

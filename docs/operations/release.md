@@ -19,6 +19,7 @@ and complete diffs in small sections, including files outside the changed set.
 The tool sandbox denies credential access, file writes and networking. Candidate
 installation, builds, and tests run on disposable GitHub-hosted workers.
 
+Partial repairs are retained even when the author reports an unresolved obstacle.
 The proposed changes are retained in the PR before a fresh, independent agent
 reviews the whole diff and every changed capability or dependency. Rejections
 include concrete repairs for the next automatic attempt. Only the trusted
@@ -42,7 +43,10 @@ allowing active builds to finish and skipping commits already published.
 
 Changes to implementation hashes are reviewed and accepted automatically. The
 fixed product policy, privacy boundaries, guards and release controls stay
-protected. Failed review or validation leaves the accepted release available
+protected. The Git command classifier is a reviewed adapter: it can accommodate
+new local commands under independent review while its privacy regressions remain
+fixed. New upstream tests that expect prohibited external behavior must instead
+assert the local result and denied requests. Failed review or validation leaves the accepted release available
 while the repair loop continues.
 
 ## Publishing installers

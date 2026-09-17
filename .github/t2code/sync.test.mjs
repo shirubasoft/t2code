@@ -221,21 +221,18 @@ test("edits reject both existing and dangling symlinks", () => {
   }
 });
 
-test("ready edits stage real file replacements and blocked decisions leave files alone", () => {
+test("blocked attempts retain bounded repairs for independent validation", () => {
   const directory = repository();
   writeFileSync(join(directory, "source.ts"), "old\n");
-  assert.throws(
-    () =>
-      applyEdits(
-        {
-          decision: "blocked",
-          summary: "policy conflict",
-          edits: [{ path: "source.ts", content: "bad" }],
-        },
-        directory,
-      ),
-    /blocked/,
+  applyEdits(
+    {
+      decision: "blocked",
+      summary: "One compatibility problem remains.",
+      edits: [{ path: "source.ts", content: "partial repair\n" }],
+    },
+    directory,
   );
+  assert.equal(git(directory, ["show", ":source.ts"]), "partial repair");
   applyEdits({ decision: "ready", edits: [{ path: "source.ts", content: "new\n" }] }, directory);
   assert.equal(
     spawnSync("git", ["show", ":source.ts"], { cwd: directory, encoding: "utf8" }).stdout,
