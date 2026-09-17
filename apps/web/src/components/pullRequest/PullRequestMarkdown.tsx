@@ -7,7 +7,6 @@ import { cn } from "~/lib/utils";
 import { PULL_REQUESTS_PANEL_REF } from "~/rightPanelStore";
 
 import ChatMarkdown from "../ChatMarkdown";
-import { MediaVideoPlayer } from "../media/MediaVideoPlayer";
 import { remarkPullRequestAutolinks, splitPullRequestBody } from "./pullRequestMarkdown.logic";
 
 export const PullRequestMarkdownContext = createContext<{
@@ -15,7 +14,7 @@ export const PullRequestMarkdownContext = createContext<{
   threadRef: ScopedThreadRef | null;
 } | null>(null);
 
-/** Renders PR uploads inline, with retry and an original link when video playback fails. */
+/** Renders text and attachment links without loading remote media. */
 export function PullRequestMarkdown({
   text,
   cwd,
@@ -57,18 +56,6 @@ export function PullRequestMarkdown({
               pullRequestPanelRef={resolvedThreadRef ?? PULL_REQUESTS_PANEL_REF}
               environmentId={environmentId}
               extraRemarkPlugins={extraRemarkPlugins}
-            />
-          );
-        }
-        if (segment.media === "video") {
-          return (
-            <MediaVideoPlayer
-              key={`${segment.id}:${segment.url}`}
-              src={segment.url}
-              originalUrl={segment.url}
-              label="Pull request video"
-              className="w-full"
-              videoClassName="rounded-lg border border-border/60"
             />
           );
         }
