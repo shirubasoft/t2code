@@ -20,7 +20,10 @@ export function readJson(path) {
 }
 function safePath(path) {
   if (path === ".gitmodules") return path;
-  if (!/^(apps|packages|scripts)\/[A-Za-z0-9_./-]+$/.test(path) || path.split("/").includes("..")) {
+  if (
+    !/^(apps|packages|scripts|infra)\/[A-Za-z0-9_./-]+$/.test(path) ||
+    path.split("/").includes("..")
+  ) {
     throw new Error(`Invalid overlay path: ${path}`);
   }
   return path;
