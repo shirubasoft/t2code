@@ -65,19 +65,14 @@ function assemble() {
         throw new Error(`Missing ${arch} ${ext} installer.`);
     }
   }
-  const parents = command("git", ["show", "--format=%P", "--no-patch", sha])
-    .split(" ")
-    .filter(Boolean);
-  const upstream = [sha, ...parents]
-    .map(
-      (ref) =>
-        command("git", ["log", "--format=%B", "-1", ref]).match(/^Upstream: ([0-9a-f]{40})$/m)?.[1],
-    )
-    .find(Boolean);
+  const upstream = assertSha(
+    JSON.parse(command("git", ["show", `${sha}:.github/t2code/upstream.json`])).commit,
+  );
+  command("git", ["merge-base", "--is-ancestor", upstream, sha]);
   const provenance = {
     repository: repo,
     commit: sha,
-    upstream: upstream ?? null,
+    upstream,
     version,
     workflowRun: process.env.GITHUB_RUN_ID,
     signing: "unsigned",
