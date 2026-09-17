@@ -119,6 +119,39 @@ test("merge cleanup restores accepted protected filenames literally", () => {
   assert.equal(git(directory, ["diff", "--cached", "--name-only", state.base]), "");
 });
 
+test("merge cleanup preserves privacy boundaries outside the workflow path list", () => {
+  const accepted = {
+    "apps/desktop/scripts/verify-preload-bundle.mjs": "accepted preload guard\n",
+    "apps/server/src/cli/update.ts": "user-initiated fork updates\n",
+    "apps/server/src/cloud/pinnedRuntime.ts": "local runtime\n",
+  };
+  const { directory, state } = mergeFixture(accepted, {
+    "apps/desktop/scripts/verify-preload-bundle.mjs": "upstream guard\n",
+    "apps/server/src/cli/update.ts": "upstream updates\n",
+    "apps/server/src/cloud/pinnedRuntime.ts": "hosted runtime\n",
+    "apps/server/src/unprotected.ts": "upstream feature\n",
+  });
+  prepareMerge(state, directory);
+  for (const [path, content] of Object.entries(accepted)) {
+    assert.equal(readFileSync(join(directory, path), "utf8"), content);
+    assert.equal(git(directory, ["show", `:${path}`]), content.trimEnd());
+    assert.throws(() => assertEditable(path));
+  }
+  assert.equal(
+    git(directory, ["diff", "--cached", "--name-only", state.base]),
+    "apps/server/src/unprotected.ts",
+  );
+});
+
+test("all accepted privacy boundaries are protected from agent edits", () => {
+  const privacy = JSON.parse(
+    readFileSync(new URL("../../scripts/private-build-policy.json", import.meta.url), "utf8"),
+  );
+  for (const path of Object.keys(privacy.boundaries)) {
+    assert.throws(() => assertEditable(path), path);
+  }
+});
+
 test("agent edits stage only the literal filename containing metacharacters", () => {
   const directory = repository();
   writeFileSync(join(directory, "source.ts"), "accepted\n");

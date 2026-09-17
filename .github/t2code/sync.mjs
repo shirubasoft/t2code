@@ -19,6 +19,10 @@ const { fileURLToPath, pathToFileURL } = NodeURL;
 
 const ownDirectory = dirname(fileURLToPath(import.meta.url));
 export const policy = JSON.parse(readFileSync(resolve(ownDirectory, "policy.json"), "utf8"));
+const privacyPolicy = JSON.parse(
+  readFileSync(resolve(ownDirectory, "../../scripts/private-build-policy.json"), "utf8"),
+);
+const privacyBoundaries = new Set(Object.keys(privacyPolicy.boundaries));
 const shaPattern = /^[0-9a-f]{40}$/;
 
 export function assertSha(value) {
@@ -27,8 +31,11 @@ export function assertSha(value) {
 }
 
 export function isProtected(path) {
-  return policy.protectedPaths.some((entry) =>
-    entry.endsWith("/") ? path.startsWith(entry) : path === entry,
+  return (
+    privacyBoundaries.has(path) ||
+    policy.protectedPaths.some((entry) =>
+      entry.endsWith("/") ? path.startsWith(entry) : path === entry,
+    )
   );
 }
 
