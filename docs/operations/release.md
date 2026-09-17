@@ -13,11 +13,19 @@ The migration prompt and the accepted privacy policy enforce this boundary.
 
 ## Validation and recovery
 
-The agent returns bounded file edits. It cannot change `.github`, the privacy guard
-or its baseline, or protected packaging files. Its read-only shell inspects source
+The repair agent returns bounded file edits. It cannot change `.github`, the privacy
+guard, its generated baseline, or protected packaging files. Its read-only shell inspects source
 and complete diffs in small sections, including files outside the changed set.
 The tool sandbox denies credential access, file writes and networking. Candidate
 installation, builds, and tests run on disposable GitHub-hosted workers.
+
+The proposed changes are retained in the PR before a fresh, independent agent
+reviews the whole diff and every changed capability or dependency. Rejections
+include concrete repairs for the next automatic attempt. Only the trusted
+controller can record new hashes after approval. The approval is bound to every
+tracked source file and its mode, the accepted base, and the trusted workflow run.
+CI verifies the successful reviewer job and its immutable approval artifact before
+accepting the generated baseline. Editing a baseline cannot approve its contents.
 
 Validation is dispatched from `main` with the exact candidate and accepted base
 commit IDs. The accepted guard checks the candidate before ordinary CI runs. A
@@ -32,10 +40,10 @@ Successful validation is reused when a merge needs retrying. The hourly workflow
 also retries missing or failed releases for the accepted main commit, while
 allowing active builds to finish and skipping commits already published.
 
-The agent can repair product code autonomously, but changes to the privacy policy
-or trusted validation still require maintainer review. Keep those changes in a
-separate reviewed PR. The hourly workflow uses the newly accepted controls on its
-next run. Failed validation always leaves the accepted release available.
+Changes to implementation hashes are reviewed and accepted automatically. The
+fixed product policy, privacy boundaries, guards and release controls stay
+protected. Failed review or validation leaves the accepted release available
+while the repair loop continues.
 
 ## Publishing installers
 
@@ -67,7 +75,8 @@ stage; the repair agent has no signing credentials.
 Enable Actions to create pull requests. Protect `main` with required validation
 and require review for changes to the trusted policy and workflows. Do not require
 linear history or squash upstream integration PRs. The automation uses scoped job
-tokens and explicit workflow dispatches, so it needs no stored GitHub PAT.
+tokens and explicit workflow dispatches. The devbox's separate fallback dispatcher
+covers missing scheduled runs; its credential is kept outside the agent runner.
 
 The devbox runner belongs to the selected-repository organization group
 `t2code-sync`. Restrict that group to
@@ -75,7 +84,8 @@ The devbox runner belongs to the selected-repository organization group
 its host-side workflow check. The homelab repository owns its provisioning and
 service configuration.
 
-The initial bootstrap is a maintainer-reviewed exception: validate the initial
-branch by explicitly dispatching CI with that same branch commit as both source
-and base, then merge it and establish the protected main policy. Subsequent
-automated validations must use the accepted `main` workflow and baseline.
+Maintainer changes to protected controls require review and full CI. Dispatch CI
+from the reviewed branch with its exact commit as both source and base, then merge
+that reviewed commit. This procedure also establishes the initial policy. The
+automatic merger accepts only validation dispatched from the accepted `main`
+workflow; it cannot use the maintainer procedure to approve its own controls.

@@ -6,6 +6,7 @@
     ".github/",
     "scripts/verify-private-build.mjs",
     "scripts/private-build-policy.json",
+    "scripts/private-build-baseline.json",
     "scripts/build-desktop-artifact.ts",
     "scripts/build-desktop-artifact.test.ts",
     "scripts/lib/update-manifest.ts",

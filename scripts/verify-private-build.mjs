@@ -15,8 +15,8 @@ const forbidden = [
   /(?:OtlpTracer|OtlpMetrics|OtlpLogger|OTLPTraceExporter|OTLPMetricExporter)\s*\./,
 ];
 // Any file that can open a connection, delegate execution, configure a client,
-// or introduce an endpoint needs an exact reviewed digest. The migration agent
-// cannot edit this baseline. Formatting-only edits are conservative failures.
+// or introduce an endpoint needs an exact reviewed digest. Only the trusted
+// controller can refresh the baseline after an independent privacy review.
 const capability =
   /effect\/unstable\/(?:http|socket|process)|node:|\brequire\s*\(|\b(?:fetch|XMLHttpRequest|WebSocket|EventSource|sendBeacon|HttpClient|FetchHttpClient|NodeHttpClient|httpClient|https|createConnection|connectTls|ProcessRunner|ChildProcess|spawn|execFile|execSync|shell|openExternal|loadURL|webRequest|autoUpdater|UserNetworkAccess)\b|(?:https?|wss?):\/\/|node:(?:http|https|net|tls|dns|dgram|child_process)|\.wasm\b|\beval\s*\(|\bnew\s+Function\b|\bimport\s*\(/;
 const testFile =
@@ -85,7 +85,8 @@ export function inventory(source, paths = sourceFiles(source)) {
       continue;
     }
     if (!stat.isFile()) continue;
-    if (path === "scripts/private-build-policy.json") continue;
+    if (["scripts/private-build-policy.json", "scripts/private-build-baseline.json"].includes(path))
+      continue;
     const manifest = path.endsWith("package.json");
     const buildInput =
       path.startsWith("scripts/") ||
@@ -126,13 +127,8 @@ export function inventory(source, paths = sourceFiles(source)) {
   return { capabilities, dependencies, violations };
 }
 
-export function verifySource(source, policy, paths) {
-  const actual = inventory(source, paths);
-  const violations = [...actual.violations];
-  for (const [path, sha] of Object.entries(actual.capabilities)) {
-    if (policy.capabilities[path] !== sha)
-      violations.push(`${path}: network/process capability changed without accepted policy review`);
-  }
+export function verifyBoundaries(source, policy) {
+  const violations = [];
   for (const [path, sha] of Object.entries(policy.boundaries)) {
     try {
       if (fileDigest(path, NodeFS.readFileSync(NodePath.join(source, path))) !== sha)
@@ -141,6 +137,16 @@ export function verifySource(source, policy, paths) {
       violations.push(`${path}: required privacy boundary missing`);
     }
   }
+  return violations;
+}
+
+export function verifySource(source, policy, paths) {
+  const actual = inventory(source, paths);
+  const violations = [...actual.violations, ...verifyBoundaries(source, policy)];
+  for (const [path, sha] of Object.entries(actual.capabilities)) {
+    if (policy.capabilities[path] !== sha)
+      violations.push(`${path}: network/process capability changed without accepted policy review`);
+  }
   for (const [path, dependencies] of Object.entries(actual.dependencies)) {
     for (const dependency of dependencies) {
       if (!policy.dependencies[path]?.includes(dependency))
@@ -148,6 +154,16 @@ export function verifySource(source, policy, paths) {
     }
   }
   return violations;
+}
+
+export function loadPolicy(root = directory) {
+  const fixed = JSON.parse(
+    NodeFS.readFileSync(NodePath.join(root, "private-build-policy.json"), "utf8"),
+  );
+  const baseline = JSON.parse(
+    NodeFS.readFileSync(NodePath.join(root, "private-build-baseline.json"), "utf8"),
+  );
+  return { capabilities: baseline.capabilities, dependencies: baseline.dependencies, ...fixed };
 }
 
 export function verifyArtifacts(root) {
@@ -178,9 +194,7 @@ export function main(args) {
   }
   if (!options["--source"]) throw new Error("--source is required");
   // Resolve policy beside this trusted script, never from the candidate tree.
-  const policy = JSON.parse(
-    NodeFS.readFileSync(NodePath.join(directory, "private-build-policy.json"), "utf8"),
-  );
+  const policy = loadPolicy();
   const violations = verifySource(options["--source"], policy);
   if (options["--artifacts"]) violations.push(...verifyArtifacts(options["--artifacts"]));
   if (violations.length) throw new Error(`Privacy checks failed:\n${violations.join("\n")}`);

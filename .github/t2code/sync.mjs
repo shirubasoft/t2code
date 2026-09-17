@@ -16,6 +16,7 @@ import * as NodePath from "node:path";
 const { dirname, isAbsolute, resolve, sep } = NodePath;
 import * as NodeURL from "node:url";
 const { fileURLToPath, pathToFileURL } = NodeURL;
+import { baselinePath, refreshBaseline, verifyApproval, reviewTree } from "./privacy-review.mjs";
 
 const ownDirectory = dirname(fileURLToPath(import.meta.url));
 export const policy = JSON.parse(readFileSync(resolve(ownDirectory, "policy.json"), "utf8"));
@@ -78,7 +79,7 @@ function git(args, { cwd = process.cwd(), allowFailure = false, outputFile } = {
   return { status: result.status, stdout: result.stdout?.trimEnd() ?? "", stderr: result.stderr };
 }
 
-async function api(path, options = {}) {
+export async function api(path, options = {}) {
   const response = await fetch(`https://api.github.com/${path}`, {
     ...options,
     headers: {
@@ -189,6 +190,8 @@ export async function ensureRelease(repository, sha) {
 export async function plan() {
   const repository = process.env.GITHUB_REPOSITORY;
   const base = assertSha((await api(`repos/${repository}/commits/main`)).sha);
+  if (process.env.GITHUB_SHA && process.env.GITHUB_SHA !== base)
+    return output({ ready: "false", reason: "main-changed" });
   // A merge can succeed even when dispatch or publication fails. Recover the
   // accepted release independently of whether another upstream update is ready.
   try {
@@ -433,11 +436,47 @@ export async function publishCandidate(state, result) {
           body,
         },
       });
+  output({ pr: pr.number, sha });
+}
+
+export async function completeCandidate(state, approval, candidateSha, number) {
+  const repository = process.env.GITHUB_REPOSITORY;
+  assertSha(candidateSha);
+  if (!Number.isSafeInteger(number) || number < 1) throw new Error("Expected the sync PR number.");
+  if (git(["rev-parse", "HEAD"]).stdout !== candidateSha)
+    throw new Error("Finalization checked out a different candidate.");
+  await verifyApproval(approval, state.base, reviewTree(process.cwd()), repository, api);
+  const pr = await api(`repos/${repository}/pulls/${number}`);
+  if (
+    pr.state !== "open" ||
+    pr.draft ||
+    pr.head.sha !== candidateSha ||
+    pr.head.ref !== policy.branch ||
+    pr.head.repo?.full_name !== repository ||
+    pr.base.ref !== "main" ||
+    pr.base.sha !== state.base ||
+    assertSha((await api(`repos/${repository}/commits/main`)).sha) !== state.base
+  )
+    throw new Error("The sync candidate or accepted base changed during privacy review.");
+  const recorded = parseState(pr.body);
+  if (recorded.base !== state.base || recorded.upstream !== state.upstream)
+    throw new Error("The proposed migration identity changed during privacy review.");
+  refreshBaseline(approval, state.base, process.cwd());
+  git(["config", "user.name", "T2 Code sync"]);
+  git(["config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com"]);
+  git(["commit", "-m", "chore(sync): record independent privacy approval", "--", baselinePath]);
+  const approvedSha = assertSha(git(["rev-parse", "HEAD"]).stdout);
+  git([
+    "push",
+    `--force-with-lease=refs/heads/${policy.branch}:${candidateSha}`,
+    "origin",
+    `HEAD:refs/heads/${policy.branch}`,
+  ]);
   await api(`repos/${repository}/actions/workflows/ci.yml/dispatches`, {
     method: "POST",
-    body: { ref: "main", inputs: { pr: String(pr.number), sha, base: state.base } },
+    body: { ref: "main", inputs: { pr: String(number), sha: approvedSha, base: state.base } },
   });
-  output({ pr: pr.number, sha });
+  output({ pr: number, sha: approvedSha });
 }
 
 export async function recordBlocked(state) {
@@ -556,6 +595,15 @@ async function main() {
   if (command === "context")
     return writeFileSync(process.env.T2_REVIEW_CONTEXT, reviewContext(state));
   if (command === "blocked") return recordBlocked(state);
+  if (command === "complete") {
+    const approval = JSON.parse(readFileSync(process.env.T2_PRIVACY_APPROVAL, "utf8"));
+    return completeCandidate(
+      state,
+      approval,
+      process.env.T2_CANDIDATE_SHA,
+      Number(process.env.T2_SYNC_PR),
+    );
+  }
   const result = JSON.parse(readFileSync(process.env.T2_AGENT_OUTPUT, "utf8"));
   if (command === "apply") return applyEdits(result);
   if (command === "publish") return publishCandidate(state, result);
