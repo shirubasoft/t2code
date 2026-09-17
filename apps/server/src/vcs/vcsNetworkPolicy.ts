@@ -77,6 +77,7 @@ const LOCAL_GIT_COMMANDS = new Set([
   "rm",
   "show",
   "show-ref",
+  "sparse-checkout",
   "stash",
   "status",
   "stripspace",

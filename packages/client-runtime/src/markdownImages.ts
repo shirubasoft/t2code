@@ -1,4 +1,5 @@
 import { isWindowsAbsolutePath } from "@t3tools/shared/path";
+import { isLoopbackUrl } from "@t3tools/shared/localNetwork";
 
 import {
   normalizeMarkdownLinkDestination,
@@ -43,7 +44,11 @@ export function classifyMarkdownImageSource(
     return { _tag: "Blocked" };
   }
   if (DIRECT_IMAGE_SOURCE_PATTERN.test(source)) {
-    return { _tag: "Direct", uri: source };
+    // Embedded bytes and local-server URLs need no external asset request.
+    // Protocol-relative URLs are rejected rather than inheriting a remote origin.
+    return /^(?:data:|blob:)/i.test(source) || isLoopbackUrl(source)
+      ? { _tag: "Direct", uri: source }
+      : { _tag: "Blocked" };
   }
 
   if (/^file:/i.test(source)) {

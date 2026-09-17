@@ -4,15 +4,30 @@ import { classifyMarkdownImageSource, markdownImageSourceFragment } from "./mark
 
 describe("classifyMarkdownImageSource", () => {
   it.each([
-    "https://example.com/image.png",
-    "HTTP://example.com/image.png",
     "data:image/png;base64,AAAA",
     "blob:https://app.t3.codes/image-id",
-    "//cdn.example.com/image.png",
-  ])("keeps %s directly loadable", (uri) => {
+    "http://127.0.0.1:3773/api/assets/image.png",
+    "http://localhost:3773/api/assets/image.png",
+    "http://[::1]:3773/api/assets/image.png",
+  ])("keeps local or embedded source %s directly loadable", (uri) => {
     expect(classifyMarkdownImageSource(uri, "/workspace/project")).toEqual({
       _tag: "Direct",
       uri,
+    });
+  });
+
+  it.each([
+    "https://example.com/image.png",
+    "HTTP://example.com/image.png",
+    "//cdn.example.com/image.png",
+    "https://raw.githubusercontent.com/owner/repo/main/image.png",
+    "https://github.com/user-attachments/assets/image-id",
+    "https://media.githubusercontent.com/media/owner/repo/main/video.mp4",
+    "http://localhost.example.com/image.png",
+    "http://user:password@localhost/image.png",
+  ])("blocks remote source %s before it reaches an image or video renderer", (source) => {
+    expect(classifyMarkdownImageSource(source, "/workspace/project")).toEqual({
+      _tag: "Blocked",
     });
   });
 
