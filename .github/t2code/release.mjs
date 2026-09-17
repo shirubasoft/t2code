@@ -73,6 +73,8 @@ function assemble() {
   if (nightlyVersion(tag) !== version)
     throw new Error("Version must match the upstream nightly tag");
   const sha = assertSha(process.env.T2_RELEASE_SHA);
+  const pin = sourcePin(sha, tag);
+  const upstream = pin.commit;
   mergeManifests(directory, "nightly-mac.yml", "nightly-mac-x64.yml", "nightly-mac.yml", "macOS");
   mergeManifests(
     directory,
@@ -88,8 +90,6 @@ function assemble() {
         throw new Error(`Missing ${arch} ${ext} installer.`);
     }
   }
-  const pin = sourcePin(sha, tag);
-  const upstream = pin.commit;
   const provenance = {
     repository: repo,
     commit: sha,

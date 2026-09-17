@@ -193,6 +193,7 @@ NodeTest.test("release assembly rejects stable feeds and mismatched nightly iden
     T2_NIGHTLY_TAG: "v0.0.43-nightly.20260917.1867",
   });
   NodeAssert.notEqual(wrongTag.status, 0);
+  NodeAssert.match(wrongTag.stderr, /accepted upstream nightly/);
   const fresh = fixture();
   NodeFS.writeFileSync(NodePath.join(fresh.assets, "latest.yml"), "stable feed");
   const stable = fresh.assemble();
