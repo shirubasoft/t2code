@@ -16,6 +16,9 @@ jobs:
   plan:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
     outputs:
       release_sha: ${{ steps.plan.outputs.release_sha }}
       tag: ${{ steps.plan.outputs.tag }}
@@ -72,6 +75,8 @@ jobs:
     if: needs.plan.outputs.ready == 'true'
     runs-on: [self-hosted, linux, t2code-sync]
     timeout-minutes: 55
+    env:
+      T2_REVIEW_NAME: t2-review-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
@@ -98,20 +103,25 @@ jobs:
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: analytics-history
-          path: review
+          path: ${{ runner.temp }}/${{ env.T2_REVIEW_NAME }}
       - name: Review commit history and adapt analytics patches
+        id: review
         run: |
           set -euo pipefail
           output_dir=$(mktemp -d "$RUNNER_TEMP/t2-agent-output-XXXXXX")
+          echo "output_dir=$output_dir" >> "$GITHUB_OUTPUT"
+          status=0
           t2code-codex "$GITHUB_WORKSPACE/candidate" \
             "$GITHUB_WORKSPACE/control/.github/t2code/agent-output.schema.json" \
-            "$output_dir" "$GITHUB_WORKSPACE/review" < control/.github/t2code/migrate.md
-          cp "$output_dir/agent-output.json" agent-output.json
+            "$output_dir" "$RUNNER_TEMP/$T2_REVIEW_NAME" < control/.github/t2code/migrate.md || status=$?
+          exit "$status"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always() && steps.review.outputs.output_dir != ''
         with:
           name: analytics-review
-          path: agent-output.json
-          retention-days: 7
+          path: ${{ steps.review.outputs.output_dir }}/agent-output.json
+          if-no-files-found: ignore
+          retention-days: 30
 
   propose:
     needs: [plan, analytics]
@@ -200,3 +210,36 @@ jobs:
           T2_BASE_SHA: ${{ needs.plan.outputs.base }}
           T2_SYNC_PR: ${{ needs.propose.outputs.pr }}
           T2_NIGHTLY_TAG: ${{ needs.plan.outputs.tag }}
+
+  feedback:
+    needs: [plan, analytics, propose, validate, merge]
+    if: always() && needs.plan.outputs.ready == 'true' && needs.merge.result != 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ needs.plan.outputs.base }}
+          persist-credentials: false
+          sparse-checkout: .github/t2code
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: analytics-history
+          path: context
+      - name: Preserve the proposed patch and failed job logs for the next scheduled attempt
+        run: node .github/t2code/sync.mjs feedback
+        env:
+          GH_TOKEN: ${{ github.token }}
+          T2_SYNC_CONTEXT: ${{ github.workspace }}/context
+          T2_SYNC_RESULTS: ${{ toJSON(needs) }}
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: sync-feedback-${{ needs.plan.outputs.base }}-${{ needs.plan.outputs.upstream }}
+          path: feedback/feedback.json
+          retention-days: 30

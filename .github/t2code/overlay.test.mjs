@@ -10,6 +10,7 @@ import * as NodeTest from "node:test";
 const { test } = NodeTest;
 import { apply, verify, git, transform, readJson, controlRoot } from "./overlay.mjs";
 import { validateOverlay } from "./sync.mjs";
+import { inspectOverlay } from "./review.mjs";
 
 test("patches require one unambiguous anchor and preserve unrelated content", () => {
   assert.equal(
@@ -44,8 +45,88 @@ test("agent edits cannot change automation, packaging or added files", () => {
         },
         accepted,
       ),
-    /outside runtime source/,
+    /outside analytics source/,
   );
+});
+
+test("analytics review can retire a deleted relay test and carry protection to moved source", () => {
+  const accepted = readJson(join(controlRoot, ".github/t2code/overlay.json"));
+  const replacements = accepted.replacements.filter(
+    (rule) => rule.path !== "infra/relay/scripts/deploy.test.ts",
+  );
+  replacements.push(
+    { path: "infra/relay/src/logging.ts", before: "exportLogs()", after: "localLogs()" },
+    { path: "scripts/relay/logging.test.ts", before: "exports logs", after: "keeps logs local" },
+  );
+  validateOverlay({ ...accepted, replacements }, accepted);
+});
+
+test("runtime packaging paths, traversal and fork-owned privacy files remain protected", () => {
+  const accepted = readJson(join(controlRoot, ".github/t2code/overlay.json"));
+  for (const path of [
+    "apps/web/src/components/desktopUpdate.logic.ts",
+    "packages/shared/src/cliRelease.ts",
+    "scripts/build-desktop-artifact.ts",
+  ]) {
+    const replacements = accepted.replacements.map((rule) =>
+      rule.path === path ? { ...rule, after: "redirectRelease()" } : rule,
+    );
+    assert.throws(
+      () => validateOverlay({ ...accepted, replacements }, accepted),
+      /packaging controls/,
+    );
+  }
+  for (const path of [
+    "apps/web/src/../../../../.github/ci.ts",
+    "packages/shared/package.json",
+    "packages/shared/src/t2Analytics.ts",
+    "scripts/install.sh",
+  ]) {
+    assert.throws(() =>
+      validateOverlay(
+        {
+          ...accepted,
+          replacements: [...accepted.replacements, { path, before: "false", after: "true" }],
+        },
+        accepted,
+      ),
+    );
+  }
+});
+
+test("preflight verifies deleted targets and stale anchors against Git, not working files", () => {
+  const root = mkdtempSync(join(tmpdir(), "t2-review-tree-"));
+  try {
+    git(["init"], root);
+    mkdirSync(join(root, "infra/relay/src"), { recursive: true });
+    const path = "infra/relay/src/logging.ts";
+    writeFileSync(join(root, path), "exportLogs();\n");
+    git(["add", "."], root);
+    git(
+      ["-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "Source"],
+      root,
+    );
+    const upstream = git(["rev-parse", "HEAD"], root).trim();
+    rmSync(join(root, path));
+    const rule = { path, before: "exportLogs();", after: "localLogs();" };
+    const overlay = {
+      files: [],
+      replacements: [rule, { ...rule, path: "infra/relay/scripts/deploy.test.ts" }],
+    };
+    assert.deepEqual(inspectOverlay(overlay, upstream, root), [
+      { path, status: "applies", editable: true },
+      { path: "infra/relay/scripts/deploy.test.ts", status: "deleted", editable: true },
+    ]);
+    const stale = inspectOverlay(
+      { files: [], replacements: [{ ...rule, before: "oldExporter();" }] },
+      upstream,
+      root,
+    );
+    assert.equal(stale[0].status, "stale");
+    assert.match(stale[0].error, /anchor must occur once/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("the real overlay recreates the upstream snapshot without touching its lockfile", () => {

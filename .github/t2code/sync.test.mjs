@@ -129,8 +129,14 @@ const state = JSON.parse(fs.readFileSync(${JSON.stringify(stateFile)}));
 const args = process.argv.slice(2);
 fs.appendFileSync(${JSON.stringify(record)}, JSON.stringify(args) + "\\n");
 if (args[0] === "workflow") process.exit(0);
+if (args[0] === "run" && args[1] === "download") {
+  fs.writeFileSync(require("node:path").join(args[args.indexOf("--dir") + 1], "feedback.json"), JSON.stringify(state.feedback));
+  process.exit(0);
+}
 const path = args[1];
 if (path.endsWith("git/ref/heads/main")) console.log(JSON.stringify({object:{sha:state.base}}));
+else if (path.includes("/actions/artifacts?name=sync-feedback-")) console.log(JSON.stringify({artifacts:state.feedback ? [{id:1,expired:false,workflow_run:{id:17,head_branch:"main",head_sha:state.base}}] : []}));
+else if (path.endsWith("/actions/runs/17")) console.log(JSON.stringify({id:17,path:".github/workflows/upstream-sync.yml",event:"schedule",status:"completed"}));
 else if (path.includes("pingdotgg/t3code/releases/tags/")) console.log(JSON.stringify(state.release));
 else if (path.includes("pingdotgg/t3code/releases?")) console.log(JSON.stringify([state.release]));
 else if (path.includes("shirubasoft/t2code/releases/tags/")) {
@@ -250,6 +256,46 @@ test("planning rejects an accepted nightly whose tag was moved", () => {
     const result = f.run();
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /Pinned upstream nightly identity changed/);
+  } finally {
+    rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+test("scheduled planning resumes prior repairs, defers exhausted cycles and retains feedback after cooldown", () => {
+  const f = nightlyFixture();
+  try {
+    f.state.feedback = {
+      version: 1,
+      base: f.state.base,
+      upstream: f.nightlySha,
+      runId: 17,
+      attempt: 1,
+      finishedAt: new Date().toISOString(),
+      agentOutput: JSON.stringify({ decision: "blocked", summary: "stale patch", edits: [] }),
+      failures: [{ name: "propose", log: "Patch anchor must occur once" }],
+    };
+    const resumed = f.run();
+    assert.equal(resumed.status, 0, resumed.stderr);
+    assert.match(resumed.output, /ready=true/);
+    assert.equal(JSON.parse(readFileSync(join(f.checkout, "review/plan.json"))).attempt, 2);
+    assert.deepEqual(
+      JSON.parse(readFileSync(join(f.checkout, "review/feedback.json"))),
+      f.state.feedback,
+    );
+    f.state.feedback.attempt = 3;
+    const deferred = f.run();
+    assert.equal(deferred.status, 0, deferred.stderr);
+    assert.equal(deferred.output, "ready=false\n");
+    assert.match(deferred.stdout, /Sync repair deferred until/);
+    f.state.feedback.finishedAt = new Date(Date.now() - 7 * 60 * 60 * 1000).toISOString();
+    const nextCycle = f.run();
+    assert.equal(nextCycle.status, 0, nextCycle.stderr);
+    assert.match(nextCycle.output, /ready=true/);
+    assert.equal(JSON.parse(readFileSync(join(f.checkout, "review/plan.json"))).attempt, 1);
+    assert.equal(
+      JSON.parse(readFileSync(join(f.checkout, "review/feedback.json"))).failures[0].log,
+      "Patch anchor must occur once",
+    );
   } finally {
     rmSync(f.root, { recursive: true, force: true });
   }

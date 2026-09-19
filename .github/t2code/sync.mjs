@@ -1,10 +1,14 @@
 import * as NodeFS from "node:fs";
-const { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync, appendFileSync } = NodeFS;
+const { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync, appendFileSync } =
+  NodeFS;
 import * as NodePath from "node:path";
 const { resolve } = NodePath;
 import * as NodeChildProcess from "node:child_process";
 const { execFileSync } = NodeChildProcess;
 import { apply, verify, git, readJson, assertSha, controlRoot } from "./overlay.mjs";
+import { inspectOverlay, validateOverlay } from "./review.mjs";
+import { collectFeedback, restoreFeedback, retryPlan } from "./feedback.mjs";
+export { validateOverlay } from "./review.mjs";
 
 import {
   forkRepository,
@@ -90,11 +94,23 @@ function plan() {
   // Initial migration may return from an unreleased main snapshot to its last
   // nightly. Subsequent nightlies must retain the accepted source ancestry.
   if (pin.tag) git(["merge-base", "--is-ancestor", from, upstream]);
+  const previous = restoreFeedback(base, upstream);
+  const retry = retryPlan(previous);
+  if (!retry.ready) {
+    const message = `Sync repair deferred until ${retry.retryAt} after three reviews of ${upstream}. The accepted release is unchanged.`;
+    console.log(message);
+    if (process.env.GITHUB_STEP_SUMMARY)
+      appendFileSync(process.env.GITHUB_STEP_SUMMARY, message + "\n");
+    output({ ready: false });
+    return;
+  }
+  rmSync("review", { recursive: true, force: true });
   mkdirSync("review", { recursive: true });
   writeFileSync(
     "review/plan.json",
-    JSON.stringify({ base, from, upstream, nightly }, null, 2) + "\n",
+    JSON.stringify({ base, from, upstream, nightly, attempt: retry.attempt }, null, 2) + "\n",
   );
+  if (previous) writeFileSync("review/feedback.json", JSON.stringify(previous, null, 2) + "\n");
   writeFileSync(
     "review/commits.txt",
     git(["log", "--reverse", "--format=fuller", `${from}...${upstream}`]),
@@ -104,31 +120,16 @@ function plan() {
     git(["diff", "--no-ext-diff", from, upstream, "--", ".", ":!.repos"]),
   );
   writeFileSync("review/overlay.json", readFileSync(".github/t2code/overlay.json"));
+  writeFileSync(
+    "review/overlay-check.json",
+    JSON.stringify(inspectOverlay(readJson(".github/t2code/overlay.json"), upstream), null, 2) +
+      "\n",
+  );
   for (const path of readJson(".github/t2code/overlay.json").files) {
     mkdirSync(resolve("review/fork-files", path, ".."), { recursive: true });
     cpSync(path, resolve("review/fork-files", path));
   }
   output({ ready: true, base, upstream, tag: nightly.tag });
-}
-export function validateOverlay(candidate, accepted) {
-  if (JSON.stringify(candidate.files) !== JSON.stringify(accepted.files))
-    throw new Error("Agent cannot change added files");
-  if (!Array.isArray(candidate.replacements) || candidate.replacements.length > 150)
-    throw new Error("Invalid replacement list");
-  const fixed = accepted.replacements.filter(
-    (rule) => !/^(apps|packages)\/[^/]+\/src\//.test(rule.path),
-  );
-  for (const rule of fixed) {
-    if (!candidate.replacements.some((next) => JSON.stringify(next) === JSON.stringify(rule)))
-      throw new Error(`Agent changed packaging controls: ${rule.path}`);
-  }
-  for (const rule of candidate.replacements) {
-    if (
-      !/^(apps|packages)\/[^/]+\/src\/[A-Za-z0-9_./-]+\.(ts|tsx|js|mjs)$/.test(rule.path) &&
-      !fixed.some((known) => JSON.stringify(known) === JSON.stringify(rule))
-    )
-      throw new Error(`Agent patch outside runtime source: ${rule.path}`);
-  }
 }
 function propose() {
   const context = resolve(process.env.T2_SYNC_CONTEXT);
@@ -235,13 +236,36 @@ function merge() {
   dispatchRelease(merged.sha, tag);
   console.log(`Merged ${pr.html_url}; dispatched ${tag} for ${merged.sha}`);
 }
+function feedback() {
+  const context = resolve(process.env.T2_SYNC_CONTEXT);
+  const plan = readJson(resolve(context, "plan.json"));
+  const previousPath = resolve(context, "feedback.json");
+  const previous = existsSync(previousPath) ? readJson(previousPath) : undefined;
+  const results = Object.fromEntries(
+    Object.entries(JSON.parse(process.env.T2_SYNC_RESULTS)).map(([name, job]) => [
+      name,
+      job.result,
+    ]),
+  );
+  const result = collectFeedback(plan, previous, Number(process.env.GITHUB_RUN_ID), results);
+  mkdirSync("feedback", { recursive: true });
+  writeFileSync("feedback/feedback.json", JSON.stringify(result, null, 2) + "\n");
+  const retry = retryPlan(result);
+  const message = retry.ready
+    ? `The next scheduled sync will resume with failure logs and the previous patch, review ${retry.attempt} of 3.`
+    : `Three reviews completed. Scheduled syncs will resume after ${retry.retryAt}, preserving the failure logs and previous patch.`;
+  console.log(message);
+  if (process.env.GITHUB_STEP_SUMMARY)
+    appendFileSync(process.env.GITHUB_STEP_SUMMARY, message + "\n");
+}
 if (process.argv[1] === new URL(import.meta.url).pathname) {
   if (process.argv[2] === "plan") plan();
   else if (process.argv[2] === "propose") propose();
   else if (process.argv[2] === "merge") merge();
+  else if (process.argv[2] === "feedback") feedback();
   else if (process.argv[2] === "retry-release") {
     const tag = process.env.T2_NIGHTLY_TAG;
     nightlyVersion(tag);
     if (!releaseInProgress(tag)) dispatchRelease(process.env.T2_RELEASE_SHA, tag);
-  } else throw new Error("Expected plan, propose, merge or retry-release");
+  } else throw new Error("Expected plan, propose, merge, feedback or retry-release");
 }
