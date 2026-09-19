@@ -173,7 +173,6 @@ function publish() {
       "--notes-file",
       "release-notes.md",
       "--draft",
-      "--prerelease",
     ]);
   command("gh", [
     "release",
@@ -193,8 +192,8 @@ function publish() {
     "--repo",
     repo,
     "--draft=false",
-    "--prerelease",
-    "--latest=false",
+    "--prerelease=false",
+    "--latest",
   ]);
 }
 
