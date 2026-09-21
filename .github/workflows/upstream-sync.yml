@@ -47,6 +47,7 @@ jobs:
         with:
           name: analytics-history
           path: review/
+          include-hidden-files: true
           retention-days: 7
 
   retry_release:
