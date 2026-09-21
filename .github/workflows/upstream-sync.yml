@@ -75,8 +75,6 @@ jobs:
     if: needs.plan.outputs.ready == 'true'
     runs-on: [self-hosted, linux, t2code-sync]
     timeout-minutes: 55
-    env:
-      T2_REVIEW_NAME: t2-review-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
@@ -100,10 +98,15 @@ jobs:
           git -C candidate fetch --filter=blob:none --no-tags --depth=1 origin "$UPSTREAM_SHA"
           git -C candidate checkout --force --detach "$UPSTREAM_SHA"
           git -C candidate clean -fdx
+      - name: Clear previous review inputs
+        run: |
+          # The installed runner wrapper only accepts a workspace path ending in /review.
+          rm -rf -- "$GITHUB_WORKSPACE/review"
+          mkdir -p "$GITHUB_WORKSPACE/review"
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: analytics-history
-          path: ${{ runner.temp }}/${{ env.T2_REVIEW_NAME }}
+          path: review
       - name: Review commit history and adapt analytics patches
         id: review
         run: |
@@ -113,7 +116,10 @@ jobs:
           status=0
           t2code-codex "$GITHUB_WORKSPACE/candidate" \
             "$GITHUB_WORKSPACE/control/.github/t2code/agent-output.schema.json" \
-            "$output_dir" "$RUNNER_TEMP/$T2_REVIEW_NAME" < control/.github/t2code/migrate.md || status=$?
+            "$output_dir" "$GITHUB_WORKSPACE/review" < control/.github/t2code/migrate.md || status=$?
+          if [ "$status" -ne 0 ]; then
+            echo "::error::t2code-codex exited with status $status (review: $GITHUB_WORKSPACE/review)"
+          fi
           exit "$status"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always() && steps.review.outputs.output_dir != ''
