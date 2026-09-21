@@ -188,6 +188,21 @@ function assertMissing(path: string, message: string): void {
 const tempRoot = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t3-release-smoke-"));
 
 try {
+  const releaseWorkflow = NodeFS.readFileSync(
+    NodePath.resolve(repoRoot, ".github/workflows/release.yml"),
+    "utf8",
+  );
+  for (const marker of [
+    "Read production relay tracing config",
+    "T3CODE_RELAY_CLIENT_OTLP_TRACES_",
+    "relay-client-tracing-config",
+    "relay-client-tracing.env",
+  ]) {
+    if (releaseWorkflow.includes(marker)) {
+      throw new Error(`Release workflow must not inject external tracing credentials: ${marker}`);
+    }
+  }
+
   copyWorkspaceManifestFixture(tempRoot);
 
   NodeChildProcess.execFileSync(

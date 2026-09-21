@@ -7,8 +7,8 @@
     },
     {
       "path": "apps/desktop/src/app/DesktopObservability.ts",
-      "before": "      filePath: tracePath,\n      maxBytes: DESKTOP_LOG_FILE_MAX_BYTES,\n      maxFiles: DESKTOP_LOG_FILE_MAX_FILES,\n      batchWindowMs: DESKTOP_TRACE_BATCH_WINDOW_MS,\n    });\n    const delegate = Option.isNone(otlpTracesUrl)\n      ? undefined\n      : yield* OtlpTracer.make({\n          url: otlpTracesUrl.value,\n          exportInterval: `${environment.otlpExportIntervalMs} millis`,\n          headers: Option.getOrUndefined(environment.otlpHeaders),\n          resource: {\n            serviceName: \"desktop\",\n            attributes: {\n              \"service.runtime\": \"desktop\",\n              \"service.mode\": environment.isDevelopment ? \"development\" : \"packaged\",\n            },\n          },\n        }).pipe(Effect.provide(otlpSerializationLayer(environment.otlpProtocol)));\n    const tracer = yield* makeLocalFileTracer({\n      filePath: tracePath,\n      maxBytes: DESKTOP_LOG_FILE_MAX_BYTES,\n      maxFiles: DESKTOP_LOG_FILE_MAX_FILES,\n      batchWindowMs: DESKTOP_TRACE_BATCH_WINDOW_MS,\n",
-      "after": "      filePath: tracePath,\n      maxBytes: DESKTOP_LOG_FILE_MAX_BYTES,\n      maxFiles: DESKTOP_LOG_FILE_MAX_FILES,\n      batchWindowMs: DESKTOP_TRACE_BATCH_WINDOW_MS,\n    });\n    const delegate =\n      !allowAnalyticsExport() || Option.isNone(otlpTracesUrl)\n        ? undefined\n        : yield* OtlpTracer.make({\n            url: otlpTracesUrl.value,\n            exportInterval: `${environment.otlpExportIntervalMs} millis`,\n            headers: Option.getOrUndefined(environment.otlpHeaders),\n            resource: {\n              serviceName: \"desktop\",\n              attributes: {\n                \"service.runtime\": \"desktop\",\n                \"service.mode\": environment.isDevelopment ? \"development\" : \"packaged\",\n              },\n            },\n          }).pipe(Effect.provide(otlpSerializationLayer(environment.otlpProtocol)));\n    const tracer = yield* makeLocalFileTracer({\n      filePath: tracePath,\n      maxBytes: DESKTOP_LOG_FILE_MAX_BYTES,\n      maxFiles: DESKTOP_LOG_FILE_MAX_FILES,\n      batchWindowMs: DESKTOP_TRACE_BATCH_WINDOW_MS,\n"
+      "before": "        const delegate =\n          endpoints.traces === undefined\n",
+      "after": "        const delegate =\n          !allowAnalyticsExport() || endpoints.traces === undefined\n"
     },
     {
       "path": "apps/desktop/src/electron/ElectronUpdater.ts",
@@ -109,11 +109,6 @@
       "path": "apps/web/src/components/clerk/ElectronManagedAuthShell.tsx",
       "before": "}: {\n  readonly publishableKey: string;\n  readonly children: ReactNode;\n}) {\n  return (\n    <ClerkProvider appearance={clerkAppearance} publishableKey={publishableKey} passkeys={passkeys}>\n      <ManagedRelayAuthProvider>{children}</ManagedRelayAuthProvider>\n    </ClerkProvider>\n  );\n}\n",
       "after": "}: {\n  readonly publishableKey: string;\n  readonly children: ReactNode;\n}) {\n  return (\n    <ClerkProvider\n      telemetry={false}\n      appearance={clerkAppearance}\n      publishableKey={publishableKey}\n      passkeys={passkeys}\n    >\n      <ManagedRelayAuthProvider>{children}</ManagedRelayAuthProvider>\n    </ClerkProvider>\n  );\n}\n"
-    },
-    {
-      "path": "infra/relay/scripts/deploy.test.ts",
-      "before": "    );\n  });\n});\n\ndescribe(\"release workflow tracing config propagation\", () => {\n  it.effect(\"uses an artifact instead of a masked cross-job token output\", () =>\n    Effect.gen(function* () {\n      const fileSystem = yield* FileSystem.FileSystem;\n      const path = yield* Path.Path;\n      const workflowPath = yield* path.fromFileUrl(\n        new URL(\"../../../.github/workflows/release.yml\", import.meta.url),\n      );\n      const workflow = yield* fileSystem.readFileString(workflowPath);\n\n      expect(workflow).not.toContain(\"client_tracing_token:\");\n      expect(workflow).not.toContain(\"needs.relay_public_config.outputs.client_tracing_token\");\n      expect(workflow).toContain('--github-env-file \"$RUNNER_TEMP/relay-client-tracing.env\"');\n      expect(workflow).toContain(\"name: relay-client-tracing-config\");\n      expect(workflow).toContain('cat \"$config_path\" >> \"$GITHUB_ENV\"');\n    }).pipe(Effect.provide(NodeServices.layer)),\n  );\n});\n\ndescribe(\"publicConfigFromOutput\", () => {\n",
-      "after": "    );\n  });\n});\n\ndescribe(\"release workflow tracing config propagation\", () => {\n  it.effect(\"does not inject external tracing credentials into desktop releases\", () =>\n    Effect.gen(function* () {\n      const fileSystem = yield* FileSystem.FileSystem;\n      const path = yield* Path.Path;\n      const workflowPath = yield* path.fromFileUrl(\n        new URL(\"../../../.github/workflows/release.yml\", import.meta.url),\n      );\n      const workflow = yield* fileSystem.readFileString(workflowPath);\n\n      expect(workflow).not.toContain(\"client_tracing_token:\");\n      expect(workflow).not.toContain(\"needs.relay_public_config.outputs.client_tracing_token\");\n      expect(workflow).not.toContain('--github-env-file \"$RUNNER_TEMP/relay-client-tracing.env\"');\n      expect(workflow).not.toContain(\"name: relay-client-tracing-config\");\n      expect(workflow).not.toContain('cat \"$config_path\" >> \"$GITHUB_ENV\"');\n    }).pipe(Effect.provide(NodeServices.layer)),\n  );\n});\n\ndescribe(\"publicConfigFromOutput\", () => {\n"
     },
     {
       "path": "packages/shared/package.json",
@@ -284,6 +279,81 @@
       "path": "scripts/install.ps1",
       "before": "T3CODE_CHANNEL=stable (the default)",
       "after": "T3CODE_CHANNEL=nightly (the default)"
+    },
+    {
+      "path": "apps/desktop/src/app/DesktopObservability.ts",
+      "before": "    const loggerLayer = Logger.layer(\n      endpoints.logs === undefined\n",
+      "after": "    const loggerLayer = Logger.layer(\n      !allowAnalyticsExport() || endpoints.logs === undefined\n"
+    },
+    {
+      "path": "apps/server/src/serverLogger.ts",
+      "before": "import { otlpSerializationLayer } from \"@t3tools/shared/observability\";",
+      "after": "import { otlpSerializationLayer } from \"@t3tools/shared/observability\";\nimport { allowAnalyticsExport } from \"@t3tools/shared/t2Analytics\";"
+    },
+    {
+      "path": "apps/server/src/serverLogger.ts",
+      "before": "  const otlpLogger =\n    config.otlpLogsUrl === undefined\n",
+      "after": "  const otlpLogger =\n    !allowAnalyticsExport() || config.otlpLogsUrl === undefined\n"
+    },
+    {
+      "path": "apps/server/src/serverLogger.test.ts",
+      "before": "\"exports log records to the configured logs endpoint\"",
+      "after": "\"keeps log records local with a configured logs endpoint\""
+    },
+    {
+      "path": "apps/server/src/serverLogger.test.ts",
+      "before": "      assert.lengthOf(requests, 1);\n      const [request] = requests;\n      assert.strictEqual(request?.url, \"https://collector.example.com/v1/logs\");\n      assert.include(request?.body ?? \"\", \"server logger under test\");\n      assert.include(request?.body ?? \"\", \"t3-server\");\n      assert.include(request?.body ?? \"\", \"service.runtime\");",
+      "after": "      assert.lengthOf(requests, 0);"
+    },
+    {
+      "path": "apps/server/src/serverLogger.test.ts",
+      "before": "\"sends the headers and wire format the rest of OTLP export already uses\"",
+      "after": "\"does not export logs with protobuf and headers configured\""
+    },
+    {
+      "path": "apps/server/src/serverLogger.test.ts",
+      "before": "      assert.lengthOf(requests, 1);\n      assert.strictEqual(requests[0]?.headers[\"x-scope\"], \"logs\");\n      assert.strictEqual(requests[0]?.headers[\"content-type\"], \"application/x-protobuf\");",
+      "after": "      assert.lengthOf(requests, 0);"
+    },
+    {
+      "path": "apps/server/src/serverLogger.test.ts",
+      "before": "\"stops duplicating messages onto the span once log records are exported\"",
+      "after": "\"preserves local span events with a configured logs endpoint\""
+    },
+    {
+      "path": "apps/server/src/serverLogger.test.ts",
+      "before": "      assert.lengthOf(requests, 1);\n      assert.include(requests[0]?.body ?? \"\", \"server logger under test\");\n      assert.lengthOf(spans, 1);\n      assert.lengthOf(spans[0]?.events ?? [], 0);",
+      "after": "      assert.lengthOf(requests, 0);\n      assert.lengthOf(spans, 1);\n      assert.deepEqual(\n        spans[0]?.events.map(([name]) => name),\n        [\"server logger under test\"],\n      );"
+    },
+    {
+      "path": "apps/desktop/src/app/DesktopObservability.test.ts",
+      "before": "\"exports main process log records to the configured logs endpoint\"",
+      "after": "\"keeps main process logs local with a configured logs endpoint\""
+    },
+    {
+      "path": "apps/desktop/src/app/DesktopObservability.test.ts",
+      "before": "      assert.lengthOf(requests, 1);\n      const [request] = requests;\n      assert.strictEqual(request?.url, \"https://collector.example.com/v1/logs\");\n      assert.include(request?.body ?? \"\", \"desktop log export\");\n      assert.include(request?.body ?? \"\", \"service.runtime\");\n      assert.strictEqual(request?.headers[\"x-scope\"], \"desktop\");\n\n      // The log record is the export now, so the same message must not also\n      // ride along as an event on the span.",
+      "after": "      assert.lengthOf(requests, 0);\n\n      // Log messages remain in the local trace even with an exporter configured."
+    },
+    {
+      "path": "apps/desktop/src/app/DesktopObservability.test.ts",
+      "before": "      assert.notEqual(record, undefined);\n      assert.lengthOf(record?.events ?? [], 0);",
+      "after": "      assert.notEqual(record, undefined);\n      assert.deepEqual(\n        record?.events.map((event) => event.name),\n        [\"desktop log export\"],\n      );"
+    },
+    {
+      "path": "apps/desktop/src/app/DesktopObservability.test.ts",
+      "before": "\"reads every signal endpoint from Settings when the environment names none\"",
+      "after": "\"does not export any signal when endpoints are configured in Settings\""
+    },
+    {
+      "path": "apps/desktop/src/app/DesktopObservability.test.ts",
+      "before": "      assert.deepEqual(requests.map((request) => request.url).toSorted(), [\n        \"https://settings.example.com/v1/logs\",\n        \"https://settings.example.com/v1/traces\",\n      ]);\n      assert.include(\n        requests.find((request) => request.url.endsWith(\"/v1/logs\"))?.body ?? \"\",\n        \"desktop log export from settings\",\n      );\n      assert.include(\n        requests.find((request) => request.url.endsWith(\"/v1/traces\"))?.body ?? \"\",\n        \"desktop-settings-export-test\",\n      );",
+      "after": "      assert.deepEqual(requests, []);"
+    },
+    {
+      "path": "scripts/release-smoke.ts",
+      "before": "  NodeChildProcess.execFileSync(\n    process.execPath,\n    [\"--test\", NodePath.resolve(repoRoot, \".github/scripts/relay-state-output.test.cjs\")],\n    { stdio: \"inherit\" },\n  );",
+      "after": "  const releaseWorkflow = NodeFS.readFileSync(\n    NodePath.resolve(repoRoot, \".github/workflows/release.yml\"),\n    \"utf8\",\n  );\n  for (const marker of [\n    \"Read production relay tracing config\",\n    \"T3CODE_RELAY_CLIENT_OTLP_TRACES_\",\n    \"relay-client-tracing-config\",\n    \"relay-client-tracing.env\",\n  ]) {\n    if (releaseWorkflow.includes(marker)) {\n      throw new Error(`Release workflow must not inject external tracing credentials: ${marker}`);\n    }\n  }"
     }
   ],
   "files": [
