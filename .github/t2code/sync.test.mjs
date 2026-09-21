@@ -81,6 +81,9 @@ function nightlyFixture() {
   };
   git(upstream, "init");
   writeFileSync(join(upstream, "app.txt"), "nightly source\n");
+  NodeFS.mkdirSync(join(upstream, ".github/workflows"), { recursive: true });
+  writeFileSync(join(upstream, ".github/workflows/release.yml"), "upstream release\n");
+  writeFileSync(join(upstream, ".github/workflows/deploy.yml"), "upstream deployment\n");
   const nightlySha = commit(upstream, "Published nightly");
   const tag = "v0.0.43-nightly.20260917.1866";
   git(
@@ -100,6 +103,9 @@ function nightlyFixture() {
   writeFileSync(join(upstream, "app.txt"), "unreleased main change\n");
   const mainSha = commit(upstream, "Unreleased main");
   git(checkout, "clone", upstream, ".");
+  writeFileSync(join(checkout, ".github/workflows/release.yml"), "fork release\n");
+  rmSync(join(checkout, ".github/workflows/deploy.yml"));
+  writeFileSync(join(checkout, ".github/CODEOWNERS"), "* @fork-maintainer\n");
   NodeFS.mkdirSync(join(checkout, ".github/t2code"), { recursive: true });
   writeFileSync(
     join(checkout, ".github/t2code/upstream.json"),
@@ -206,6 +212,34 @@ test("planning resolves an annotated nightly tag, not the release's main target 
       /-unreleased main change/,
     );
     assert.match(result.output, /ready=true/);
+  } finally {
+    rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+test("review receives the accepted controls that replace upstream workflows", () => {
+  const f = nightlyFixture();
+  try {
+    const result = f.run();
+    assert.equal(result.status, 0, result.stderr);
+    const controls = join(f.checkout, "review/fork-controls");
+    assert.equal(
+      readFileSync(join(controls, ".github/workflows/release.yml"), "utf8"),
+      "fork release\n",
+    );
+    assert.equal(NodeFS.existsSync(join(controls, ".github/workflows/deploy.yml")), false);
+    assert.equal(
+      readFileSync(join(controls, ".github/CODEOWNERS"), "utf8"),
+      "* @fork-maintainer\n",
+    );
+    assert.deepEqual(JSON.parse(readFileSync(join(controls, ".github/t2code/overlay.json"))), {
+      files: [],
+      replacements: [],
+    });
+    assert.equal(
+      JSON.parse(readFileSync(join(controls, ".github/t2code/upstream.json"))).commit,
+      f.mainSha,
+    );
   } finally {
     rmSync(f.root, { recursive: true, force: true });
   }

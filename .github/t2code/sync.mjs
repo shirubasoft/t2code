@@ -22,6 +22,7 @@ import {
 
 const repository = forkRepository;
 const branch = "codex/analytics-sync";
+const forkControlPaths = [".github/workflows", ".github/t2code", ".github/CODEOWNERS"];
 function gh(args) {
   return execFileSync("gh", args, { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 }).trim();
 }
@@ -129,6 +130,10 @@ function plan() {
     mkdirSync(resolve("review/fork-files", path, ".."), { recursive: true });
     cpSync(path, resolve("review/fork-files", path));
   }
+  for (const path of forkControlPaths) {
+    mkdirSync(resolve("review/fork-controls", path, ".."), { recursive: true });
+    cpSync(path, resolve("review/fork-controls", path), { recursive: true });
+  }
   output({ ready: true, base, upstream, tag: nightly.tag });
 }
 function propose() {
@@ -160,7 +165,7 @@ function propose() {
   git(["fetch", "--no-tags", "https://github.com/pingdotgg/t3code.git", upstream]);
   git(["switch", "-C", branch, base]);
   git(["read-tree", "--reset", "-u", upstream]);
-  for (const path of [".github/workflows", ".github/t2code", ".github/CODEOWNERS"]) {
+  for (const path of forkControlPaths) {
     rmSync(path, { recursive: true, force: true });
     cpSync(resolve(controlRoot, path), path, { recursive: true });
   }
