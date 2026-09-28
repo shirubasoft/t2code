@@ -18,6 +18,8 @@ import {
   forkRelease,
   releaseInProgress,
   nightlyVersion,
+  github,
+  upstreamRepository,
 } from "./nightly.mjs";
 
 const repository = forkRepository;
@@ -36,12 +38,11 @@ function api(path, data, method = data ? "POST" : "GET") {
   );
 }
 function output(values) {
-  appendFileSync(
-    process.env.GITHUB_OUTPUT,
-    Object.entries(values)
-      .map(([key, value]) => `${key}=${value}\n`)
-      .join(""),
-  );
+  const text = Object.entries(values)
+    .map(([key, value]) => `${key}=${value}\n`)
+    .join("");
+  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, text);
+  else process.stdout.write(text);
 }
 function dispatchRelease(sha, tag) {
   gh([
@@ -85,7 +86,9 @@ function plan() {
       return;
     }
   }
-  const release = nextNightly(pin);
+  const tag = process.argv[3];
+  if (tag) nightlyVersion(tag);
+  const release = tag ? github(`${upstreamRepository}/releases/tags/${tag}`) : nextNightly(pin);
   if (!release) {
     output({ ready: false });
     return;
@@ -105,34 +108,36 @@ function plan() {
     output({ ready: false });
     return;
   }
-  rmSync("review", { recursive: true, force: true });
-  mkdirSync("review", { recursive: true });
+  const review = resolve(process.env.T2_SYNC_CONTEXT ?? "review");
+  rmSync(review, { recursive: true, force: true });
+  mkdirSync(review, { recursive: true });
   writeFileSync(
-    "review/plan.json",
+    resolve(review, "plan.json"),
     JSON.stringify({ base, from, upstream, nightly, attempt: retry.attempt }, null, 2) + "\n",
   );
-  if (previous) writeFileSync("review/feedback.json", JSON.stringify(previous, null, 2) + "\n");
+  if (previous)
+    writeFileSync(resolve(review, "feedback.json"), JSON.stringify(previous, null, 2) + "\n");
   writeFileSync(
-    "review/commits.txt",
+    resolve(review, "commits.txt"),
     git(["log", "--reverse", "--format=fuller", `${from}...${upstream}`]),
   );
   writeFileSync(
-    "review/upstream.diff",
+    resolve(review, "upstream.diff"),
     git(["diff", "--no-ext-diff", from, upstream, "--", ".", ":!.repos"]),
   );
-  writeFileSync("review/overlay.json", readFileSync(".github/t2code/overlay.json"));
+  writeFileSync(resolve(review, "overlay.json"), readFileSync(".github/t2code/overlay.json"));
   writeFileSync(
-    "review/overlay-check.json",
+    resolve(review, "overlay-check.json"),
     JSON.stringify(inspectOverlay(readJson(".github/t2code/overlay.json"), upstream), null, 2) +
       "\n",
   );
   for (const path of readJson(".github/t2code/overlay.json").files) {
-    mkdirSync(resolve("review/fork-files", path, ".."), { recursive: true });
-    cpSync(path, resolve("review/fork-files", path));
+    mkdirSync(resolve(review, "fork-files", path, ".."), { recursive: true });
+    cpSync(path, resolve(review, "fork-files", path));
   }
   for (const path of forkControlPaths) {
-    mkdirSync(resolve("review/fork-controls", path, ".."), { recursive: true });
-    cpSync(path, resolve("review/fork-controls", path), { recursive: true });
+    mkdirSync(resolve(review, "fork-controls", path, ".."), { recursive: true });
+    cpSync(path, resolve(review, "fork-controls", path), { recursive: true });
   }
   output({ ready: true, base, upstream, tag: nightly.tag });
 }
@@ -198,7 +203,7 @@ function propose() {
   // The branch is dedicated to generated snapshots; never rewrite main or a human branch.
   git(["push", "--force-with-lease", "origin", `${sha}:refs/heads/${branch}`]);
   const existing = api(`pulls?state=open&head=shirubasoft:${branch}`)[0];
-  const body = `Follow upstream nightly https://github.com/pingdotgg/t3code/releases/tag/${state.nightly.tag}, source ${upstream}.\n\n${result.summary}\n\nApplication changes are limited to the recorded analytics patches and installer metadata. Full CI must pass before merging.\n\nModel: Codex configured model, high reasoning. Harness: isolated Codex CLI.`;
+  const body = `Follow upstream nightly https://github.com/pingdotgg/t3code/releases/tag/${state.nightly.tag}, source ${upstream}.\n\n${result.summary}\n\nApplication changes are limited to the recorded analytics patches and installer metadata. Full CI must pass before merging.\n\nModel: GPT-6. Harness: local Codex task.`;
   const pr = existing
     ? api(
         `pulls/${existing.number}`,
