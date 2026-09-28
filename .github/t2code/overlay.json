@@ -47,8 +47,8 @@
     },
     {
       "path": "apps/server/src/http.ts",
-      "before": "          bodyJson,\n        }),\n      ),\n    );\n\n    if (otlpTracesUrl === undefined) {\n      return HttpServerResponse.empty({ status: 204 });\n    }\n\n    return yield* httpClient\n      .post(otlpTracesUrl, {\n",
-      "after": "          bodyJson,\n        }),\n      ),\n    );\n\n    if (!allowAnalyticsExport() || otlpTracesUrl === undefined) {\n      return HttpServerResponse.empty({ status: 204 });\n    }\n\n    return yield* httpClient\n      .post(otlpTracesUrl, {\n"
+      "before": "    if (otlpTracesUrl === undefined) {",
+      "after": "    if (!allowAnalyticsExport() || otlpTracesUrl === undefined) {"
     },
     {
       "path": "apps/server/src/observability/Layers/Observability.ts",
@@ -57,13 +57,13 @@
     },
     {
       "path": "apps/server/src/observability/Layers/Observability.ts",
-      "before": "              count: stats.count,\n              durationMs: stats.durationMs,\n            }),\n        });\n        const delegate =\n          config.otlpTracesUrl === undefined\n            ? undefined\n            : yield* OtlpTracer.make({\n                url: config.otlpTracesUrl,\n                exportInterval: `${config.otlpExportIntervalMs} millis`,\n                headers: config.otlpHeaders,\n",
-      "after": "              count: stats.count,\n              durationMs: stats.durationMs,\n            }),\n        });\n        const delegate =\n          !allowAnalyticsExport() || config.otlpTracesUrl === undefined\n            ? undefined\n            : yield* OtlpTracer.make({\n                url: config.otlpTracesUrl,\n                exportInterval: `${config.otlpExportIntervalMs} millis`,\n                headers: config.otlpHeaders,\n"
+      "before": "          config.otlpTracesUrl === undefined",
+      "after": "          !allowAnalyticsExport() || config.otlpTracesUrl === undefined"
     },
     {
       "path": "apps/server/src/observability/Layers/Observability.ts",
-      "before": "        );\n      }),\n    ).pipe(Layer.provide(OtlpExporter.layerFlusher), Layer.provideMerge(serializationLayer));\n\n    const metricsLayer =\n      config.otlpMetricsUrl === undefined\n        ? Layer.empty\n        : OtlpMetrics.layer({\n            url: config.otlpMetricsUrl,\n            exportInterval: `${config.otlpExportIntervalMs} millis`,\n            headers: config.otlpHeaders,\n",
-      "after": "        );\n      }),\n    ).pipe(Layer.provide(OtlpExporter.layerFlusher), Layer.provideMerge(serializationLayer));\n\n    const metricsLayer =\n      !allowAnalyticsExport() || config.otlpMetricsUrl === undefined\n        ? Layer.empty\n        : OtlpMetrics.layer({\n            url: config.otlpMetricsUrl,\n            exportInterval: `${config.otlpExportIntervalMs} millis`,\n            headers: config.otlpHeaders,\n"
+      "before": "      config.otlpMetricsUrl === undefined",
+      "after": "      !allowAnalyticsExport() || config.otlpMetricsUrl === undefined"
     },
     {
       "path": "apps/server/src/server.test.ts",
@@ -77,7 +77,7 @@
     },
     {
       "path": "apps/server/src/server.test.ts",
-      "before": "        // @effect-diagnostics-next-line preferSchemaOverJson:off\n        body: HttpBody.text(JSON.stringify(payload), \"application/json\"),\n      });\n\n      assert.equal(response.status, 204);\n      // The local collector still decodes the browser's JSON before forwarding.\n      assert.equal(localTraceRecords.length, 1);\n      assert.equal(upstreamRequests.length, 1);\n      const forwarded = upstreamRequests[0];\n      assert.notEqual(forwarded, undefined);\n      if (!forwarded) {\n        return;\n      }\n      assert.equal(forwarded.contentType, \"application/x-protobuf\");\n      // Protobuf strings are raw UTF-8, so the span and service names survive\n      // the stub's utf8 decode even though the surrounding bytes don't.\n      assert.notEqual(forwarded.body[0], \"{\");\n      assert.include(forwarded.body, \"client.protobuf.test\");\n      assert.include(forwarded.body, \"t3-web\");\n    }).pipe(Effect.provide(NodeHttpServer.layerTest)),\n  );\n\n  it.effect(\"responds to browser OTLP trace preflight requests with CORS headers\", () =>\n    Effect.gen(function* () {\n",
+      "before": "        // @effect-diagnostics-next-line preferSchemaOverJson:off\n        body: HttpBody.text(JSON.stringify(payload), \"application/json\"),\n      });\n\n      assert.equal(response.status, 204);\n      // The local collector still decodes the browser's JSON before forwarding.\n      assert.equal(localTraceRecords.length, 1);\n      assert.equal(upstreamRequests.length, 1);\n      const forwarded = upstreamRequests[0];\n      assert.notEqual(forwarded, undefined);\n      if (!forwarded) {\n        return;\n      }\n      assert.equal(forwarded.contentType, \"application/x-protobuf\");\n      // Protobuf strings are raw UTF-8, so the span and service names survive\n      // the stub's utf8 decode even though the surrounding bytes don't.\n      assert.notEqual(forwarded.body[0], \"{\");\n      assert.include(forwarded.body, \"client.protobuf.test\");\n      assert.include(forwarded.body, \"t3code-web\");\n    }).pipe(Effect.provide(NodeHttpServer.layerTest)),\n  );\n\n  it.effect(\"responds to browser OTLP trace preflight requests with CORS headers\", () =>\n    Effect.gen(function* () {\n",
       "after": "        // @effect-diagnostics-next-line preferSchemaOverJson:off\n        body: HttpBody.text(JSON.stringify(payload), \"application/json\"),\n      });\n\n      assert.equal(response.status, 204);\n      // The local collector still decodes the browser's JSON without forwarding it.\n      assert.equal(localTraceRecords.length, 1);\n      assert.deepEqual(upstreamRequests, []);\n    }).pipe(Effect.provide(NodeHttpServer.layerTest)),\n  );\n\n  it.effect(\"responds to browser OTLP trace preflight requests with CORS headers\", () =>\n    Effect.gen(function* () {\n"
     },
     {
@@ -122,7 +122,7 @@
     },
     {
       "path": "packages/shared/src/relayTracing.test.ts",
-      "before": "\n    return Layer.build(tracedApplication).pipe(\n      Effect.scoped,\n      Effect.andThen(\n        Effect.sync(() => {\n          expect(fetchFn).toHaveBeenCalledOnce();\n          const payload = new TextDecoder().decode(fetchFn.mock.calls[0]?.[1]?.body as Uint8Array);\n          expect(payload).toContain(\"relay request failed\");\n          expect(payload).toContain(\"relay socket closed\");\n        }),\n      ),\n    );\n  });\n});\n",
+      "before": "\n    return Layer.build(tracedApplication).pipe(\n      Effect.scoped,\n      Effect.andThen(\n        Effect.sync(() => {\n          expect(fetchFn).toHaveBeenCalledOnce();\n          const payload = new TextDecoder().decode(fetchFn.mock.calls[0]?.[1]?.body as Uint8Array);\n          expect(payload).toContain(\"relay request failed\");\n          expect(payload).toContain(\"relay socket closed\");\n          expect(payload).toContain('\"key\":\"service.name\",\"value\":{\"stringValue\":\"relay-test\"}');\n          expect(payload).toContain('\"key\":\"service.namespace\",\"value\":{\"stringValue\":\"t3code\"}');\n        }),\n      ),\n    );\n  });\n});\n",
       "after": "\n    return Layer.build(tracedApplication).pipe(\n      Effect.scoped,\n      Effect.andThen(\n        Effect.sync(() => {\n          expect(fetchFn).not.toHaveBeenCalled();\n        }),\n      ),\n    );\n  });\n});\n"
     },
     {
@@ -302,12 +302,12 @@
     },
     {
       "path": "apps/server/src/serverLogger.test.ts",
-      "before": "      assert.lengthOf(requests, 1);\n      const [request] = requests;\n      assert.strictEqual(request?.url, \"https://collector.example.com/v1/logs\");\n      assert.include(request?.body ?? \"\", \"server logger under test\");\n      assert.include(request?.body ?? \"\", \"t3-server\");\n      assert.include(request?.body ?? \"\", \"service.runtime\");",
+      "before": "      assert.lengthOf(requests, 1);\n      const [request] = requests;\n      assert.strictEqual(request?.url, \"https://collector.example.com/v1/logs\");\n      assert.include(request?.body ?? \"\", \"server logger under test\");\n      assert.include(request?.body ?? \"\", \"t3code-server\");\n      assert.include(request?.body ?? \"\", \"service.runtime\");",
       "after": "      assert.lengthOf(requests, 0);"
     },
     {
       "path": "apps/server/src/serverLogger.test.ts",
-      "before": "\"sends the headers and wire format the rest of OTLP export already uses\"",
+      "before": "\"sends the headers and wire format the log signal asked for\"",
       "after": "\"does not export logs with protobuf and headers configured\""
     },
     {
@@ -354,6 +354,51 @@
       "path": "scripts/release-smoke.ts",
       "before": "  NodeChildProcess.execFileSync(\n    process.execPath,\n    [\"--test\", NodePath.resolve(repoRoot, \".github/scripts/relay-state-output.test.cjs\")],\n    { stdio: \"inherit\" },\n  );",
       "after": "  const releaseWorkflow = NodeFS.readFileSync(\n    NodePath.resolve(repoRoot, \".github/workflows/release.yml\"),\n    \"utf8\",\n  );\n  for (const marker of [\n    \"Read production relay tracing config\",\n    \"T3CODE_RELAY_CLIENT_OTLP_TRACES_\",\n    \"relay-client-tracing-config\",\n    \"relay-client-tracing.env\",\n  ]) {\n    if (releaseWorkflow.includes(marker)) {\n      throw new Error(`Release workflow must not inject external tracing credentials: ${marker}`);\n    }\n  }"
+    },
+    {
+      "path": "apps/server/src/server.test.ts",
+      "before": "      assert.deepEqual(forwardedUrls, [\n        \"http://collector.test/v1/traces\",\n        \"http://collector.test/v1/traces\",\n      ]);",
+      "after": "      assert.deepEqual(forwardedUrls, []);"
+    },
+    {
+      "path": "apps/server/src/serverLogger.test.ts",
+      "before": "\"keeps its service name while OTEL resource attributes add dimensions\"",
+      "after": "\"keeps OTEL resource attributes local with a configured logs exporter\""
+    },
+    {
+      "path": "apps/server/src/serverLogger.test.ts",
+      "before": "      assert.lengthOf(requests, 1);\n      const body = requests[0]?.body ?? \"\";\n      assert.include(body, '\"stringValue\":\"t3code-server\"');\n      assert.include(body, \"deployment.environment.name\");\n      assert.include(body, '\"key\":\"service.namespace\",\"value\":{\"stringValue\":\"t3code\"}');\n      assert.notInclude(body, \"renamed\");",
+      "after": "      assert.lengthOf(requests, 0);"
+    },
+    {
+      "path": "apps/desktop/src/app/DesktopObservability.test.ts",
+      "before": "\"exports to an OTEL endpoint over Settings, with its own headers and protocol\"",
+      "after": "\"keeps logs local with OTEL and Settings configured\""
+    },
+    {
+      "path": "apps/desktop/src/app/DesktopObservability.test.ts",
+      "before": "      assert.lengthOf(requests, 1);\n      const [request] = requests;\n      assert.strictEqual(request?.url, \"https://collector.example.com/v1/logs\");\n      assert.strictEqual(request?.headers[\"x-otel\"], \"desktop\");\n      assert.strictEqual(request?.headers[\"x-scope\"], undefined);\n      assert.strictEqual(request?.headers[\"content-type\"], \"application/json\");",
+      "after": "      assert.lengthOf(requests, 0);"
+    },
+    {
+      "path": "apps/desktop/src/app/DesktopObservability.test.ts",
+      "before": "\"keeps its service name while OTEL resource attributes add dimensions\"",
+      "after": "\"keeps OTEL resource attributes local with a configured logs exporter\""
+    },
+    {
+      "path": "apps/desktop/src/app/DesktopObservability.test.ts",
+      "before": "      assert.lengthOf(requests, 1);\n      const body = requests[0]?.body ?? \"\";\n      assert.include(body, '\"stringValue\":\"t3code-desktop\"');\n      assert.include(body, \"deployment.environment.name\");\n      assert.include(body, '\"key\":\"service.namespace\",\"value\":{\"stringValue\":\"t3code\"}');\n      assert.notInclude(body, \"renamed\");",
+      "after": "      assert.lengthOf(requests, 0);"
+    },
+    {
+      "path": "apps/desktop/src/app/DesktopObservability.test.ts",
+      "before": "\"exports kill switch warnings through the configured logger\"",
+      "after": "\"keeps kill switch warnings local with a configured logger\""
+    },
+    {
+      "path": "apps/desktop/src/app/DesktopObservability.test.ts",
+      "before": "      assert.include(requests[0]?.body ?? \"\", \"OTEL_SDK_DISABLED=1 was read as false\");",
+      "after": "      assert.lengthOf(requests, 0);"
     }
   ],
   "files": [

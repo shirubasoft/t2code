@@ -1,12 +1,16 @@
 import * as NodePath from "@effect/platform-node/NodePath";
 import { assert, describe, it } from "@effect/vitest";
 import * as NodeOS from "node:os";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Tracer from "effect/Tracer";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+
+import { DEFAULT_SIGNAL_EXPORT } from "@t3tools/shared/observability";
+import * as OtelEnvironment from "@t3tools/shared/otelEnvironment";
 
 import * as ServerConfig from "./config.ts";
 import { ServerLoggerLive } from "./serverLogger.ts";
@@ -51,10 +55,10 @@ const configLayer = (overrides: Partial<ServerConfig.ServerConfig["Service"]>) =
         otlpTracesUrl: undefined,
         otlpMetricsUrl: undefined,
         otlpLogsUrl: undefined,
-        otlpExportIntervalMs: 10_000,
-        otlpServiceName: "t3-server",
-        otlpHeaders: undefined,
-        otlpProtocol: "http/json",
+        otlpTracesExport: DEFAULT_SIGNAL_EXPORT,
+        otlpMetricsExport: DEFAULT_SIGNAL_EXPORT,
+        otlpLogsExport: DEFAULT_SIGNAL_EXPORT,
+        otelEnvironment: OtelEnvironment.none,
         cwd: baseDir,
         baseDir,
         ...derivedPaths,
@@ -142,6 +146,28 @@ describe("ServerLoggerLive", () => {
     }),
   );
 
+  it.effect("keeps OTEL resource attributes local with a configured logs exporter", () =>
+    Effect.gen(function* () {
+      const requests = yield* logThrough({
+        otlpLogsUrl: "https://collector.example.com/v1/logs",
+      }).pipe(
+        Effect.provide(
+          ConfigProvider.layer(
+            ConfigProvider.fromEnv({
+              env: {
+                OTEL_SERVICE_NAME: "renamed",
+                OTEL_RESOURCE_ATTRIBUTES:
+                  "service.name=renamed,service.namespace=renamed,deployment.environment.name=development",
+              },
+            }),
+          ),
+        ),
+      );
+
+      assert.lengthOf(requests, 0);
+    }),
+  );
+
   it.effect("stays off the network when no logs endpoint is configured", () =>
     Effect.gen(function* () {
       const requests = yield* logThrough({});
@@ -154,8 +180,11 @@ describe("ServerLoggerLive", () => {
     Effect.gen(function* () {
       const requests = yield* logThrough({
         otlpLogsUrl: "https://collector.example.com/v1/logs",
-        otlpProtocol: "http/protobuf",
-        otlpHeaders: { "x-scope": "logs" },
+        otlpLogsExport: {
+          ...DEFAULT_SIGNAL_EXPORT,
+          protocol: "http/protobuf",
+          headers: { "x-scope": "logs" },
+        },
       });
 
       assert.lengthOf(requests, 0);
