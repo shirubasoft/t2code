@@ -144,7 +144,7 @@ if (path.endsWith("git/ref/heads/main")) console.log(JSON.stringify({object:{sha
 else if (path.includes("/actions/artifacts?name=sync-feedback-")) console.log(JSON.stringify({artifacts:state.feedback ? [{id:1,expired:false,workflow_run:{id:17,head_branch:"main",head_sha:state.base}}] : []}));
 else if (path.endsWith("/actions/runs/17")) console.log(JSON.stringify({id:17,path:".github/workflows/upstream-sync.yml",event:"schedule",status:"completed"}));
 else if (path.includes("pingdotgg/t3code/releases/tags/")) console.log(JSON.stringify(state.release));
-else if (path.includes("pingdotgg/t3code/releases?")) console.log(JSON.stringify([state.release]));
+else if (path.includes("pingdotgg/t3code/releases?")) console.log(JSON.stringify(state.releases ?? [state.release]));
 else if (path.includes("shirubasoft/t2code/releases/tags/")) {
   if (state.fork) console.log(JSON.stringify(state.fork));
   else { console.error("gh: Not Found (HTTP 404)"); process.exit(1); }
@@ -171,19 +171,24 @@ process.exit(result.status ?? 1);
     mainSha,
     state,
     commit,
-    run: (command = "plan") => {
+    run: (command = "plan", { tag: requestedTag, context, consoleOutput = false } = {}) => {
       writeFileSync(stateFile, JSON.stringify(state));
       writeFileSync(output, "");
       const result = spawnSync(
         process.execPath,
-        [join(controlRoot, ".github/t2code/sync.mjs"), command],
+        [
+          join(controlRoot, ".github/t2code/sync.mjs"),
+          command,
+          ...(requestedTag ? [requestedTag] : []),
+        ],
         {
           cwd: checkout,
           encoding: "utf8",
           env: {
             ...process.env,
             PATH: `${commands}${delimiter}${process.env.PATH}`,
-            GITHUB_OUTPUT: output,
+            GITHUB_OUTPUT: consoleOutput ? undefined : output,
+            T2_SYNC_CONTEXT: context,
             T2_NIGHTLY_TAG: tag,
             T2_RELEASE_SHA: state.base,
           },
@@ -212,6 +217,64 @@ test("planning resolves an annotated nightly tag, not the release's main target 
       /-unreleased main change/,
     );
     assert.match(result.output, /ready=true/);
+  } finally {
+    rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+test("local planning reviews an explicit nightly in an external directory without GitHub runner variables", () => {
+  const f = nightlyFixture();
+  try {
+    f.state.releases = [];
+    const context = join(f.root, "local-review");
+    const result = f.run("plan", { tag: f.tag, context, consoleOutput: true });
+    assert.equal(result.status, 0, result.stderr);
+    const plan = JSON.parse(readFileSync(join(context, "plan.json")));
+    assert.equal(plan.nightly.tag, f.tag);
+    assert.equal(plan.upstream, f.nightlySha);
+    assert.match(readFileSync(join(context, "upstream.diff"), "utf8"), /-unreleased main change/);
+    assert.match(result.stdout, /ready=true/);
+    assert.equal(result.output, "");
+    assert.equal(NodeFS.existsSync(join(f.checkout, "review")), false);
+    assert.equal(
+      readFileSync(join(context, "fork-controls/.github/workflows/release.yml"), "utf8"),
+      "fork release\n",
+    );
+  } finally {
+    rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+test("local planning rejects a preview tag", () => {
+  const f = nightlyFixture();
+  try {
+    const result = f.run("plan", { tag: f.tag.replace("nightly", "preview") });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /Expected an upstream nightly version tag/);
+    assert.equal(NodeFS.existsSync(join(f.checkout, "review")), false);
+  } finally {
+    rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+test("local planning does not rebuild an already published accepted nightly", () => {
+  const f = nightlyFixture();
+  try {
+    writeFileSync(
+      join(f.checkout, ".github/t2code/upstream.json"),
+      JSON.stringify({
+        repository: "pingdotgg/t3code",
+        commit: f.nightlySha,
+        tag: f.tag,
+        releaseId: 42,
+      }),
+    );
+    f.state.base = f.commit(f.checkout, "Accept published nightly");
+    f.state.fork = { draft: false };
+    const result = f.run("plan", { tag: f.tag });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.output, "ready=false\n");
+    assert.equal(NodeFS.existsSync(join(f.checkout, "review")), false);
   } finally {
     rmSync(f.root, { recursive: true, force: true });
   }
