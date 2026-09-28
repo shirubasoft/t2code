@@ -88,6 +88,10 @@ function plan() {
   }
   const tag = process.argv[3];
   if (tag) nightlyVersion(tag);
+  if (tag && tag === pin.tag) {
+    output({ ready: false });
+    return;
+  }
   const release = tag ? github(`${upstreamRepository}/releases/tags/${tag}`) : nextNightly(pin);
   if (!release) {
     output({ ready: false });

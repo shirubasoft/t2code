@@ -257,6 +257,29 @@ test("local planning rejects a preview tag", () => {
   }
 });
 
+test("local planning does not rebuild an already published accepted nightly", () => {
+  const f = nightlyFixture();
+  try {
+    writeFileSync(
+      join(f.checkout, ".github/t2code/upstream.json"),
+      JSON.stringify({
+        repository: "pingdotgg/t3code",
+        commit: f.nightlySha,
+        tag: f.tag,
+        releaseId: 42,
+      }),
+    );
+    f.state.base = f.commit(f.checkout, "Accept published nightly");
+    f.state.fork = { draft: false };
+    const result = f.run("plan", { tag: f.tag });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.output, "ready=false\n");
+    assert.equal(NodeFS.existsSync(join(f.checkout, "review")), false);
+  } finally {
+    rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
 test("review receives the accepted controls that replace upstream workflows", () => {
   const f = nightlyFixture();
   try {
