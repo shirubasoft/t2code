@@ -61,26 +61,39 @@ function fixture() {
   const bytes = Buffer.from("installer fixture");
   const hash = NodeCrypto.createHash("sha512").update(bytes).digest("base64");
   for (const [arch, ext] of [
-    ["x64", "dmg"],
-    ["arm64", "dmg"],
     ["x86_64", "AppImage"],
     ["arm64", "AppImage"],
-    ["x64", "exe"],
-    ["arm64", "exe"],
+    ["amd64", "deb"],
+    ["arm64", "deb"],
   ]) {
     NodeFS.writeFileSync(NodePath.join(assets, `T2-Code-${version}-${arch}.${ext}`), bytes);
   }
-  for (const [name, arch, ext] of [
-    ["nightly-mac.yml", "arm64", "dmg"],
-    ["nightly-mac-x64.yml", "x64", "dmg"],
-    ["nightly-win-x64.yml", "x64", "exe"],
-    ["nightly-win-arm64.yml", "arm64", "exe"],
-    ["nightly-linux.yml", "x86_64", "AppImage"],
-    ["nightly-linux-arm64.yml", "arm64", "AppImage"],
+  for (const arch of ["x64", "arm64"]) {
+    NodeFS.writeFileSync(NodePath.join(assets, `t3-${version}-linux-${arch}.tar.gz`), bytes);
+  }
+  for (const [name, appImageArch, debArch] of [
+    ["nightly-linux.yml", "x86_64", "amd64"],
+    ["nightly-linux-arm64.yml", "arm64", "arm64"],
   ]) {
     NodeFS.writeFileSync(
       NodePath.join(assets, name),
-      `version: ${version}\nfiles:\n  - url: T2-Code-${version}-${arch}.${ext}\n    sha512: ${hash}\n    size: ${bytes.length}\n${ext === "AppImage" ? "    blockMapSize: 4\n" : ""}releaseDate: '2026-09-16T00:00:00.000Z'\n`,
+      serializeUpdateManifest(
+        {
+          version,
+          releaseDate: "2026-09-16T00:00:00.000Z",
+          files: [
+            {
+              url: `T2-Code-${version}-${appImageArch}.AppImage`,
+              sha512: hash,
+              size: bytes.length,
+              blockMapSize: 4,
+            },
+            { url: `T2-Code-${version}-${debArch}.deb`, sha512: hash, size: bytes.length },
+          ],
+          extras: {},
+        },
+        { platformLabel: "Linux" },
+      ),
     );
   }
   return {
@@ -106,7 +119,7 @@ function fixture() {
 }
 
 NodeTest.test(
-  "release assembly records the pinned upstream and hashes each published artifact",
+  "Linux-only release assembly records the pinned upstream and hashes each artifact",
   () => {
     const { assets, sha, upstream, assemble } = fixture();
     const result = assemble();
@@ -132,11 +145,6 @@ NodeTest.test(
           .digest("hex"),
       );
     }
-    NodeAssert.match(
-      NodeFS.readFileSync(NodePath.join(assets, "nightly.yml"), "utf8"),
-      /arm64\.exe/,
-    );
-    NodeAssert.match(NodeFS.readFileSync(NodePath.join(assets, "nightly.yml"), "utf8"), /x64\.exe/);
   },
 );
 
@@ -171,14 +179,14 @@ NodeTest.test("the actual AppImage manifest shape retains its embedded block map
 NodeTest.test("release assembly rejects modified installer bytes and missing architectures", () => {
   for (const remove of [false, true]) {
     const { assets, assemble } = fixture();
-    const path = NodePath.join(assets, `T2-Code-${version}-arm64.exe`);
+    const path = NodePath.join(assets, `T2-Code-${version}-arm64.AppImage`);
     if (remove) NodeFS.rmSync(path);
     else NodeFS.appendFileSync(path, "modified");
     const result = assemble();
     NodeAssert.notEqual(result.status, 0);
     NodeAssert.match(
       result.stderr,
-      remove ? /Missing arm64 exe installer/ : /Updater checksum mismatch/,
+      remove ? /Missing Linux release asset: .*arm64.AppImage/ : /Updater checksum mismatch/,
     );
   }
 });
@@ -199,4 +207,41 @@ NodeTest.test("release assembly rejects stable feeds and mismatched nightly iden
   const stable = fresh.assemble();
   NodeAssert.notEqual(stable.status, 0);
   NodeAssert.match(stable.stderr, /Stable updater feed/);
+});
+
+NodeTest.test(
+  "release assembly requires Debian packages, CLI archives and feeds for both Linux architectures",
+  () => {
+    for (const name of [
+      `T2-Code-${version}-amd64.deb`,
+      `T2-Code-${version}-arm64.deb`,
+      `t3-${version}-linux-x64.tar.gz`,
+      `t3-${version}-linux-arm64.tar.gz`,
+      "nightly-linux.yml",
+      "nightly-linux-arm64.yml",
+    ]) {
+      const { assets, assemble } = fixture();
+      NodeFS.rmSync(NodePath.join(assets, name));
+      const result = assemble();
+      NodeAssert.notEqual(result.status, 0);
+      NodeAssert.ok(result.stderr.includes(`Missing Linux release asset: ${name}`), result.stderr);
+    }
+  },
+);
+
+NodeTest.test("release assembly rejects non-Linux installers, archives and updater feeds", () => {
+  for (const name of [
+    `T2-Code-${version}-x64.dmg`,
+    `T2-Code-${version}-arm64.exe`,
+    `t3-${version}-darwin-arm64.tar.gz`,
+    `t3-${version}-win32-x64.zip`,
+    "nightly-mac.yml",
+    "nightly.yml",
+  ]) {
+    const { assets, assemble } = fixture();
+    NodeFS.writeFileSync(NodePath.join(assets, name), "non-Linux artifact");
+    const result = assemble();
+    NodeAssert.notEqual(result.status, 0);
+    NodeAssert.ok(result.stderr.includes(`Unexpected Linux release asset: ${name}`), result.stderr);
+  }
 });

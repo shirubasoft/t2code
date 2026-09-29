@@ -3,8 +3,10 @@
 Release requests are handled in the local Codex task on the maintainer's machine.
 The task reviews and adapts the analytics overlay, opens the source update PR,
 waits for CI, merges it, and dispatches `release.yml`. GitHub-hosted runners build
-and publish the cross-platform packages. No scheduled sync or homelab runner is
-required.
+and publish Linux packages only, for x64 and ARM64. Keep this release policy
+unless the maintainer explicitly changes it. Releases include AppImage and Debian
+installers, CLI archives, and Linux updater feeds. No scheduled sync or homelab
+runner is required.
 
 ## Prepare a source update
 
