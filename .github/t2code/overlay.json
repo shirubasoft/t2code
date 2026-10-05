@@ -112,8 +112,8 @@
     },
     {
       "path": "packages/shared/package.json",
-      "before": "{\n  \"name\": \"@t3tools/shared\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"exports\": {\n    \"./legacyCliLauncher\": {\n      \"types\": \"./src/legacyCliLauncher.ts\",\n      \"import\": \"./src/legacyCliLauncher.ts\"\n    },\n    \"./delimitedPreview\": {\n",
-      "after": "{\n  \"name\": \"@t3tools/shared\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"exports\": {\n    \"./t2Analytics\": {\n      \"types\": \"./src/t2Analytics.ts\",\n      \"import\": \"./src/t2Analytics.ts\"\n    },\n    \"./legacyCliLauncher\": {\n      \"types\": \"./src/legacyCliLauncher.ts\",\n      \"import\": \"./src/legacyCliLauncher.ts\"\n    },\n    \"./delimitedPreview\": {\n"
+      "before": "  \"exports\": {\n",
+      "after": "  \"exports\": {\n    \"./t2Analytics\": {\n      \"types\": \"./src/t2Analytics.ts\",\n      \"import\": \"./src/t2Analytics.ts\"\n    },\n"
     },
     {
       "path": "packages/shared/src/relayTracing.test.ts",
