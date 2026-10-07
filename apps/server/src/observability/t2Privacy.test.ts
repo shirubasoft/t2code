@@ -3,18 +3,18 @@ import { expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
-import { FetchHttpClient } from "effect/unstable/http";
+import { FetchHttpClient } from "effect/http";
 import { vi } from "vite-plus/test";
 import * as ServerConfig from "../config.ts";
 import * as ResourceAttribution from "../resourceTelemetry/ResourceAttribution.ts";
-import { ObservabilityLive } from "./Layers/Observability.ts";
+import * as Observability from "./Observability.ts";
 
 it.effect("keeps server traces local with both external exporters configured", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const config = yield* ServerConfig.ServerConfig;
     const fetchFn = vi.fn<typeof fetch>(async () => new Response(null, { status: 200 }));
-    const observability = ObservabilityLive.pipe(
+    const observability = Observability.layer.pipe(
       Layer.provide(
         ServerConfig.layer({
           ...config,
