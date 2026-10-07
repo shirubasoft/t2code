@@ -2,8 +2,8 @@
   "replacements": [
     {
       "path": "apps/desktop/src/app/DesktopObservability.ts",
-      "before": "import { PRIMARY_LOCAL_ENVIRONMENT_ID } from \"@t3tools/contracts\";\nimport {\n  makeLocalFileTracer,\n  makeTraceSink,\n  otlpSerializationLayer,\n",
-      "after": "import { allowAnalyticsExport } from \"@t3tools/shared/t2Analytics\";\nimport { PRIMARY_LOCAL_ENVIRONMENT_ID } from \"@t3tools/contracts\";\nimport {\n  makeLocalFileTracer,\n  makeTraceSink,\n  otlpSerializationLayer,\n"
+      "before": "import { PRIMARY_LOCAL_ENVIRONMENT_ID } from \"@t3tools/contracts\";\n",
+      "after": "import { allowAnalyticsExport } from \"@t3tools/shared/t2Analytics\";\nimport { PRIMARY_LOCAL_ENVIRONMENT_ID } from \"@t3tools/contracts\";\n"
     },
     {
       "path": "apps/desktop/src/app/DesktopObservability.ts",
@@ -27,18 +27,18 @@
     },
     {
       "path": "apps/mobile/src/features/observability/tracing.test.ts",
-      "before": "      extra: {},\n    },\n  },\n}));\n\nit.effect(\"exports spans through the scoped mobile OTLP layer\", () => {\n  const fetchFn = vi.fn<typeof fetch>(async () => new Response(null, { status: 202 }));\n  const tracingLayer = makeTracingLayer(\n    {\n      tracesUrl: \"https://api.axiom.test/v1/traces\",\n      tracesDataset: \"mobile-traces\",\n",
-      "after": "      extra: {},\n    },\n  },\n}));\n\nit.effect(\"does not export spans through the configured mobile OTLP layer\", () => {\n  const fetchFn = vi.fn<typeof fetch>(async () => new Response(null, { status: 202 }));\n  const tracingLayer = makeTracingLayer(\n    {\n      tracesUrl: \"https://api.axiom.test/v1/traces\",\n      tracesDataset: \"mobile-traces\",\n"
+      "before": "      extra: {},\n    },\n  },\n}));\n\nit.effect(\"exports spans through the scoped mobile OTLP layer\", () => {\n  const fetchFn = vi.fn<typeof fetch>(async () => new Response(null, { status: 202 }));\n  const layerTracing = Tracing.layerFromConfig(\n    {\n      tracesUrl: \"https://api.axiom.test/v1/traces\",\n      tracesDataset: \"mobile-traces\",\n",
+      "after": "      extra: {},\n    },\n  },\n}));\n\nit.effect(\"does not export spans through the configured mobile OTLP layer\", () => {\n  const fetchFn = vi.fn<typeof fetch>(async () => new Response(null, { status: 202 }));\n  const layerTracing = Tracing.layerFromConfig(\n    {\n      tracesUrl: \"https://api.axiom.test/v1/traces\",\n      tracesDataset: \"mobile-traces\",\n"
     },
     {
       "path": "apps/mobile/src/features/observability/tracing.test.ts",
-      "before": "    expect(fetchFn).not.toHaveBeenCalled();\n  }).pipe(\n    Effect.scoped,\n    Effect.andThen(\n      Effect.sync(() => {\n        expect(fetchFn).toHaveBeenCalledOnce();\n        const [url, init] = fetchFn.mock.calls[0]!;\n        expect(String(url)).toBe(\"https://api.axiom.test/v1/traces\");\n        expect(new Headers(init?.headers).get(\"authorization\")).toBe(\"Bearer public-ingest-token\");\n        expect(new Headers(init?.headers).get(\"x-axiom-dataset\")).toBe(\"mobile-traces\");\n        expect(new TextDecoder().decode(init?.body as Uint8Array)).toContain(\"mobile.test.span\");\n      }),\n    ),\n  );\n});\n\nit.effect(\"does not let OTLP serialization failures alter application effects\", () => {\n  const fetchFn = vi.fn<typeof fetch>(async () => new Response(null, { status: 202 }));\n  const tracingLayer = makeTracingLayer(\n    {\n      tracesUrl: \"https://api.axiom.test/v1/traces\",\n      tracesDataset: \"mobile-traces\",\n",
-      "after": "    expect(fetchFn).not.toHaveBeenCalled();\n  }).pipe(\n    Effect.scoped,\n    Effect.andThen(\n      Effect.sync(() => {\n        expect(fetchFn).not.toHaveBeenCalled();\n      }),\n    ),\n  );\n});\n\nit.effect(\"preserves application failures without exporting them\", () => {\n  const fetchFn = vi.fn<typeof fetch>(async () => new Response(null, { status: 202 }));\n  const tracingLayer = makeTracingLayer(\n    {\n      tracesUrl: \"https://api.axiom.test/v1/traces\",\n      tracesDataset: \"mobile-traces\",\n"
+      "before": "    expect(fetchFn).not.toHaveBeenCalled();\n  }).pipe(\n    Effect.scoped,\n    Effect.andThen(\n      Effect.sync(() => {\n        expect(fetchFn).toHaveBeenCalledOnce();\n        const [url, init] = fetchFn.mock.calls[0]!;\n        expect(String(url)).toBe(\"https://api.axiom.test/v1/traces\");\n        expect(new Headers(init?.headers).get(\"authorization\")).toBe(\"Bearer public-ingest-token\");\n        expect(new Headers(init?.headers).get(\"x-axiom-dataset\")).toBe(\"mobile-traces\");\n        expect(new TextDecoder().decode(init?.body as Uint8Array)).toContain(\"mobile.test.span\");\n      }),\n    ),\n  );\n});\n\nit.effect(\"does not let OTLP serialization failures alter application effects\", () => {\n  const fetchFn = vi.fn<typeof fetch>(async () => new Response(null, { status: 202 }));\n  const layerTracing = Tracing.layerFromConfig(\n    {\n      tracesUrl: \"https://api.axiom.test/v1/traces\",\n      tracesDataset: \"mobile-traces\",\n",
+      "after": "    expect(fetchFn).not.toHaveBeenCalled();\n  }).pipe(\n    Effect.scoped,\n    Effect.andThen(\n      Effect.sync(() => {\n        expect(fetchFn).not.toHaveBeenCalled();\n      }),\n    ),\n  );\n});\n\nit.effect(\"preserves application failures without exporting them\", () => {\n  const fetchFn = vi.fn<typeof fetch>(async () => new Response(null, { status: 202 }));\n  const layerTracing = Tracing.layerFromConfig(\n    {\n      tracesUrl: \"https://api.axiom.test/v1/traces\",\n      tracesDataset: \"mobile-traces\",\n"
     },
     {
       "path": "apps/mobile/src/features/observability/tracing.test.ts",
-      "before": "\n  return Layer.build(tracedApplication).pipe(\n    Effect.scoped,\n    Effect.andThen(\n      Effect.sync(() => {\n        expect(fetchFn).toHaveBeenCalledOnce();\n        expect(new TextDecoder().decode(fetchFn.mock.calls[0]?.[1]?.body as Uint8Array)).toContain(\n          \"mobile.test.failed-span\",\n        );\n      }),\n    ),\n  );\n});\n",
-      "after": "\n  return Layer.build(tracedApplication).pipe(\n    Effect.scoped,\n    Effect.andThen(\n      Effect.sync(() => {\n        expect(fetchFn).not.toHaveBeenCalled();\n      }),\n    ),\n  );\n});\n"
+      "before": "\n  return Layer.build(layerTracedApplication).pipe(\n    Effect.scoped,\n    Effect.andThen(\n      Effect.sync(() => {\n        expect(fetchFn).toHaveBeenCalledOnce();\n        expect(new TextDecoder().decode(fetchFn.mock.calls[0]?.[1]?.body as Uint8Array)).toContain(\n          \"mobile.test.failed-span\",\n        );\n      }),\n    ),\n  );\n});\n",
+      "after": "\n  return Layer.build(layerTracedApplication).pipe(\n    Effect.scoped,\n    Effect.andThen(\n      Effect.sync(() => {\n        expect(fetchFn).not.toHaveBeenCalled();\n      }),\n    ),\n  );\n});\n"
     },
     {
       "path": "apps/server/src/http.ts",
@@ -51,17 +51,17 @@
       "after": "    if (!allowAnalyticsExport() || otlpTracesUrl === undefined) {"
     },
     {
-      "path": "apps/server/src/observability/Layers/Observability.ts",
-      "before": "import { httpHeaderRedactionLayer } from \"@t3tools/shared/httpObservability\";\nimport {\n  makeLocalFileTracer,\n  makeTraceSink,\n  otlpSerializationLayer,\n",
-      "after": "import { allowAnalyticsExport } from \"@t3tools/shared/t2Analytics\";\nimport { httpHeaderRedactionLayer } from \"@t3tools/shared/httpObservability\";\nimport {\n  makeLocalFileTracer,\n  makeTraceSink,\n  otlpSerializationLayer,\n"
+      "path": "apps/server/src/observability/Observability.ts",
+      "before": "import * as HttpObservability from \"@t3tools/shared/httpObservability\";\n",
+      "after": "import { allowAnalyticsExport } from \"@t3tools/shared/t2Analytics\";\nimport * as HttpObservability from \"@t3tools/shared/httpObservability\";\n"
     },
     {
-      "path": "apps/server/src/observability/Layers/Observability.ts",
+      "path": "apps/server/src/observability/Observability.ts",
       "before": "          config.otlpTracesUrl === undefined",
       "after": "          !allowAnalyticsExport() || config.otlpTracesUrl === undefined"
     },
     {
-      "path": "apps/server/src/observability/Layers/Observability.ts",
+      "path": "apps/server/src/observability/Observability.ts",
       "before": "      config.otlpMetricsUrl === undefined",
       "after": "      !allowAnalyticsExport() || config.otlpMetricsUrl === undefined"
     },
@@ -82,13 +82,13 @@
     },
     {
       "path": "packages/shared/src/relayTracing.test.ts",
-      "before": "\n      expect(userSpans).toEqual([\"relay.operation\"]);\n    }),\n  );\n\n  it.effect(\"preserves nested error causes in exported relay spans\", () => {\n    const fetchFn = vi.fn<typeof fetch>(async () => new Response(null, { status: 202 }));\n    const httpClientLayer = FetchHttpClient.layer.pipe(\n      Layer.provide(Layer.succeed(FetchHttpClient.Fetch, fetchFn)),\n    );\n    const tracingLayer = makeRelayClientTracingLayer(\n",
-      "after": "\n      expect(userSpans).toEqual([\"relay.operation\"]);\n    }),\n  );\n\n  it.effect(\"keeps error causes local even with a configured relay exporter\", () => {\n    const fetchFn = vi.fn<typeof fetch>(async () => new Response(null, { status: 202 }));\n    const httpClientLayer = FetchHttpClient.layer.pipe(\n      Layer.provide(Layer.succeed(FetchHttpClient.Fetch, fetchFn)),\n    );\n    const tracingLayer = makeRelayClientTracingLayer(\n"
+      "before": "\n      expect(userSpans).toEqual([\"relay.operation\"]);\n    }),\n  );\n\n  it.effect(\"preserves nested error causes in exported relay spans\", () => {\n    const fetchFn = vi.fn<typeof fetch>(async () => new Response(null, { status: 202 }));\n    const layerHttpClient = FetchHttpClient.layer.pipe(\n      Layer.provide(Layer.succeed(FetchHttpClient.Fetch, fetchFn)),\n    );\n    const layerTracing = RelayTracing.layer(\n",
+      "after": "\n      expect(userSpans).toEqual([\"relay.operation\"]);\n    }),\n  );\n\n  it.effect(\"keeps error causes local even with a configured relay exporter\", () => {\n    const fetchFn = vi.fn<typeof fetch>(async () => new Response(null, { status: 202 }));\n    const layerHttpClient = FetchHttpClient.layer.pipe(\n      Layer.provide(Layer.succeed(FetchHttpClient.Fetch, fetchFn)),\n    );\n    const layerTracing = RelayTracing.layer(\n"
     },
     {
       "path": "packages/shared/src/relayTracing.test.ts",
-      "before": "\n    return Layer.build(tracedApplication).pipe(\n      Effect.scoped,\n      Effect.andThen(\n        Effect.sync(() => {\n          expect(fetchFn).toHaveBeenCalledOnce();\n          const payload = new TextDecoder().decode(fetchFn.mock.calls[0]?.[1]?.body as Uint8Array);\n          expect(payload).toContain(\"relay request failed\");\n          expect(payload).toContain(\"relay socket closed\");\n          expect(payload).toContain('\"key\":\"service.name\",\"value\":{\"stringValue\":\"relay-test\"}');\n          expect(payload).toContain('\"key\":\"service.namespace\",\"value\":{\"stringValue\":\"t3code\"}');\n        }),\n      ),\n    );\n  });\n});\n",
-      "after": "\n    return Layer.build(tracedApplication).pipe(\n      Effect.scoped,\n      Effect.andThen(\n        Effect.sync(() => {\n          expect(fetchFn).not.toHaveBeenCalled();\n        }),\n      ),\n    );\n  });\n});\n"
+      "before": "\n    return Layer.build(layerTracedApplication).pipe(\n      Effect.scoped,\n      Effect.andThen(\n        Effect.sync(() => {\n          expect(fetchFn).toHaveBeenCalledOnce();\n          const payload = new TextDecoder().decode(fetchFn.mock.calls[0]?.[1]?.body as Uint8Array);\n          expect(payload).toContain(\"relay request failed\");\n          expect(payload).toContain(\"relay socket closed\");\n          expect(payload).toContain('\"key\":\"service.name\",\"value\":{\"stringValue\":\"relay-test\"}');\n          expect(payload).toContain('\"key\":\"service.namespace\",\"value\":{\"stringValue\":\"t3code\"}');\n        }),\n      ),\n    );\n  });\n});\n",
+      "after": "\n    return Layer.build(layerTracedApplication).pipe(\n      Effect.scoped,\n      Effect.andThen(\n        Effect.sync(() => {\n          expect(fetchFn).not.toHaveBeenCalled();\n        }),\n      ),\n    );\n  });\n});\n"
     },
     {
       "path": "packages/shared/src/relayTracing.ts",
@@ -97,8 +97,8 @@
     },
     {
       "path": "packages/shared/src/relayTracing.ts",
-      "before": "\nexport function makeRelayClientTracingLayer(\n  config: RelayClientTracingConfig | null,\n  resource: RelayClientTracingResource,\n): Layer.Layer<never, never, HttpClient.HttpClient> {\n  if (config === null) {\n    return Layer.succeed(RelayClientTracer, Option.none());\n  }\n\n  const tracerLayer = OtlpTracer.layer({\n    url: config.tracesUrl,\n",
-      "after": "\nexport function makeRelayClientTracingLayer(\n  config: RelayClientTracingConfig | null,\n  resource: RelayClientTracingResource,\n): Layer.Layer<never, never, HttpClient.HttpClient> {\n  if (!allowAnalyticsExport() || config === null) {\n    return Layer.succeed(RelayClientTracer, Option.none());\n  }\n\n  const tracerLayer = OtlpTracer.layer({\n    url: config.tracesUrl,\n"
+      "before": "  if (config === null) {\n",
+      "after": "  if (!allowAnalyticsExport() || config === null) {\n"
     },
     {
       "path": "scripts/build-desktop-artifact.test.ts",
@@ -127,8 +127,8 @@
     },
     {
       "path": "scripts/build-desktop-artifact.ts",
-      "before": "import * as Stream from \"effect/Stream\";\nimport { Command, Flag } from \"effect/unstable/cli\";\nimport { ChildProcess, ChildProcessSpawner } from \"effect/unstable/process\";\n\nconst LINUX_ICON_SIZES = [16, 22, 24, 32, 48, 64, 128, 256, 512] as const;\nconst DESKTOP_APP_ID = \"com.t3tools.t3code\";\nconst APPLE_TEAM_ID_PATTERN = /^[A-Z0-9]{10}$/u;\n\nconst BuildPlatform = Schema.Literals([\"mac\", \"linux\", \"win\"]);\nconst BuildArch = Schema.Literals([\"arm64\", \"x64\", \"universal\"]);\n\n",
-      "after": "import * as Stream from \"effect/Stream\";\nimport { Command, Flag } from \"effect/unstable/cli\";\nimport { ChildProcess, ChildProcessSpawner } from \"effect/unstable/process\";\n\nconst LINUX_ICON_SIZES = [16, 22, 24, 32, 48, 64, 128, 256, 512] as const;\nconst DESKTOP_APP_ID = \"com.shirubasoft.t2code\";\nconst APPLE_TEAM_ID_PATTERN = /^[A-Z0-9]{10}$/u;\n\nconst BuildPlatform = Schema.Literals([\"mac\", \"linux\", \"win\"]);\nconst BuildArch = Schema.Literals([\"arm64\", \"x64\", \"universal\"]);\n\n"
+      "before": "const DESKTOP_APP_ID = \"com.t3tools.t3code\";",
+      "after": "const DESKTOP_APP_ID = \"com.shirubasoft.t2code\";"
     },
     {
       "path": "scripts/build-desktop-artifact.ts",
@@ -247,13 +247,13 @@
     },
     {
       "path": "apps/desktop/src/app/DesktopObservability.ts",
-      "before": "    const loggerLayer = Logger.layer(\n      endpoints.logs === undefined\n",
-      "after": "    const loggerLayer = Logger.layer(\n      !allowAnalyticsExport() || endpoints.logs === undefined\n"
+      "before": "    const layerLogger = Logger.layer(\n      endpoints.logs === undefined\n",
+      "after": "    const layerLogger = Logger.layer(\n      !allowAnalyticsExport() || endpoints.logs === undefined\n"
     },
     {
       "path": "apps/server/src/serverLogger.ts",
-      "before": "import { otlpSerializationLayer } from \"@t3tools/shared/observability\";",
-      "after": "import { otlpSerializationLayer } from \"@t3tools/shared/observability\";\nimport { allowAnalyticsExport } from \"@t3tools/shared/t2Analytics\";"
+      "before": "import * as SharedObservability from \"@t3tools/shared/observability\";",
+      "after": "import * as SharedObservability from \"@t3tools/shared/observability\";\nimport { allowAnalyticsExport } from \"@t3tools/shared/t2Analytics\";"
     },
     {
       "path": "apps/server/src/serverLogger.ts",
@@ -402,18 +402,18 @@
     },
     {
       "path": "apps/server/src/http.test.ts",
-      "before": "import * as Path from \"effect/Path\";\nimport * as Queue from \"effect/Queue\";\nimport {\n  HttpClient,\n  HttpClientRequest,\n  HttpRouter,\n",
-      "after": "import * as Path from \"effect/Path\";\nimport * as Queue from \"effect/Queue\";\nimport {\n  FetchHttpClient,\n  HttpClient,\n  HttpClientRequest,\n  HttpRouter,\n"
+      "before": "import { HttpClient, HttpClientRequest, HttpRouter, HttpServerResponse } from \"effect/http\";",
+      "after": "import {\n  FetchHttpClient,\n  HttpClient,\n  HttpClientRequest,\n  HttpRouter,\n  HttpServerResponse,\n} from \"effect/http\";"
     },
     {
       "path": "apps/server/src/http.test.ts",
-      "before": "} from \"effect/unstable/http\";\nimport { openMediaFile } from \"./assets/MediaFile.ts\";\n\nimport { ORCHESTRATION_PROTOCOL_HEADER } from \"@t3tools/contracts\";\n\nimport * as ServerConfig from \"./config.ts\";\n\n",
-      "after": "} from \"effect/unstable/http\";\nimport { openMediaFile } from \"./assets/MediaFile.ts\";\n\nimport {\n  AuthOrchestrationOperateScope,\n  AuthSessionId,\n  ORCHESTRATION_PROTOCOL_HEADER,\n} from \"@t3tools/contracts\";\nimport type { TraceRecord } from \"@t3tools/shared/observability\";\nimport { OtlpSerialization } from \"effect/unstable/observability\";\nimport * as EnvironmentAuth from \"./auth/EnvironmentAuth.ts\";\nimport * as BrowserTraceCollector from \"./observability/BrowserTraceCollector.ts\";\n\nimport * as ServerConfig from \"./config.ts\";\n\n"
+      "before": "import { ORCHESTRATION_PROTOCOL_HEADER } from \"@t3tools/contracts\";",
+      "after": "import {\n  AuthOrchestrationOperateScope,\n  AuthSessionId,\n  ORCHESTRATION_PROTOCOL_HEADER,\n} from \"@t3tools/contracts\";\nimport type { TraceRecord } from \"@t3tools/shared/observability\";\nimport { OtlpSerialization } from \"effect/observability\";\nimport * as EnvironmentAuth from \"./auth/EnvironmentAuth.ts\";\nimport * as BrowserTraceCollector from \"./observability/BrowserTraceCollector.ts\";"
     },
     {
       "path": "apps/server/src/http.test.ts",
-      "before": "  downloadContentDisposition,\n  httpCompressionLayer,\n  isLoopbackHostname,\n  resolveDevRedirectUrl,\n  staticAndDevRouteLayer,\n} from \"./http.ts\";\n\ndescribe(\"browser API CORS\", () => {\n  it(\"accepts protocol negotiation with authenticated browser headers\", async () => {\n",
-      "after": "  downloadContentDisposition,\n  httpCompressionLayer,\n  isLoopbackHostname,\n  otlpTracesProxyRouteLayer,\n  resolveDevRedirectUrl,\n  staticAndDevRouteLayer,\n} from \"./http.ts\";\n\nit.effect(\"keeps browser traces local with JSON and protobuf collectors configured\", () =>\n  Effect.gen(function* () {\n    const config = yield* ServerConfig.ServerConfig;\n    for (const serializationLayer of [\n      OtlpSerialization.layerJson,\n      OtlpSerialization.layerProtobuf,\n    ]) {\n      const records: Array<TraceRecord> = [];\n      const fetchFn = vi.fn<typeof fetch>(async () => new Response(null, { status: 204 }));\n      const appLayer = otlpTracesProxyRouteLayer.pipe(\n        Layer.provideMerge(\n          ServerConfig.layer({ ...config, otlpTracesUrl: \"https://collector.invalid/v1/traces\" }),\n        ),\n        Layer.provideMerge(serializationLayer),\n        Layer.provideMerge(\n          Layer.mock(EnvironmentAuth.EnvironmentAuth, {\n            authenticateHttpRequest: () =>\n              Effect.succeed({\n                sessionId: AuthSessionId.make(\"privacy-test\"),\n                subject: \"privacy-test\",\n                method: \"bearer-access-token\",\n                scopes: [AuthOrchestrationOperateScope],\n              }),\n          }),\n        ),\n        Layer.provideMerge(\n          Layer.succeed(BrowserTraceCollector.BrowserTraceCollector, {\n            record: (incoming) =>\n              Effect.sync(() => {\n                records.push(...incoming);\n              }),\n          }),\n        ),\n        Layer.provideMerge(\n          FetchHttpClient.layer.pipe(\n            Layer.provideMerge(Layer.succeed(FetchHttpClient.Fetch, fetchFn)),\n          ),\n        ),\n      );\n      const { handler } = yield* Effect.acquireRelease(\n        Effect.sync(() => HttpRouter.toWebHandler(appLayer, { disableLogger: true })),\n        ({ dispose }) => Effect.promise(dispose),\n      );\n      const payload = {\n        resourceSpans: [\n          {\n            resource: {\n              attributes: [{ key: \"service.name\", value: { stringValue: \"t3code-web\" } }],\n            },\n            scopeSpans: [\n              {\n                scope: { name: \"privacy-test\" },\n                spans: [\n                  {\n                    traceId: \"11111111111111111111111111111111\",\n                    spanId: \"2222222222222222\",\n                    name: \"enterprise-source\",\n                    kind: 1,\n                    startTimeUnixNano: \"1000000\",\n                    endTimeUnixNano: \"2000000\",\n                    attributes: [{ key: \"code\", value: { stringValue: \"company secret\" } }],\n                    events: [],\n                    links: [],\n                    status: { code: 1 },\n                    flags: 1,\n                  },\n                ],\n              },\n            ],\n          },\n        ],\n      };\n      const response = yield* Effect.promise(() =>\n        handler(\n          new Request(\"http://t3.test/api/observability/v1/traces\", {\n            method: \"POST\",\n            headers: { \"content-type\": \"application/json\" },\n            // @effect-diagnostics-next-line preferSchemaOverJson:off\n            body: JSON.stringify(payload),\n          }),\n        ),\n      );\n      expect(response.status).toBe(204);\n      expect(fetchFn).not.toHaveBeenCalled();\n      expect(records).toHaveLength(1);\n      expect(records[0]?.name).toBe(\"enterprise-source\");\n      expect(records[0]?.attributes).toEqual({ code: \"company secret\" });\n    }\n  }).pipe(\n    Effect.provide(\n      ServerConfig.layerTest(process.cwd(), { prefix: \"t2-browser-traces-\" }).pipe(\n        Layer.provideMerge(NodeServices.layer),\n      ),\n    ),\n    Effect.scoped,\n  ),\n);\n\ndescribe(\"browser API CORS\", () => {\n  it(\"accepts protocol negotiation with authenticated browser headers\", async () => {\n"
+      "before": "describe(\"untraced requests\", () => {",
+      "after": "it.effect(\"keeps browser traces local with JSON and protobuf collectors configured\", () =>\n  Effect.gen(function* () {\n    const config = yield* ServerConfig.ServerConfig;\n    for (const serializationLayer of [\n      OtlpSerialization.layerJson,\n      OtlpSerialization.layerProtobuf,\n    ]) {\n      const records: Array<TraceRecord> = [];\n      const fetchFn = vi.fn<typeof fetch>(async () => new Response(null, { status: 204 }));\n      const appLayer = ServerHttp.layerOtlpTracesProxyRoute.pipe(\n        Layer.provideMerge(\n          ServerConfig.layer({ ...config, otlpTracesUrl: \"https://collector.invalid/v1/traces\" }),\n        ),\n        Layer.provideMerge(serializationLayer),\n        Layer.provideMerge(\n          Layer.mock(EnvironmentAuth.EnvironmentAuth, {\n            authenticateHttpRequest: () =>\n              Effect.succeed({\n                sessionId: AuthSessionId.make(\"privacy-test\"),\n                subject: \"privacy-test\",\n                method: \"bearer-access-token\",\n                scopes: [AuthOrchestrationOperateScope],\n              }),\n          }),\n        ),\n        Layer.provideMerge(\n          Layer.succeed(BrowserTraceCollector.BrowserTraceCollector, {\n            record: (incoming) =>\n              Effect.sync(() => {\n                records.push(...incoming);\n              }),\n          }),\n        ),\n        Layer.provideMerge(\n          FetchHttpClient.layer.pipe(\n            Layer.provideMerge(Layer.succeed(FetchHttpClient.Fetch, fetchFn)),\n          ),\n        ),\n      );\n      const { handler } = yield* Effect.acquireRelease(\n        Effect.sync(() => HttpRouter.toWebHandler(appLayer, { disableLogger: true })),\n        ({ dispose }) => Effect.promise(dispose),\n      );\n      const payload = {\n        resourceSpans: [\n          {\n            resource: {\n              attributes: [{ key: \"service.name\", value: { stringValue: \"t3code-web\" } }],\n            },\n            scopeSpans: [\n              {\n                scope: { name: \"privacy-test\" },\n                spans: [\n                  {\n                    traceId: \"11111111111111111111111111111111\",\n                    spanId: \"2222222222222222\",\n                    name: \"enterprise-source\",\n                    kind: 1,\n                    startTimeUnixNano: \"1000000\",\n                    endTimeUnixNano: \"2000000\",\n                    attributes: [{ key: \"code\", value: { stringValue: \"company secret\" } }],\n                    events: [],\n                    links: [],\n                    status: { code: 1 },\n                    flags: 1,\n                  },\n                ],\n              },\n            ],\n          },\n        ],\n      };\n      const response = yield* Effect.promise(() =>\n        handler(\n          new Request(\"http://t3.test/api/observability/v1/traces\", {\n            method: \"POST\",\n            headers: { \"content-type\": \"application/json\" },\n            body: JSON.stringify(payload),\n          }),\n        ),\n      );\n      expect(response.status).toBe(204);\n      expect(fetchFn).not.toHaveBeenCalled();\n      expect(records).toHaveLength(1);\n      expect(records[0]?.name).toBe(\"enterprise-source\");\n      expect(records[0]?.attributes).toEqual({ code: \"company secret\" });\n    }\n  }).pipe(\n    Effect.provide(\n      ServerConfig.layerTest(process.cwd(), { prefix: \"t2-browser-traces-\" }).pipe(\n        Layer.provideMerge(NodeServices.layer),\n      ),\n    ),\n    Effect.scoped,\n  ),\n);\n\ndescribe(\"untraced requests\", () => {"
     },
     {
       "path": "scripts/notify-discord-release.test.ts",
@@ -422,7 +422,7 @@
     },
     {
       "path": "scripts/notify-discord-release.test.ts",
-      "before": "import { ChildProcess, ChildProcessSpawner } from \"effect/unstable/process\";\n",
+      "before": "import { ChildProcess, ChildProcessSpawner } from \"effect/process\";\n",
       "after": ""
     },
     {
