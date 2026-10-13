@@ -49,6 +49,37 @@ test("agent edits cannot change automation, packaging or added files", () => {
   );
 });
 
+test("packaging anchors can follow upstream context while preserving the replacement", () => {
+  const path = "scripts/build-desktop-artifact.test.ts";
+  const assertion = 'assert.equal(appId, "com.t3tools.t3code");';
+  const forkAssertion = 'assert.equal(appId, "com.shirubasoft.t2code");';
+  const accepted = {
+    files: [],
+    replacements: [{ path, before: `${assertion}\n});`, after: `${forkAssertion}\n});` }],
+  };
+  const reanchored = {
+    files: [],
+    replacements: [{ path, before: assertion, after: forkAssertion }],
+  };
+  const upstream = `${assertion}\nassert.equal(browserPasskeys, false);\n});`;
+  assert.throws(() => transform(upstream, accepted.replacements), /anchor must occur once/);
+  validateOverlay(reanchored, accepted);
+  assert.equal(
+    transform(upstream, reanchored.replacements),
+    `${forkAssertion}\nassert.equal(browserPasskeys, false);\n});`,
+  );
+  for (const rule of [
+    { path, before: assertion, after: 'assert.equal(appId, "com.other.app");' },
+    { path: "scripts/build-desktop-artifact.ts", before: assertion, after: forkAssertion },
+    { path, before: assertion, after: `${forkAssertion}\nskipValidation();` },
+  ]) {
+    assert.throws(
+      () => validateOverlay({ files: [], replacements: [rule] }, accepted),
+      /packaging controls/,
+    );
+  }
+});
+
 test("analytics review can retire a deleted relay test and carry protection to moved source", () => {
   const accepted = readJson(join(controlRoot, ".github/t2code/overlay.json"));
   const replacements = accepted.replacements.filter(

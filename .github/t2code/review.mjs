@@ -1,7 +1,6 @@
 import { git, transform } from "./overlay.mjs";
 
-// These replacements route installation and updates to the fork. Analytics
-// review can adapt source and tests, but cannot redirect a release or updater.
+// Packaging replacements keep their edit while anchors can follow upstream context.
 const packagingPaths = new Set([
   "apps/web/src/components/desktopUpdate.logic.ts",
   "apps/web/src/components/desktopUpdate.logic.test.ts",
@@ -23,23 +22,48 @@ function analyticsPath(path) {
   );
 }
 
+function packagingChange(rule) {
+  if (typeof rule.before !== "string" || typeof rule.after !== "string") return null;
+  let start = 0;
+  while (
+    start < rule.before.length &&
+    start < rule.after.length &&
+    rule.before[start] === rule.after[start]
+  ) {
+    start += 1;
+  }
+  let beforeEnd = rule.before.length;
+  let afterEnd = rule.after.length;
+  while (
+    beforeEnd > start &&
+    afterEnd > start &&
+    rule.before[beforeEnd - 1] === rule.after[afterEnd - 1]
+  ) {
+    beforeEnd -= 1;
+    afterEnd -= 1;
+  }
+  return JSON.stringify([
+    rule.path,
+    rule.before.slice(start, beforeEnd),
+    rule.after.slice(start, afterEnd),
+  ]);
+}
+
 export function validateOverlay(candidate, accepted) {
   if (JSON.stringify(candidate.files) !== JSON.stringify(accepted.files))
     throw new Error("Agent cannot change added files");
   if (!Array.isArray(candidate.replacements) || candidate.replacements.length > 150)
     throw new Error("Invalid replacement list");
   const fixed = accepted.replacements.filter((rule) => !analyticsPath(rule.path));
+  const fixedChanges = new Set(fixed.map(packagingChange));
   for (const rule of fixed) {
-    if (!candidate.replacements.some((next) => JSON.stringify(next) === JSON.stringify(rule)))
+    if (!candidate.replacements.some((next) => packagingChange(next) === packagingChange(rule)))
       throw new Error(`Agent changed packaging controls: ${rule.path}`);
   }
   for (const rule of candidate.replacements) {
     if (accepted.files.includes(rule.path))
       throw new Error(`Agent cannot patch fixed policy files: ${rule.path}`);
-    if (
-      !analyticsPath(rule.path) &&
-      !fixed.some((known) => JSON.stringify(known) === JSON.stringify(rule))
-    )
+    if (!analyticsPath(rule.path) && !fixedChanges.has(packagingChange(rule)))
       throw new Error(`Agent patch outside analytics source: ${rule.path}`);
     if (
       typeof rule.before !== "string" ||

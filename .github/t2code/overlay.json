@@ -42,8 +42,8 @@
     },
     {
       "path": "apps/server/src/http.ts",
-      "before": "  AuthOrchestrationReadScope,\n  EnvironmentHttpApi,\n} from \"@t3tools/contracts\";\nimport { isDevProxiedPath } from \"@t3tools/shared/devProxy\";\nimport { decodeOtlpTraceRecords } from \"@t3tools/shared/observability\";\nimport * as Data from \"effect/Data\";\nimport * as Effect from \"effect/Effect\";\nimport * as FileSystem from \"effect/FileSystem\";\nimport * as Layer from \"effect/Layer\";\nimport * as Option from \"effect/Option\";\n",
-      "after": "  AuthOrchestrationReadScope,\n  EnvironmentHttpApi,\n} from \"@t3tools/contracts\";\nimport { isDevProxiedPath } from \"@t3tools/shared/devProxy\";\nimport { decodeOtlpTraceRecords } from \"@t3tools/shared/observability\";\nimport { allowAnalyticsExport } from \"@t3tools/shared/t2Analytics\";\nimport * as Data from \"effect/Data\";\nimport * as Effect from \"effect/Effect\";\nimport * as FileSystem from \"effect/FileSystem\";\nimport * as Layer from \"effect/Layer\";\nimport * as Option from \"effect/Option\";\n"
+      "before": "import { decodeOtlpTraceRecords } from \"@t3tools/shared/observability\";\n",
+      "after": "import { decodeOtlpTraceRecords } from \"@t3tools/shared/observability\";\nimport { allowAnalyticsExport } from \"@t3tools/shared/t2Analytics\";\n"
     },
     {
       "path": "apps/server/src/http.ts",
@@ -117,8 +117,8 @@
     },
     {
       "path": "scripts/build-desktop-artifact.test.ts",
-      "before": "\n    assert.deepStrictEqual(configuration.rpDomains, [\n      \"clerk.example.com\",\n      \"example.clerk.accounts.dev\",\n    ]);\n    assert.include(entitlements, \"<string>ABC1234567.com.t3tools.t3code</string>\");\n    assert.include(entitlements, \"<string>webcredentials:clerk.example.com</string>\");\n    assert.include(entitlements, \"<string>webcredentials:example.clerk.accounts.dev</string>\");\n    assert.include(entitlements, \"<key>com.apple.security.cs.allow-jit</key>\");\n  });\n\n",
-      "after": "\n    assert.deepStrictEqual(configuration.rpDomains, [\n      \"clerk.example.com\",\n      \"example.clerk.accounts.dev\",\n    ]);\n    assert.include(entitlements, \"<string>ABC1234567.com.shirubasoft.t2code</string>\");\n    assert.include(entitlements, \"<string>webcredentials:clerk.example.com</string>\");\n    assert.include(entitlements, \"<string>webcredentials:example.clerk.accounts.dev</string>\");\n    assert.include(entitlements, \"<key>com.apple.security.cs.allow-jit</key>\");\n  });\n\n"
+      "before": "    assert.include(entitlements, \"<string>ABC1234567.com.t3tools.t3code</string>\");\n",
+      "after": "    assert.include(entitlements, \"<string>ABC1234567.com.shirubasoft.t2code</string>\");\n"
     },
     {
       "path": "scripts/build-desktop-artifact.test.ts",
@@ -362,8 +362,8 @@
     },
     {
       "path": "apps/server/src/telemetry/AnalyticsService.ts",
-      "before": "import { HostProcessArchitecture, HostProcessPlatform } from \"@t3tools/shared/hostProcess\";\n",
-      "after": "import { allowAnalyticsExport } from \"@t3tools/shared/t2Analytics\";\nimport { HostProcessArchitecture, HostProcessPlatform } from \"@t3tools/shared/hostProcess\";\n"
+      "before": "import * as HostProcess from \"@t3tools/shared/HostProcess\";\n",
+      "after": "import { allowAnalyticsExport } from \"@t3tools/shared/t2Analytics\";\nimport * as HostProcess from \"@t3tools/shared/HostProcess\";\n"
     },
     {
       "path": "apps/server/src/telemetry/AnalyticsService.ts",
@@ -439,6 +439,46 @@
       "path": "scripts/notify-discord-release.test.ts",
       "before": "\"Discord release CLI and workflow\"",
       "after": "\"Discord release CLI\""
+    },
+    {
+      "path": "packages/shared/src/path.ts",
+      "before": " * Home-relative paths stay intact for the server to expand. */\nexport function resolveWorkspaceFilePath(path: string, workspaceRoot: string): string {\n  if (isAbsolutePath(path) || path.startsWith(\"~/\") || path.startsWith(\"~\\\\\")) return path;\n  const base = workspaceRoot.replace(/[/\\\\]+$/, \"\");\n  return isWindowsAbsolutePath(workspaceRoot)\n    ? `${base}\\\\${path.replaceAll(\"/\", \"\\\\\")}`\n    : `${base}/${path}`;\n",
+      "after": " * Home-relative paths stay intact for the server to expand. */\nexport function resolveWorkspaceFilePath(path: string, workspaceRoot: string): string {\n  if (isAbsolutePath(path) || path.startsWith(\"~/\") || path.startsWith(\"~\\\\\")) return path;\n  let end = workspaceRoot.length;\n  while (end > 0 && (workspaceRoot[end - 1] === \"/\" || workspaceRoot[end - 1] === \"\\\\\")) end -= 1;\n  const base = workspaceRoot.slice(0, end);\n  return isWindowsAbsolutePath(workspaceRoot)\n    ? `${base}\\\\${path.replaceAll(\"/\", \"\\\\\")}`\n    : `${base}/${path}`;\n"
+    },
+    {
+      "path": "packages/shared/src/path.test.ts",
+      "before": "} from \"./path.ts\";\n\ndescribe(\"path helpers\", () => {\n  it.each([\n    [\"report:123\", \"/workspace\", \"/workspace/report:123\"],\n    [\"/workspace/report:12:3\", \"/other\", \"/workspace/report:12:3\"],\n",
+      "after": "} from \"./path.ts\";\n\ndescribe(\"path helpers\", () => {\n  it(\"preserves long separator runs inside a workspace root and trims only its suffix\", () => {\n    const root = `/${\"/\\\\\".repeat(10_000)}repo`;\n    expect(resolveWorkspaceFilePath(\"src/file.ts\", `${root}/\\\\/`)).toBe(`${root}/src/file.ts`);\n    const windowsRoot = `C:\\\\${\"/\\\\\".repeat(10_000)}repo`;\n    expect(resolveWorkspaceFilePath(\"src/file.ts\", `${windowsRoot}/\\\\/`)).toBe(\n      `${windowsRoot}\\\\src\\\\file.ts`,\n    );\n  });\n\n  it.each([\n    [\"report:123\", \"/workspace\", \"/workspace/report:123\"],\n    [\"/workspace/report:12:3\", \"/other\", \"/workspace/report:12:3\"],\n"
+    },
+    {
+      "path": "packages/source-control-gitcafe/src/server/gitCafeHosts.ts",
+      "before": "\n/** An `owner/name` repository path, without the `.git` suffix a clone URL carries. */\nexport function gitCafeRepositoryPath(path: string): string | null {\n  const repository = path\n    .trim()\n    .replace(/\\/+$/u, \"\")\n    .replace(/\\.git$/u, \"\");\n  return REPOSITORY.test(repository) ? repository : null;\n}\n\n",
+      "after": "\n/** An `owner/name` repository path, without the `.git` suffix a clone URL carries. */\nexport function gitCafeRepositoryPath(path: string): string | null {\n  const trimmed = path.trim();\n  let end = trimmed.length;\n  while (end > 0 && trimmed[end - 1] === \"/\") end -= 1;\n  const repository = trimmed.slice(0, end).replace(/\\.git$/u, \"\");\n  return REPOSITORY.test(repository) ? repository : null;\n}\n\n"
+    },
+    {
+      "path": "packages/source-control-gitcafe/src/server/gitCafeHosts.test.ts",
+      "before": "import * as GitCafeHosts from \"./gitCafeHosts.ts\";\n\ndescribe(\"gitCafeHosts\", () => {\n  it(\"knows exactly the production and staging hosts\", () => {\n    assert.deepStrictEqual([...GitCafeHosts.GITCAFE_HOSTS], [\"git.cafe\", \"staging.git.cafe\"]);\n    assert.isTrue(GitCafeHosts.isGitCafeHost(\"Git.Cafe\"));\n",
+      "after": "import * as GitCafeHosts from \"./gitCafeHosts.ts\";\n\ndescribe(\"gitCafeHosts\", () => {\n  it(\"rejects long interior slash runs and accepts trailing slashes after a repository\", () => {\n    const slashes = \"/\".repeat(20_000);\n    assert.isNull(GitCafeHosts.gitCafeRepositoryPath(`team/${slashes}project`));\n    assert.strictEqual(\n      GitCafeHosts.gitCafeRepositoryPath(`team/project.git${slashes}`),\n      \"team/project\",\n    );\n    assert.isNull(GitCafeHosts.gitCafeRepositoryPath(slashes));\n  });\n\n  it(\"knows exactly the production and staging hosts\", () => {\n    assert.deepStrictEqual([...GitCafeHosts.GITCAFE_HOSTS], [\"git.cafe\", \"staging.git.cafe\"]);\n    assert.isTrue(GitCafeHosts.isGitCafeHost(\"Git.Cafe\"));\n"
+    },
+    {
+      "path": "packages/client-runtime/src/pullRequestMarkdown.ts",
+      "before": "  // Blank lines around a run are dropped, but never leading spaces: four of them open an\n  // indented code block, so trimming a run would silently turn code into prose.\n  const flushMarkdown = () => {\n    const text = markdown.join(\"\\n\").replace(/^\\n+/u, \"\").replace(/\\s+$/u, \"\");\n    markdown.length = 0;\n    if (text.trim().length > 0) {\n      segments.push({ id: `markdown:${segments.length}`, kind: \"markdown\", text });\n",
+      "after": "  // Blank lines around a run are dropped, but never leading spaces: four of them open an\n  // indented code block, so trimming a run would silently turn code into prose.\n  const flushMarkdown = () => {\n    const text = markdown.join(\"\\n\").replace(/^\\n+/u, \"\").trimEnd();\n    markdown.length = 0;\n    if (text.trim().length > 0) {\n      segments.push({ id: `markdown:${segments.length}`, kind: \"markdown\", text });\n"
+    },
+    {
+      "path": "packages/client-runtime/src/pullRequestMarkdown.test.ts",
+      "before": "import { splitPullRequestBody } from \"./pullRequestMarkdown.ts\";\n\ndescribe(\"pull request body segmentation\", () => {\n  it(\"keeps a plain body as a single markdown run\", () => {\n    expect(splitPullRequestBody(\"## What changed\\n\\nSome prose.\")).toEqual([\n      { id: \"markdown:0\", kind: \"markdown\", text: \"## What changed\\n\\nSome prose.\" },\n",
+      "after": "import { splitPullRequestBody } from \"./pullRequestMarkdown.ts\";\n\ndescribe(\"pull request body segmentation\", () => {\n  it(\"preserves long interior whitespace and leading code indentation while trimming the end\", () => {\n    const body = `    text${\"\\t\".repeat(20_000)}tail`;\n    expect(splitPullRequestBody(`\\n\\n${body}\\t\\u00a0\\n`)).toEqual([\n      { id: \"markdown:0\", kind: \"markdown\", text: body },\n    ]);\n  });\n\n  it(\"keeps a plain body as a single markdown run\", () => {\n    expect(splitPullRequestBody(\"## What changed\\n\\nSome prose.\")).toEqual([\n      { id: \"markdown:0\", kind: \"markdown\", text: \"## What changed\\n\\nSome prose.\" },\n"
+    },
+    {
+      "path": "apps/mobile/src/lib/markdownDocument.ts",
+      "before": "      if (!src) return \"\";\n      const alt = (attribute(tag, \"alt\") ?? \"\").replace(/[\\\\[\\]&]/g, \"\\\\$&\");\n      const href = src\n        .replace(/&/g, \"\\\\&\")\n        .replace(/</g, \"%3C\")\n        .replace(/>/g, \"%3E\")\n        .replace(/\\n/g, \"\");\n",
+      "after": "      if (!src) return \"\";\n      const alt = (attribute(tag, \"alt\") ?? \"\").replace(/[\\\\[\\]&]/g, \"\\\\$&\");\n      const href = src\n        .replace(/[\\\\&]/g, \"\\\\$&\")\n        .replace(/</g, \"%3C\")\n        .replace(/>/g, \"%3E\")\n        .replace(/\\n/g, \"\");\n"
+    },
+    {
+      "path": "apps/mobile/src/lib/markdownHtml.test.ts",
+      "before": "import { markdownImageSources } from \"./markdownImageSources\";\n\ndescribe(\"HTML in native Markdown\", () => {\n  it(\"leaves code inside an HTML details block literal\", () => {\n    const content =\n      '<details>\\n<summary>Example</summary>\\n\\n```html\\n<img src=\"literal.png\">\\n```\\n\\nUse `<img>` here.\\n</details>';\n",
+      "after": "import { markdownImageSources } from \"./markdownImageSources\";\n\ndescribe(\"HTML in native Markdown\", () => {\n  it(\"preserves backslashes before entity-shaped query values in image URLs\", () => {\n    const markdown = '<img src=\"https://example.com/path\\\\&amp;lt;&amp;x=1\" alt=\"Example\">';\n    expect(markdownImageSources(markdown)).toEqual([\"https://example.com/path\\\\&lt;&x=1\"]);\n  });\n\n  it(\"leaves code inside an HTML details block literal\", () => {\n    const content =\n      '<details>\\n<summary>Example</summary>\\n\\n```html\\n<img src=\"literal.png\">\\n```\\n\\nUse `<img>` here.\\n</details>';\n"
     }
   ],
   "files": [

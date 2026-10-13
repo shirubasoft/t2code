@@ -178,6 +178,8 @@ function propose() {
     rmSync(path, { recursive: true, force: true });
     cpSync(resolve(controlRoot, path), path, { recursive: true });
   }
+  // The Linux-only fork drops the Android publication workflow and its helper.
+  rmSync(".github/scripts/mirror-play-apk.cjs", { force: true });
   for (const path of accepted.files) {
     mkdirSync(resolve(path, ".."), { recursive: true });
     cpSync(resolve(controlRoot, path), path);

@@ -1,12 +1,12 @@
-# On-demand releases
+# Releases
 
-Release requests are handled in the local Codex task on the maintainer's machine.
+Release requests are handled by a T3 Code task on the maintainer's machine,
+either on demand or through the app's recurring scheduler.
 The task reviews and adapts the analytics overlay, opens the source update PR,
 waits for CI, merges it, and dispatches `release.yml`. GitHub-hosted runners build
 and publish Linux packages only, for x64 and ARM64. Keep this release policy
 unless the maintainer explicitly changes it. Releases include AppImage and Debian
-installers, CLI archives, and Linux updater feeds. No scheduled sync or homelab
-runner is required.
+installers, CLI archives, and Linux updater feeds.
 
 ## Prepare a source update
 
