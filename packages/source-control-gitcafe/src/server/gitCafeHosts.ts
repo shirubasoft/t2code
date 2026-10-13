@@ -27,10 +27,10 @@ const REMOTE_PATTERNS = [
 
 /** An `owner/name` repository path, without the `.git` suffix a clone URL carries. */
 export function gitCafeRepositoryPath(path: string): string | null {
-  const repository = path
-    .trim()
-    .replace(/\/+$/u, "")
-    .replace(/\.git$/u, "");
+  const trimmed = path.trim();
+  let end = trimmed.length;
+  while (end > 0 && trimmed[end - 1] === "/") end -= 1;
+  const repository = trimmed.slice(0, end).replace(/\.git$/u, "");
   return REPOSITORY.test(repository) ? repository : null;
 }
 

@@ -11,6 +11,16 @@ import { assert, describe, it } from "@effect/vitest";
 import * as GitCafeHosts from "./gitCafeHosts.ts";
 
 describe("gitCafeHosts", () => {
+  it("rejects long interior slash runs and accepts trailing slashes after a repository", () => {
+    const slashes = "/".repeat(20_000);
+    assert.isNull(GitCafeHosts.gitCafeRepositoryPath(`team/${slashes}project`));
+    assert.strictEqual(
+      GitCafeHosts.gitCafeRepositoryPath(`team/project.git${slashes}`),
+      "team/project",
+    );
+    assert.isNull(GitCafeHosts.gitCafeRepositoryPath(slashes));
+  });
+
   it("knows exactly the production and staging hosts", () => {
     assert.deepStrictEqual([...GitCafeHosts.GITCAFE_HOSTS], ["git.cafe", "staging.git.cafe"]);
     assert.isTrue(GitCafeHosts.isGitCafeHost("Git.Cafe"));

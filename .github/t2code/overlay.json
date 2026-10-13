@@ -449,6 +449,16 @@
       "path": "packages/shared/src/path.test.ts",
       "before": "} from \"./path.ts\";\n\ndescribe(\"path helpers\", () => {\n  it.each([\n    [\"report:123\", \"/workspace\", \"/workspace/report:123\"],\n    [\"/workspace/report:12:3\", \"/other\", \"/workspace/report:12:3\"],\n",
       "after": "} from \"./path.ts\";\n\ndescribe(\"path helpers\", () => {\n  it(\"preserves long separator runs inside a workspace root and trims only its suffix\", () => {\n    const root = `/${\"/\\\\\".repeat(10_000)}repo`;\n    expect(resolveWorkspaceFilePath(\"src/file.ts\", `${root}/\\\\/`)).toBe(`${root}/src/file.ts`);\n    const windowsRoot = `C:\\\\${\"/\\\\\".repeat(10_000)}repo`;\n    expect(resolveWorkspaceFilePath(\"src/file.ts\", `${windowsRoot}/\\\\/`)).toBe(\n      `${windowsRoot}\\\\src\\\\file.ts`,\n    );\n  });\n\n  it.each([\n    [\"report:123\", \"/workspace\", \"/workspace/report:123\"],\n    [\"/workspace/report:12:3\", \"/other\", \"/workspace/report:12:3\"],\n"
+    },
+    {
+      "path": "packages/source-control-gitcafe/src/server/gitCafeHosts.ts",
+      "before": "\n/** An `owner/name` repository path, without the `.git` suffix a clone URL carries. */\nexport function gitCafeRepositoryPath(path: string): string | null {\n  const repository = path\n    .trim()\n    .replace(/\\/+$/u, \"\")\n    .replace(/\\.git$/u, \"\");\n  return REPOSITORY.test(repository) ? repository : null;\n}\n\n",
+      "after": "\n/** An `owner/name` repository path, without the `.git` suffix a clone URL carries. */\nexport function gitCafeRepositoryPath(path: string): string | null {\n  const trimmed = path.trim();\n  let end = trimmed.length;\n  while (end > 0 && trimmed[end - 1] === \"/\") end -= 1;\n  const repository = trimmed.slice(0, end).replace(/\\.git$/u, \"\");\n  return REPOSITORY.test(repository) ? repository : null;\n}\n\n"
+    },
+    {
+      "path": "packages/source-control-gitcafe/src/server/gitCafeHosts.test.ts",
+      "before": "import * as GitCafeHosts from \"./gitCafeHosts.ts\";\n\ndescribe(\"gitCafeHosts\", () => {\n  it(\"knows exactly the production and staging hosts\", () => {\n    assert.deepStrictEqual([...GitCafeHosts.GITCAFE_HOSTS], [\"git.cafe\", \"staging.git.cafe\"]);\n    assert.isTrue(GitCafeHosts.isGitCafeHost(\"Git.Cafe\"));\n",
+      "after": "import * as GitCafeHosts from \"./gitCafeHosts.ts\";\n\ndescribe(\"gitCafeHosts\", () => {\n  it(\"rejects long interior slash runs and accepts trailing slashes after a repository\", () => {\n    const slashes = \"/\".repeat(20_000);\n    assert.isNull(GitCafeHosts.gitCafeRepositoryPath(`team/${slashes}project`));\n    assert.strictEqual(\n      GitCafeHosts.gitCafeRepositoryPath(`team/project.git${slashes}`),\n      \"team/project\",\n    );\n    assert.isNull(GitCafeHosts.gitCafeRepositoryPath(slashes));\n  });\n\n  it(\"knows exactly the production and staging hosts\", () => {\n    assert.deepStrictEqual([...GitCafeHosts.GITCAFE_HOSTS], [\"git.cafe\", \"staging.git.cafe\"]);\n    assert.isTrue(GitCafeHosts.isGitCafeHost(\"Git.Cafe\"));\n"
     }
   ],
   "files": [
