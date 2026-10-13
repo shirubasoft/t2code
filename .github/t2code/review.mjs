@@ -63,10 +63,7 @@ export function validateOverlay(candidate, accepted) {
   for (const rule of candidate.replacements) {
     if (accepted.files.includes(rule.path))
       throw new Error(`Agent cannot patch fixed policy files: ${rule.path}`);
-    if (
-      !analyticsPath(rule.path) &&
-      !fixedChanges.has(packagingChange(rule))
-    )
+    if (!analyticsPath(rule.path) && !fixedChanges.has(packagingChange(rule)))
       throw new Error(`Agent patch outside analytics source: ${rule.path}`);
     if (
       typeof rule.before !== "string" ||
