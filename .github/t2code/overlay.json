@@ -439,6 +439,16 @@
       "path": "scripts/notify-discord-release.test.ts",
       "before": "\"Discord release CLI and workflow\"",
       "after": "\"Discord release CLI\""
+    },
+    {
+      "path": "packages/shared/src/path.ts",
+      "before": " * Home-relative paths stay intact for the server to expand. */\nexport function resolveWorkspaceFilePath(path: string, workspaceRoot: string): string {\n  if (isAbsolutePath(path) || path.startsWith(\"~/\") || path.startsWith(\"~\\\\\")) return path;\n  const base = workspaceRoot.replace(/[/\\\\]+$/, \"\");\n  return isWindowsAbsolutePath(workspaceRoot)\n    ? `${base}\\\\${path.replaceAll(\"/\", \"\\\\\")}`\n    : `${base}/${path}`;\n",
+      "after": " * Home-relative paths stay intact for the server to expand. */\nexport function resolveWorkspaceFilePath(path: string, workspaceRoot: string): string {\n  if (isAbsolutePath(path) || path.startsWith(\"~/\") || path.startsWith(\"~\\\\\")) return path;\n  let end = workspaceRoot.length;\n  while (end > 0 && (workspaceRoot[end - 1] === \"/\" || workspaceRoot[end - 1] === \"\\\\\")) end -= 1;\n  const base = workspaceRoot.slice(0, end);\n  return isWindowsAbsolutePath(workspaceRoot)\n    ? `${base}\\\\${path.replaceAll(\"/\", \"\\\\\")}`\n    : `${base}/${path}`;\n"
+    },
+    {
+      "path": "packages/shared/src/path.test.ts",
+      "before": "} from \"./path.ts\";\n\ndescribe(\"path helpers\", () => {\n  it.each([\n    [\"report:123\", \"/workspace\", \"/workspace/report:123\"],\n    [\"/workspace/report:12:3\", \"/other\", \"/workspace/report:12:3\"],\n",
+      "after": "} from \"./path.ts\";\n\ndescribe(\"path helpers\", () => {\n  it(\"preserves long separator runs inside a workspace root and trims only its suffix\", () => {\n    const root = `/${\"/\\\\\".repeat(10_000)}repo`;\n    expect(resolveWorkspaceFilePath(\"src/file.ts\", `${root}/\\\\/`)).toBe(`${root}/src/file.ts`);\n    const windowsRoot = `C:\\\\${\"/\\\\\".repeat(10_000)}repo`;\n    expect(resolveWorkspaceFilePath(\"src/file.ts\", `${windowsRoot}/\\\\/`)).toBe(\n      `${windowsRoot}\\\\src\\\\file.ts`,\n    );\n  });\n\n  it.each([\n    [\"report:123\", \"/workspace\", \"/workspace/report:123\"],\n    [\"/workspace/report:12:3\", \"/other\", \"/workspace/report:12:3\"],\n"
     }
   ],
   "files": [

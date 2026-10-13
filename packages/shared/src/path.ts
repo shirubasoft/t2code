@@ -116,7 +116,9 @@ export function isAbsolutePath(value: string): boolean {
  * Home-relative paths stay intact for the server to expand. */
 export function resolveWorkspaceFilePath(path: string, workspaceRoot: string): string {
   if (isAbsolutePath(path) || path.startsWith("~/") || path.startsWith("~\\")) return path;
-  const base = workspaceRoot.replace(/[/\\]+$/, "");
+  let end = workspaceRoot.length;
+  while (end > 0 && (workspaceRoot[end - 1] === "/" || workspaceRoot[end - 1] === "\\")) end -= 1;
+  const base = workspaceRoot.slice(0, end);
   return isWindowsAbsolutePath(workspaceRoot)
     ? `${base}\\${path.replaceAll("/", "\\")}`
     : `${base}/${path}`;

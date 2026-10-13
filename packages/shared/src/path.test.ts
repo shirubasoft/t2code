@@ -13,6 +13,15 @@ import {
 } from "./path.ts";
 
 describe("path helpers", () => {
+  it("preserves long separator runs inside a workspace root and trims only its suffix", () => {
+    const root = `/${"/\\".repeat(10_000)}repo`;
+    expect(resolveWorkspaceFilePath("src/file.ts", `${root}/\\/`)).toBe(`${root}/src/file.ts`);
+    const windowsRoot = `C:\\${"/\\".repeat(10_000)}repo`;
+    expect(resolveWorkspaceFilePath("src/file.ts", `${windowsRoot}/\\/`)).toBe(
+      `${windowsRoot}\\src\\file.ts`,
+    );
+  });
+
   it.each([
     ["report:123", "/workspace", "/workspace/report:123"],
     ["/workspace/report:12:3", "/other", "/workspace/report:12:3"],
