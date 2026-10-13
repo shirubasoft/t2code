@@ -3,6 +3,13 @@ import { describe, expect, it } from "vite-plus/test";
 import { splitPullRequestBody } from "./pullRequestMarkdown.ts";
 
 describe("pull request body segmentation", () => {
+  it("preserves long interior whitespace and leading code indentation while trimming the end", () => {
+    const body = `    text${"\t".repeat(20_000)}tail`;
+    expect(splitPullRequestBody(`\n\n${body}\t\u00a0\n`)).toEqual([
+      { id: "markdown:0", kind: "markdown", text: body },
+    ]);
+  });
+
   it("keeps a plain body as a single markdown run", () => {
     expect(splitPullRequestBody("## What changed\n\nSome prose.")).toEqual([
       { id: "markdown:0", kind: "markdown", text: "## What changed\n\nSome prose." },

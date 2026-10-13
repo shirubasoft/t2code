@@ -69,7 +69,7 @@ export function splitPullRequestBody(body: string): ReadonlyArray<PullRequestBod
   // Blank lines around a run are dropped, but never leading spaces: four of them open an
   // indented code block, so trimming a run would silently turn code into prose.
   const flushMarkdown = () => {
-    const text = markdown.join("\n").replace(/^\n+/u, "").replace(/\s+$/u, "");
+    const text = markdown.join("\n").replace(/^\n+/u, "").trimEnd();
     markdown.length = 0;
     if (text.trim().length > 0) {
       segments.push({ id: `markdown:${segments.length}`, kind: "markdown", text });
