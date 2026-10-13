@@ -469,6 +469,16 @@
       "path": "packages/client-runtime/src/pullRequestMarkdown.test.ts",
       "before": "import { splitPullRequestBody } from \"./pullRequestMarkdown.ts\";\n\ndescribe(\"pull request body segmentation\", () => {\n  it(\"keeps a plain body as a single markdown run\", () => {\n    expect(splitPullRequestBody(\"## What changed\\n\\nSome prose.\")).toEqual([\n      { id: \"markdown:0\", kind: \"markdown\", text: \"## What changed\\n\\nSome prose.\" },\n",
       "after": "import { splitPullRequestBody } from \"./pullRequestMarkdown.ts\";\n\ndescribe(\"pull request body segmentation\", () => {\n  it(\"preserves long interior whitespace and leading code indentation while trimming the end\", () => {\n    const body = `    text${\"\\t\".repeat(20_000)}tail`;\n    expect(splitPullRequestBody(`\\n\\n${body}\\t\\u00a0\\n`)).toEqual([\n      { id: \"markdown:0\", kind: \"markdown\", text: body },\n    ]);\n  });\n\n  it(\"keeps a plain body as a single markdown run\", () => {\n    expect(splitPullRequestBody(\"## What changed\\n\\nSome prose.\")).toEqual([\n      { id: \"markdown:0\", kind: \"markdown\", text: \"## What changed\\n\\nSome prose.\" },\n"
+    },
+    {
+      "path": "apps/mobile/src/lib/markdownDocument.ts",
+      "before": "      if (!src) return \"\";\n      const alt = (attribute(tag, \"alt\") ?? \"\").replace(/[\\\\[\\]&]/g, \"\\\\$&\");\n      const href = src\n        .replace(/&/g, \"\\\\&\")\n        .replace(/</g, \"%3C\")\n        .replace(/>/g, \"%3E\")\n        .replace(/\\n/g, \"\");\n",
+      "after": "      if (!src) return \"\";\n      const alt = (attribute(tag, \"alt\") ?? \"\").replace(/[\\\\[\\]&]/g, \"\\\\$&\");\n      const href = src\n        .replace(/[\\\\&]/g, \"\\\\$&\")\n        .replace(/</g, \"%3C\")\n        .replace(/>/g, \"%3E\")\n        .replace(/\\n/g, \"\");\n"
+    },
+    {
+      "path": "apps/mobile/src/lib/markdownHtml.test.ts",
+      "before": "import { markdownImageSources } from \"./markdownImageSources\";\n\ndescribe(\"HTML in native Markdown\", () => {\n  it(\"leaves code inside an HTML details block literal\", () => {\n    const content =\n      '<details>\\n<summary>Example</summary>\\n\\n```html\\n<img src=\"literal.png\">\\n```\\n\\nUse `<img>` here.\\n</details>';\n",
+      "after": "import { markdownImageSources } from \"./markdownImageSources\";\n\ndescribe(\"HTML in native Markdown\", () => {\n  it(\"preserves backslashes before entity-shaped query values in image URLs\", () => {\n    const markdown = '<img src=\"https://example.com/path\\\\&amp;lt;&amp;x=1\" alt=\"Example\">';\n    expect(markdownImageSources(markdown)).toEqual([\"https://example.com/path\\\\&lt;&x=1\"]);\n  });\n\n  it(\"leaves code inside an HTML details block literal\", () => {\n    const content =\n      '<details>\\n<summary>Example</summary>\\n\\n```html\\n<img src=\"literal.png\">\\n```\\n\\nUse `<img>` here.\\n</details>';\n"
     }
   ],
   "files": [

@@ -109,7 +109,7 @@ export function markdownHtmlContent(content: string): string {
       if (!src) return "";
       const alt = (attribute(tag, "alt") ?? "").replace(/[\\[\]&]/g, "\\$&");
       const href = src
-        .replace(/&/g, "\\&")
+        .replace(/[\\&]/g, "\\$&")
         .replace(/</g, "%3C")
         .replace(/>/g, "%3E")
         .replace(/\n/g, "");

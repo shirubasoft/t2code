@@ -3,6 +3,11 @@ import { markdownHtmlContent, markdownWithHtml, parseMarkdownDocument } from "./
 import { markdownImageSources } from "./markdownImageSources";
 
 describe("HTML in native Markdown", () => {
+  it("preserves backslashes before entity-shaped query values in image URLs", () => {
+    const markdown = '<img src="https://example.com/path\\&amp;lt;&amp;x=1" alt="Example">';
+    expect(markdownImageSources(markdown)).toEqual(["https://example.com/path\\&lt;&x=1"]);
+  });
+
   it("leaves code inside an HTML details block literal", () => {
     const content =
       '<details>\n<summary>Example</summary>\n\n```html\n<img src="literal.png">\n```\n\nUse `<img>` here.\n</details>';
