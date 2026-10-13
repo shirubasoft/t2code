@@ -42,8 +42,8 @@
     },
     {
       "path": "apps/server/src/http.ts",
-      "before": "  AuthOrchestrationReadScope,\n  EnvironmentHttpApi,\n} from \"@t3tools/contracts\";\nimport { isDevProxiedPath } from \"@t3tools/shared/devProxy\";\nimport { decodeOtlpTraceRecords } from \"@t3tools/shared/observability\";\nimport * as Data from \"effect/Data\";\nimport * as Effect from \"effect/Effect\";\nimport * as FileSystem from \"effect/FileSystem\";\nimport * as Layer from \"effect/Layer\";\nimport * as Option from \"effect/Option\";\n",
-      "after": "  AuthOrchestrationReadScope,\n  EnvironmentHttpApi,\n} from \"@t3tools/contracts\";\nimport { isDevProxiedPath } from \"@t3tools/shared/devProxy\";\nimport { decodeOtlpTraceRecords } from \"@t3tools/shared/observability\";\nimport { allowAnalyticsExport } from \"@t3tools/shared/t2Analytics\";\nimport * as Data from \"effect/Data\";\nimport * as Effect from \"effect/Effect\";\nimport * as FileSystem from \"effect/FileSystem\";\nimport * as Layer from \"effect/Layer\";\nimport * as Option from \"effect/Option\";\n"
+      "before": "import { decodeOtlpTraceRecords } from \"@t3tools/shared/observability\";\n",
+      "after": "import { decodeOtlpTraceRecords } from \"@t3tools/shared/observability\";\nimport { allowAnalyticsExport } from \"@t3tools/shared/t2Analytics\";\n"
     },
     {
       "path": "apps/server/src/http.ts",
@@ -117,8 +117,8 @@
     },
     {
       "path": "scripts/build-desktop-artifact.test.ts",
-      "before": "\n    assert.deepStrictEqual(configuration.rpDomains, [\n      \"clerk.example.com\",\n      \"example.clerk.accounts.dev\",\n    ]);\n    assert.include(entitlements, \"<string>ABC1234567.com.t3tools.t3code</string>\");\n    assert.include(entitlements, \"<string>webcredentials:clerk.example.com</string>\");\n    assert.include(entitlements, \"<string>webcredentials:example.clerk.accounts.dev</string>\");\n    assert.include(entitlements, \"<key>com.apple.security.cs.allow-jit</key>\");\n  });\n\n",
-      "after": "\n    assert.deepStrictEqual(configuration.rpDomains, [\n      \"clerk.example.com\",\n      \"example.clerk.accounts.dev\",\n    ]);\n    assert.include(entitlements, \"<string>ABC1234567.com.shirubasoft.t2code</string>\");\n    assert.include(entitlements, \"<string>webcredentials:clerk.example.com</string>\");\n    assert.include(entitlements, \"<string>webcredentials:example.clerk.accounts.dev</string>\");\n    assert.include(entitlements, \"<key>com.apple.security.cs.allow-jit</key>\");\n  });\n\n"
+      "before": "    assert.include(entitlements, \"<string>ABC1234567.com.t3tools.t3code</string>\");\n",
+      "after": "    assert.include(entitlements, \"<string>ABC1234567.com.shirubasoft.t2code</string>\");\n"
     },
     {
       "path": "scripts/build-desktop-artifact.test.ts",
@@ -362,8 +362,8 @@
     },
     {
       "path": "apps/server/src/telemetry/AnalyticsService.ts",
-      "before": "import { HostProcessArchitecture, HostProcessPlatform } from \"@t3tools/shared/hostProcess\";\n",
-      "after": "import { allowAnalyticsExport } from \"@t3tools/shared/t2Analytics\";\nimport { HostProcessArchitecture, HostProcessPlatform } from \"@t3tools/shared/hostProcess\";\n"
+      "before": "import * as HostProcess from \"@t3tools/shared/HostProcess\";\n",
+      "after": "import { allowAnalyticsExport } from \"@t3tools/shared/t2Analytics\";\nimport * as HostProcess from \"@t3tools/shared/HostProcess\";\n"
     },
     {
       "path": "apps/server/src/telemetry/AnalyticsService.ts",

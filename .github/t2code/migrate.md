@@ -18,10 +18,12 @@ The candidate replaces upstream's .github/workflows/, .github/t2code/, and
 .github/CODEOWNERS with the accepted controls under /review/fork-controls/.
 Review those accepted files when tracing CI and release execution. Upstream
 workflows, including workflow files absent from the accepted directory, are
-removed before validation and publication. Treat the controls as read-only
-evidence; a sink reachable only through a removed upstream workflow does not
-block the candidate. Still inspect shared scripts and application code for
-exporters reachable through retained entry points.
+removed before validation and publication. A sink reachable only through a
+removed upstream workflow does not block the candidate. Still inspect shared
+scripts and application code for exporters reachable through retained entry
+points. Routine compatibility repairs to accepted controls are authorized when
+they preserve the fork's privacy protections, identity, update destinations,
+supported platforms, CI requirements, and published-asset verification.
 
 /review/overlay-check.json reports which accepted patches apply, have stale
 anchors, or target files absent from the pinned upstream Git tree. When
@@ -46,8 +48,13 @@ allowAnalyticsExport always returns false and cannot be enabled by settings.
 
 Analytics source and its focused tests under apps/, packages/, infra/, and
 scripts/ can be patched. Entries marked editable: false in overlay-check.json
-are fixed packaging controls and must remain unchanged. Do not change the files
-list, installer metadata, package exports, or fork-owned policy files.
+have a fixed replacement effect. Adapt their matching context when upstream
+changes it, retaining the same text removed and inserted in the same file.
+Validation compares that edit independently of shared context, and every anchor
+must still apply exactly once. Complete these routine repairs without a manual
+handoff. Preserve the files list, installer metadata, package exports, and
+fork-owned privacy policy. Escalate changes to release destinations, supported
+platforms, or privacy behavior rather than mechanical compatibility drift.
 The files list names fork-owned additions that are restored separately. Their
 source is available under /review/fork-files for inspecting existing protections.
 
