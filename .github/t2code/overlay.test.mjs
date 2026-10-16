@@ -80,6 +80,30 @@ test("packaging anchors can follow upstream context while preserving the replace
   }
 });
 
+test("upstream beta branding can replace alpha test inputs without changing fork outputs", () => {
+  const path = "scripts/build-desktop-artifact.test.ts";
+  const before = 'assert.equal(resolveDesktopProductName("0.0.17"), "T3 Code (Alpha)");';
+  const after = 'assert.equal(resolveDesktopProductName("0.0.17"), "T2 Code");';
+  const accepted = { files: [], replacements: [{ path, before, after }] };
+  const updated = {
+    path,
+    before: before.replaceAll("0.0.17", "0.1.0").replace("(Alpha)", "(Beta)"),
+    after: after.replaceAll("0.0.17", "0.1.0"),
+  };
+  validateOverlay({ files: [], replacements: [updated] }, accepted);
+  assert.equal(transform(updated.before, [updated]), updated.after);
+  for (const rule of [
+    { ...updated, after: updated.after.replace("T2 Code", "Other Code") },
+    { ...updated, before: updated.before.replace("(Beta)", "(Stable)") },
+    { ...updated, path: "scripts/build-desktop-artifact.ts" },
+  ]) {
+    assert.throws(
+      () => validateOverlay({ files: [], replacements: [rule] }, accepted),
+      /packaging controls/,
+    );
+  }
+});
+
 test("analytics review can retire a deleted relay test and carry protection to moved source", () => {
   const accepted = readJson(join(controlRoot, ".github/t2code/overlay.json"));
   const replacements = accepted.replacements.filter(
