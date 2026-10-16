@@ -24,27 +24,32 @@ function analyticsPath(path) {
 
 function packagingChange(rule) {
   if (typeof rule.before !== "string" || typeof rule.after !== "string") return null;
+  // Upstream's prerelease label is test input; the fork's output stays exact.
+  const before =
+    rule.path === "scripts/build-desktop-artifact.test.ts"
+      ? rule.before.replaceAll("T3 Code (Beta)", "T3 Code (Alpha)")
+      : rule.before;
   let start = 0;
   while (
-    start < rule.before.length &&
+    start < before.length &&
     start < rule.after.length &&
-    rule.before[start] === rule.after[start]
+    before[start] === rule.after[start]
   ) {
     start += 1;
   }
-  let beforeEnd = rule.before.length;
+  let beforeEnd = before.length;
   let afterEnd = rule.after.length;
   while (
     beforeEnd > start &&
     afterEnd > start &&
-    rule.before[beforeEnd - 1] === rule.after[afterEnd - 1]
+    before[beforeEnd - 1] === rule.after[afterEnd - 1]
   ) {
     beforeEnd -= 1;
     afterEnd -= 1;
   }
   return JSON.stringify([
     rule.path,
-    rule.before.slice(start, beforeEnd),
+    before.slice(start, beforeEnd),
     rule.after.slice(start, afterEnd),
   ]);
 }
