@@ -48,10 +48,12 @@ function fnv1a64(value: string): string {
  */
 export function toComposerContextId(producerId: string): ComposerContextId {
   if (CONTEXT_ID_PATTERN.test(producerId)) return producerId as ComposerContextId;
-  const slug = producerId
-    .replace(/[^a-z0-9_-]+/gi, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 48);
+  const normalized = producerId.replace(/[^a-z0-9_-]+/gi, "-");
+  let start = 0;
+  let end = normalized.length;
+  while (start < end && normalized[start] === "-") start += 1;
+  while (end > start && normalized[end - 1] === "-") end -= 1;
+  const slug = normalized.slice(start, Math.min(end, start + 48));
   return `${slug || "ctx"}-${fnv1a64(producerId)}` as ComposerContextId;
 }
 

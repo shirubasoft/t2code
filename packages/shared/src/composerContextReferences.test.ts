@@ -302,6 +302,16 @@ describe("provider projection", () => {
 });
 
 describe("toComposerContextId", () => {
+  it("preserves context identity while trimming long hyphen runs", () => {
+    const hyphens = "-".repeat(20_000);
+    expect(toComposerContextId(`::prefix${hyphens}tail::`)).toBe(
+      `prefix${"-".repeat(42)}-addf8c470ff50102`,
+    );
+    expect(toComposerContextId(`::prefix${hyphens}::`)).toBe("prefix-3267e579e13a0bb0");
+    expect(toComposerContextId(hyphens)).toBe("ctx-37635fa5e51522fc");
+    expect(toComposerContextId("---")).toBe("---");
+    expect(toComposerContextId("::--_--::")).toMatch(/^_-[0-9a-f]{16}$/);
+  });
   it("keeps same-kind raw IDs distinct when one contains the namespace prefix", () => {
     expect(toKindScopedComposerContextId("image", "x")).toBe("image_x");
     expect(toKindScopedComposerContextId("image", "image_x")).toBe("image_image_x");
