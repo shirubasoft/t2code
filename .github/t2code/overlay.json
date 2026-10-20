@@ -539,6 +539,21 @@
       "path": "apps/server/src/serverLogger.test.ts",
       "before": "        const body = requests.map((request) => request.body).join(\"\\n\");\n        assert.include(body, \"Authentication required\");\n        assert.notInclude(body, pairingToken);",
       "after": "        assert.lengthOf(requests, 0);"
+    },
+    {
+      "path": "packages/client-runtime/src/state/subagentRuntime.ts",
+      "before": "// Workflow scripts open with their `meta` export, after any leading comments.\nconst WORKFLOW_SCRIPT_START = /^\\s*(?:(?:\\/\\/[^\\n]*|\\/\\*[\\s\\S]*?\\*\\/)\\s*)*export\\s+const\\s+meta\\b/;\n",
+      "after": "// Workflow scripts open with their `meta` export, after any leading comments.\nconst WORKFLOW_SCRIPT_START = /^export\\s+const\\s+meta\\b/;\n\nfunction isWorkflowScriptText(text: string) {\n  let cursor = 0;\n  while (cursor < text.length) {\n    while (cursor < text.length && /\\s/u.test(text[cursor]!)) cursor += 1;\n    if (text.startsWith(\"//\", cursor)) {\n      cursor += 2;\n      while (cursor < text.length && !/[\\r\\n\\u2028\\u2029]/u.test(text[cursor]!)) cursor += 1;\n    } else if (text.startsWith(\"/*\", cursor)) {\n      const end = text.indexOf(\"*/\", cursor + 2);\n      if (end === -1) return false;\n      cursor = end + 2;\n    } else {\n      return WORKFLOW_SCRIPT_START.test(text.slice(cursor));\n    }\n  }\n  return false;\n}\n"
+    },
+    {
+      "path": "packages/client-runtime/src/state/subagentRuntime.ts",
+      "before": "  return (\n    message.role === \"user\" && (message.workflowScript ?? WORKFLOW_SCRIPT_START.test(message.text))\n  );",
+      "after": "  return message.role === \"user\" && (message.workflowScript ?? isWorkflowScriptText(message.text));"
+    },
+    {
+      "path": "packages/client-runtime/src/state/subagentRuntime.test.ts",
+      "before": "describe(\"resolveWorkflowOpening\", () => {\n",
+      "after": "describe(\"resolveWorkflowOpening\", () => {\n  it(\"recognizes workflow exports only after complete comments without rescanning their contents\", () => {\n    expect(\n      isWorkflowScriptMessage({ role: \"user\", text: \"// comment export const meta = {};\" }),\n    ).toBe(false);\n    expect(isWorkflowScriptMessage({ role: \"user\", text: \"// \".repeat(20_000) })).toBe(false);\n    const comments = \" /* comment */ // comment\\n\".repeat(10_000);\n    expect(\n      isWorkflowScriptMessage({ role: \"user\", text: `${comments}export const meta = {};` }),\n    ).toBe(true);\n    expect(isWorkflowScriptMessage({ role: \"user\", text: \"/* export const meta = {};\" })).toBe(\n      false,\n    );\n    expect(\n      isWorkflowScriptMessage({ role: \"user\", text: \"// comment\\r\\n\\texport const meta = {};\" }),\n    ).toBe(true);\n  });\n"
     }
   ],
   "files": [

@@ -292,7 +292,25 @@ export function deriveWorkflowGroups(
 }
 
 // Workflow scripts open with their `meta` export, after any leading comments.
-const WORKFLOW_SCRIPT_START = /^\s*(?:(?:\/\/[^\n]*|\/\*[\s\S]*?\*\/)\s*)*export\s+const\s+meta\b/;
+const WORKFLOW_SCRIPT_START = /^export\s+const\s+meta\b/;
+
+function isWorkflowScriptText(text: string) {
+  let cursor = 0;
+  while (cursor < text.length) {
+    while (cursor < text.length && /\s/u.test(text[cursor]!)) cursor += 1;
+    if (text.startsWith("//", cursor)) {
+      cursor += 2;
+      while (cursor < text.length && !/[\r\n\u2028\u2029]/u.test(text[cursor]!)) cursor += 1;
+    } else if (text.startsWith("/*", cursor)) {
+      const end = text.indexOf("*/", cursor + 2);
+      if (end === -1) return false;
+      cursor = end + 2;
+    } else {
+      return WORKFLOW_SCRIPT_START.test(text.slice(cursor));
+    }
+  }
+  return false;
+}
 
 /**
  * Whether a user message is the script a provider-native workflow runs. Servers mark every
@@ -303,9 +321,7 @@ export function isWorkflowScriptMessage(message: {
   readonly text: string;
   readonly workflowScript?: boolean | undefined;
 }): boolean {
-  return (
-    message.role === "user" && (message.workflowScript ?? WORKFLOW_SCRIPT_START.test(message.text))
-  );
+  return message.role === "user" && (message.workflowScript ?? isWorkflowScriptText(message.text));
 }
 
 type ProjectedSubagent = Parameters<typeof projectedSubagentsToRuntime>[0][number] &

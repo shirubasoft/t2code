@@ -229,6 +229,22 @@ describe("deriveWorkflowGroups over a dynamic workflow", () => {
 });
 
 describe("resolveWorkflowOpening", () => {
+  it("recognizes workflow exports only after complete comments without rescanning their contents", () => {
+    expect(
+      isWorkflowScriptMessage({ role: "user", text: "// comment export const meta = {};" }),
+    ).toBe(false);
+    expect(isWorkflowScriptMessage({ role: "user", text: "// ".repeat(20_000) })).toBe(false);
+    const comments = " /* comment */ // comment\n".repeat(10_000);
+    expect(
+      isWorkflowScriptMessage({ role: "user", text: `${comments}export const meta = {};` }),
+    ).toBe(true);
+    expect(isWorkflowScriptMessage({ role: "user", text: "/* export const meta = {};" })).toBe(
+      false,
+    );
+    expect(
+      isWorkflowScriptMessage({ role: "user", text: "// comment\r\n\texport const meta = {};" }),
+    ).toBe(true);
+  });
   const SCRIPT = '// probe\nexport const meta = { name: "probe-wf" };\nconst GROUPS = [];';
   const childThread = {
     id: ThreadId.make("child"),
