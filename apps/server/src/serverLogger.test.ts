@@ -304,16 +304,14 @@ describe("ServerLoggerLive", () => {
       Effect.andThen(logBrowserAutoOpenUnavailable),
     );
 
-    it.effect("prints the full URL but keeps its token out of exported log records", () =>
+    it.effect("prints the full pairing URL locally without exporting log records", () =>
       Effect.gen(function* () {
         const { requests } = yield* logInSpanThrough(
           { otlpLogsUrl: "https://collector.example.com/v1/logs" },
           announce,
         );
 
-        const body = requests.map((request) => request.body).join("\n");
-        assert.include(body, "Authentication required");
-        assert.notInclude(body, pairingToken);
+        assert.lengthOf(requests, 0);
         const printed = (yield* TestConsole.logLines).map((line) =>
           Array.isArray(line) ? line.join(" ") : String(line),
         );

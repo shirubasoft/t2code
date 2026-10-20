@@ -529,6 +529,16 @@
       "path": "apps/web/src/components/desktopUpdate.logic.test.ts",
       "before": "getDesktopUpdateReleaseHistoryUrl(\"pingdotgg/t3code\")",
       "after": "getDesktopUpdateReleaseHistoryUrl(\"shirubasoft/t2code\")"
+    },
+    {
+      "path": "apps/server/src/serverLogger.test.ts",
+      "before": "prints the full URL but keeps its token out of exported log records",
+      "after": "prints the full pairing URL locally without exporting log records"
+    },
+    {
+      "path": "apps/server/src/serverLogger.test.ts",
+      "before": "        const body = requests.map((request) => request.body).join(\"\\n\");\n        assert.include(body, \"Authentication required\");\n        assert.notInclude(body, pairingToken);",
+      "after": "        assert.lengthOf(requests, 0);"
     }
   ],
   "files": [
