@@ -167,8 +167,8 @@
     },
     {
       "path": "apps/web/src/components/desktopUpdate.logic.ts",
-      "before": "const DESKTOP_RELEASE_HISTORY_URL = \"https://github.com/pingdotgg/t3code/releases\";",
-      "after": "const DESKTOP_RELEASE_HISTORY_URL = \"https://github.com/shirubasoft/t2code/releases\";"
+      "before": "const DEFAULT_DESKTOP_RELEASE_REPOSITORY = \"pingdotgg/t3code\";",
+      "after": "const DEFAULT_DESKTOP_RELEASE_REPOSITORY = \"shirubasoft/t2code\";"
     },
     {
       "path": "apps/web/src/components/desktopUpdate.logic.test.ts",
@@ -182,8 +182,8 @@
     },
     {
       "path": "apps/web/src/components/desktopUpdate.logic.test.ts",
-      "before": "\"https://github.com/pingdotgg/t3code/releases\"",
-      "after": "\"https://github.com/shirubasoft/t2code/releases\""
+      "before": "    expect(getDesktopUpdateReleaseHistoryUrl(repository)).toBe(\n      \"https://github.com/pingdotgg/t3code/releases\",\n    );",
+      "after": "    expect(getDesktopUpdateReleaseHistoryUrl(repository)).toBe(\n      \"https://github.com/shirubasoft/t2code/releases\",\n    );"
     },
     {
       "path": "packages/ssh/src/tunnel.test.ts",
@@ -297,7 +297,7 @@
     },
     {
       "path": "apps/desktop/src/app/DesktopObservability.test.ts",
-      "before": "      assert.lengthOf(requests, 1);\n      const [request] = requests;\n      assert.strictEqual(request?.url, \"https://collector.example.com/v1/logs\");\n      assert.include(request?.body ?? \"\", \"desktop log export\");\n      assert.include(request?.body ?? \"\", \"service.runtime\");\n      assert.strictEqual(request?.headers[\"x-scope\"], \"desktop\");\n\n      // The log record is the export now, so the same message must not also\n      // ride along as an event on the span.",
+      "before": "      assert.lengthOf(requests, 1);\n      const [request] = requests;\n      assert.strictEqual(request?.url, \"https://collector.example.com/v1/logs\");\n      assert.include(request?.body ?? \"\", \"desktop log export\");\n      assert.include(request?.body ?? \"\", \"service.runtime\");\n      assert.strictEqual(request?.headers[\"x-scope\"], \"desktop\");",
       "after": "      assert.lengthOf(requests, 0);\n\n      // Log messages remain in the local trace even with an exporter configured."
     },
     {
@@ -377,13 +377,13 @@
     },
     {
       "path": "apps/server/src/telemetry/AnalyticsService.test.ts",
-      "before": "a batch that keeps failing is retried with backoff, then dropped",
+      "before": "a batch that keeps failing is retried with the same uuids, then dropped",
       "after": "does not export or retry batches even when analytics is enabled"
     },
     {
       "path": "apps/server/src/telemetry/AnalyticsService.test.ts",
-      "before": "      assert.equal(batches.length, 5);\n      const uuids = batches.map((batch) => batch.map((event) => event.uuid).join(\",\"));\n      assert.equal(new Set(uuids).size, 1, \"every retry carries the same uuids\");\n      assert.equal(new Set(batches[0]?.map((event) => event.uuid)).size, 20);",
-      "after": "      assert.deepEqual(batches, []);"
+      "before": "        assert.equal(batches.length, 5, failure);\n        const uuids = batches.map((batch) => batch.map((event) => event.uuid).join(\",\"));\n        assert.equal(new Set(uuids).size, 1, `${failure}: every retry carries the same uuids`);\n        assert.equal(new Set(batches[0]?.map((event) => event.uuid)).size, 20, failure);",
+      "after": "        assert.deepEqual(batches, [], failure);"
     },
     {
       "path": "apps/server/src/telemetry/AnalyticsService.test.ts",
@@ -427,7 +427,7 @@
     },
     {
       "path": "scripts/notify-discord-release.test.ts",
-      "before": "// Run the checked-in shell commands with gh/node stubs, then send their captured\n// arguments through the real CLI parser and an injected HTTP client.\nfunction workflowRun(workflow: string, stepName: string) {\n  const step = workflow.split(`      - name: ${stepName}\\n`)[1]?.split(\"\\n      - name:\")[0];\n  assert.ok(step, `Missing workflow step: ${stepName}`);\n  const run = step.split(\"        run: |\\n\")[1];\n  assert.ok(run, `Missing run block: ${stepName}`);\n  return run\n    .split(\"\\n\")\n    .map((line) => line.replace(/^          /, \"\"))\n    .join(\"\\n\");\n}\n\n",
+      "before": "function workflowRun(workflow: string, stepName: string) {\n  const step = workflow.split(`      - name: ${stepName}\\n`)[1]?.split(\"\\n      - name:\")[0];\n  assert.ok(step, `Missing workflow step: ${stepName}`);\n  const run = step.split(\"        run: |\\n\")[1];\n  assert.ok(run, `Missing run block: ${stepName}`);\n  return run\n    .split(\"\\n\")\n    .map((line) => line.replace(/^          /, \"\"))\n    .join(\"\\n\");\n}\n\n",
       "after": ""
     },
     {
@@ -442,8 +442,8 @@
     },
     {
       "path": "packages/shared/src/path.ts",
-      "before": " * Home-relative paths stay intact for the server to expand. */\nexport function resolveWorkspaceFilePath(path: string, workspaceRoot: string): string {\n  if (isAbsolutePath(path) || path.startsWith(\"~/\") || path.startsWith(\"~\\\\\")) return path;\n  const base = workspaceRoot.replace(/[/\\\\]+$/, \"\");\n  return isWindowsAbsolutePath(workspaceRoot)\n    ? `${base}\\\\${path.replaceAll(\"/\", \"\\\\\")}`\n    : `${base}/${path}`;\n",
-      "after": " * Home-relative paths stay intact for the server to expand. */\nexport function resolveWorkspaceFilePath(path: string, workspaceRoot: string): string {\n  if (isAbsolutePath(path) || path.startsWith(\"~/\") || path.startsWith(\"~\\\\\")) return path;\n  let end = workspaceRoot.length;\n  while (end > 0 && (workspaceRoot[end - 1] === \"/\" || workspaceRoot[end - 1] === \"\\\\\")) end -= 1;\n  const base = workspaceRoot.slice(0, end);\n  return isWindowsAbsolutePath(workspaceRoot)\n    ? `${base}\\\\${path.replaceAll(\"/\", \"\\\\\")}`\n    : `${base}/${path}`;\n"
+      "before": "export function resolveWorkspaceFilePath(path: string, workspaceRoot: string): string {\n  if (isAbsolutePath(path) || path.startsWith(\"~/\") || path.startsWith(\"~\\\\\")) return path;\n  const base = workspaceRoot.replace(/[/\\\\]+$/, \"\");\n  return isWindowsAbsolutePath(workspaceRoot)\n    ? `${base}\\\\${path.replaceAll(\"/\", \"\\\\\")}`\n    : `${base}/${path}`;\n",
+      "after": "export function resolveWorkspaceFilePath(path: string, workspaceRoot: string): string {\n  if (isAbsolutePath(path) || path.startsWith(\"~/\") || path.startsWith(\"~\\\\\")) return path;\n  let end = workspaceRoot.length;\n  while (end > 0 && (workspaceRoot[end - 1] === \"/\" || workspaceRoot[end - 1] === \"\\\\\")) end -= 1;\n  const base = workspaceRoot.slice(0, end);\n  return isWindowsAbsolutePath(workspaceRoot)\n    ? `${base}\\\\${path.replaceAll(\"/\", \"\\\\\")}`\n    : `${base}/${path}`;\n"
     },
     {
       "path": "packages/shared/src/path.test.ts",
@@ -452,8 +452,8 @@
     },
     {
       "path": "packages/source-control-gitcafe/src/server/gitCafeHosts.ts",
-      "before": "\n/** An `owner/name` repository path, without the `.git` suffix a clone URL carries. */\nexport function gitCafeRepositoryPath(path: string): string | null {\n  const repository = path\n    .trim()\n    .replace(/\\/+$/u, \"\")\n    .replace(/\\.git$/u, \"\");\n  return REPOSITORY.test(repository) ? repository : null;\n}\n\n",
-      "after": "\n/** An `owner/name` repository path, without the `.git` suffix a clone URL carries. */\nexport function gitCafeRepositoryPath(path: string): string | null {\n  const trimmed = path.trim();\n  let end = trimmed.length;\n  while (end > 0 && trimmed[end - 1] === \"/\") end -= 1;\n  const repository = trimmed.slice(0, end).replace(/\\.git$/u, \"\");\n  return REPOSITORY.test(repository) ? repository : null;\n}\n\n"
+      "before": "\nexport function gitCafeRepositoryPath(path: string): string | null {\n  const repository = path\n    .trim()\n    .replace(/\\/+$/u, \"\")\n    .replace(/\\.git$/u, \"\");\n  return REPOSITORY.test(repository) ? repository : null;\n}\n\n",
+      "after": "\nexport function gitCafeRepositoryPath(path: string): string | null {\n  const trimmed = path.trim();\n  let end = trimmed.length;\n  while (end > 0 && trimmed[end - 1] === \"/\") end -= 1;\n  const repository = trimmed.slice(0, end).replace(/\\.git$/u, \"\");\n  return REPOSITORY.test(repository) ? repository : null;\n}\n\n"
     },
     {
       "path": "packages/source-control-gitcafe/src/server/gitCafeHosts.test.ts",
@@ -489,6 +489,71 @@
       "path": "packages/shared/src/composerContextReferences.test.ts",
       "before": "describe(\"toComposerContextId\", () => {\n",
       "after": "describe(\"toComposerContextId\", () => {\n  it(\"preserves context identity while trimming long hyphen runs\", () => {\n    const hyphens = \"-\".repeat(20_000);\n    expect(toComposerContextId(`::prefix${hyphens}tail::`)).toBe(\n      `prefix${\"-\".repeat(42)}-addf8c470ff50102`,\n    );\n    expect(toComposerContextId(`::prefix${hyphens}::`)).toBe(\"prefix-3267e579e13a0bb0\");\n    expect(toComposerContextId(hyphens)).toBe(\"ctx-37635fa5e51522fc\");\n    expect(toComposerContextId(\"---\")).toBe(\"---\");\n    expect(toComposerContextId(\"::--_--::\")).toMatch(/^_-[0-9a-f]{16}$/);\n  });\n"
+    },
+    {
+      "path": "apps/server/src/telemetry/AnalyticsService.test.ts",
+      "before": "a batch the endpoint rejects is dropped without a retry",
+      "after": "does not send batches even to rejecting endpoints"
+    },
+    {
+      "path": "apps/server/src/telemetry/AnalyticsService.test.ts",
+      "before": "        assert.equal(batches.length, 1, `status ${status}`);",
+      "after": "        assert.deepEqual(batches, [], `status ${status}`);"
+    },
+    {
+      "path": "apps/server/src/telemetry/AnalyticsService.test.ts",
+      "before": "  it.effect(\"events carry the build's telemetry channel, or dev when none is set\", () =>\n    Effect.gen(function* () {\n      const channels = (batches: ReadonlyArray<ReadonlyArray<SentEvent>>) => [\n        ...new Set(batches.flat().map((event) => event.properties.telemetryChannel)),\n      ];\n      assert.deepEqual(channels(yield* sendForTenMinutes(respondWithStatus(204))), [\"dev\"]);\n\n      // Stands in for the value the bundler writes in at build time.\n      vi.stubGlobal(\"__T3CODE_TELEMETRY_CHANNEL__\", \"nightly\");\n      assert.deepEqual(channels(yield* sendForTenMinutes(respondWithStatus(204))), [\"nightly\"]);\n    }).pipe(Effect.ensuring(Effect.sync(() => vi.unstubAllGlobals()))),\n  );",
+      "after": "  it.effect(\"keeps default and nightly telemetry channels disabled\", () =>\n    Effect.gen(function* () {\n      assert.deepEqual(yield* sendForTenMinutes(respondWithStatus(204)), []);\n\n      vi.stubGlobal(\"__T3CODE_TELEMETRY_CHANNEL__\", \"nightly\");\n      assert.deepEqual(yield* sendForTenMinutes(respondWithStatus(204)), []);\n    }).pipe(Effect.ensuring(Effect.sync(() => vi.unstubAllGlobals()))),\n  );"
+    },
+    {
+      "path": "apps/web/src/components/desktopUpdate.logic.test.ts",
+      "before": "\"https://github.com/pingdotgg/t3code/releases/tag/v1.2.3\"",
+      "after": "\"https://github.com/shirubasoft/t2code/releases/tag/v1.2.3\""
+    },
+    {
+      "path": "apps/web/src/components/desktopUpdate.logic.test.ts",
+      "before": "    expect(getDesktopUpdateReleaseHistoryUrl(\"pingdotgg/t3code\")).toBe(\n      \"https://github.com/pingdotgg/t3code/releases\",\n    );",
+      "after": "    expect(getDesktopUpdateReleaseHistoryUrl(\"pingdotgg/t3code\")).toBe(\n      \"https://github.com/shirubasoft/t2code/releases\",\n    );"
+    },
+    {
+      "path": "apps/web/src/components/desktopUpdate.logic.test.ts",
+      "before": "getDesktopUpdateReleaseUrl(\"0.0.30\", \"pingdotgg/t3code\")",
+      "after": "getDesktopUpdateReleaseUrl(\"0.0.30\", \"shirubasoft/t2code\")"
+    },
+    {
+      "path": "apps/web/src/components/desktopUpdate.logic.test.ts",
+      "before": "getDesktopUpdateReleaseUrl(\"0.0.30-nightly.20260728.931\", \"pingdotgg/t3code\")",
+      "after": "getDesktopUpdateReleaseUrl(\"0.0.30-nightly.20260728.931\", \"shirubasoft/t2code\")"
+    },
+    {
+      "path": "apps/web/src/components/desktopUpdate.logic.test.ts",
+      "before": "getDesktopUpdateReleaseHistoryUrl(\"pingdotgg/t3code\")",
+      "after": "getDesktopUpdateReleaseHistoryUrl(\"shirubasoft/t2code\")"
+    },
+    {
+      "path": "apps/server/src/serverLogger.test.ts",
+      "before": "prints the full URL but keeps its token out of exported log records",
+      "after": "prints the full pairing URL locally without exporting log records"
+    },
+    {
+      "path": "apps/server/src/serverLogger.test.ts",
+      "before": "        const body = requests.map((request) => request.body).join(\"\\n\");\n        assert.include(body, \"Authentication required\");\n        assert.notInclude(body, pairingToken);",
+      "after": "        assert.lengthOf(requests, 0);"
+    },
+    {
+      "path": "packages/client-runtime/src/state/subagentRuntime.ts",
+      "before": "// Workflow scripts open with their `meta` export, after any leading comments.\nconst WORKFLOW_SCRIPT_START = /^\\s*(?:(?:\\/\\/[^\\n]*|\\/\\*[\\s\\S]*?\\*\\/)\\s*)*export\\s+const\\s+meta\\b/;\n",
+      "after": "// Workflow scripts open with their `meta` export, after any leading comments.\nconst WORKFLOW_SCRIPT_START = /^export\\s+const\\s+meta\\b/;\n\nfunction isWorkflowScriptText(text: string) {\n  let cursor = 0;\n  while (cursor < text.length) {\n    while (cursor < text.length && /\\s/u.test(text[cursor]!)) cursor += 1;\n    if (text.startsWith(\"//\", cursor)) {\n      cursor += 2;\n      while (cursor < text.length && !/[\\r\\n\\u2028\\u2029]/u.test(text[cursor]!)) cursor += 1;\n    } else if (text.startsWith(\"/*\", cursor)) {\n      const end = text.indexOf(\"*/\", cursor + 2);\n      if (end === -1) return false;\n      cursor = end + 2;\n    } else {\n      return WORKFLOW_SCRIPT_START.test(text.slice(cursor));\n    }\n  }\n  return false;\n}\n"
+    },
+    {
+      "path": "packages/client-runtime/src/state/subagentRuntime.ts",
+      "before": "  return (\n    message.role === \"user\" && (message.workflowScript ?? WORKFLOW_SCRIPT_START.test(message.text))\n  );",
+      "after": "  return message.role === \"user\" && (message.workflowScript ?? isWorkflowScriptText(message.text));"
+    },
+    {
+      "path": "packages/client-runtime/src/state/subagentRuntime.test.ts",
+      "before": "describe(\"resolveWorkflowOpening\", () => {\n",
+      "after": "describe(\"resolveWorkflowOpening\", () => {\n  it(\"recognizes workflow exports only after complete comments without rescanning their contents\", () => {\n    expect(\n      isWorkflowScriptMessage({ role: \"user\", text: \"// comment export const meta = {};\" }),\n    ).toBe(false);\n    expect(isWorkflowScriptMessage({ role: \"user\", text: \"// \".repeat(20_000) })).toBe(false);\n    const comments = \" /* comment */ // comment\\n\".repeat(10_000);\n    expect(\n      isWorkflowScriptMessage({ role: \"user\", text: `${comments}export const meta = {};` }),\n    ).toBe(true);\n    expect(isWorkflowScriptMessage({ role: \"user\", text: \"/* export const meta = {};\" })).toBe(\n      false,\n    );\n    expect(\n      isWorkflowScriptMessage({ role: \"user\", text: \"// comment\\r\\n\\texport const meta = {};\" }),\n    ).toBe(true);\n  });\n"
     }
   ],
   "files": [
