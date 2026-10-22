@@ -12,6 +12,8 @@ import * as NodeTest from "node:test";
 const { test } = NodeTest;
 import { controlRoot } from "./overlay.mjs";
 
+const planningNow = Date.parse("2026-09-18T12:00:00.000Z");
+
 test("planning rejects an advanced main even when its commit diff exceeds the process buffer", () => {
   const root = mkdtempSync(join(tmpdir(), "t2-sync-main-"));
   const output = join(root, "output");
@@ -171,12 +173,24 @@ process.exit(result.status ?? 1);
     mainSha,
     state,
     commit,
-    run: (command = "plan", { tag: requestedTag, context, consoleOutput = false } = {}) => {
+    run: (
+      command = "plan",
+      { tag: requestedTag, context, consoleOutput = false, now = planningNow } = {},
+    ) => {
+      const clockModule = join(root, "clock.mjs");
+      writeFileSync(
+        clockModule,
+        `import { mock } from "node:test";
+mock.timers.enable({ apis: ["Date"], now: ${JSON.stringify(now)} });
+`,
+      );
       writeFileSync(stateFile, JSON.stringify(state));
       writeFileSync(output, "");
       const result = spawnSync(
         process.execPath,
         [
+          "--import",
+          clockModule,
           join(controlRoot, ".github/t2code/sync.mjs"),
           command,
           ...(requestedTag ? [requestedTag] : []),
@@ -367,7 +381,7 @@ test("scheduled planning resumes prior repairs, defers exhausted cycles and reta
       upstream: f.nightlySha,
       runId: 17,
       attempt: 1,
-      finishedAt: new Date().toISOString(),
+      finishedAt: new Date(planningNow).toISOString(),
       agentOutput: JSON.stringify({ decision: "blocked", summary: "stale patch", edits: [] }),
       failures: [{ name: "propose", log: "Patch anchor must occur once" }],
     };
@@ -384,8 +398,7 @@ test("scheduled planning resumes prior repairs, defers exhausted cycles and reta
     assert.equal(deferred.status, 0, deferred.stderr);
     assert.equal(deferred.output, "ready=false\n");
     assert.match(deferred.stdout, /Sync repair deferred until/);
-    f.state.feedback.finishedAt = new Date(Date.now() - 7 * 60 * 60 * 1000).toISOString();
-    const nextCycle = f.run();
+    const nextCycle = f.run("plan", { now: planningNow + 7 * 60 * 60 * 1000 });
     assert.equal(nextCycle.status, 0, nextCycle.stderr);
     assert.match(nextCycle.output, /ready=true/);
     assert.equal(JSON.parse(readFileSync(join(f.checkout, "review/plan.json"))).attempt, 1);
