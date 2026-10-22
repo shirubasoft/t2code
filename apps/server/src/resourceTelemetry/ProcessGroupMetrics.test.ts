@@ -1,3 +1,4 @@
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import type { ResourceTelemetryProcess } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
@@ -16,15 +17,19 @@ it.effect("does not sample process groups for a configured external metrics coll
     assert.equal(samples, 0);
   }).pipe(
     Effect.provide(
-      Layer.mergeAll(
-        Layer.mock(ServerConfig.ServerConfig)({
-          otlpMetricsUrl: "https://collector.invalid/v1/metrics",
-        }),
-        Layer.mock(ResourceTelemetry.ResourceTelemetry)({
-          refresh: Effect.sync(() => {
-            samples += 1;
-          }).pipe(Effect.andThen(Effect.never)),
-        }),
+      Layer.mock(ResourceTelemetry.ResourceTelemetry)({
+        refresh: Effect.sync(() => {
+          samples += 1;
+        }).pipe(Effect.andThen(Effect.never)),
+      }),
+    ),
+    Effect.updateService(ServerConfig.ServerConfig, (config) => ({
+      ...config,
+      otlpMetricsUrl: "https://collector.invalid/v1/metrics",
+    })),
+    Effect.provide(
+      ServerConfig.layerTest(import.meta.dirname, { prefix: "t2-process-group-metrics-" }).pipe(
+        Layer.provide(NodeServices.layer),
       ),
     ),
     Effect.scoped,
