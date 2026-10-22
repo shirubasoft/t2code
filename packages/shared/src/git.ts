@@ -202,9 +202,9 @@ export function isBareGitConfig(configText: string): boolean {
   for (const rawLine of configText.split(/\r?\n/)) {
     let line = rawLine.trim();
     // Git accepts the first setting on the section header's own line.
-    const header = /^\[\s*([^\]]*?)\s*\](.*)$/.exec(line);
+    const header = /^\[([^\]]*)\](.*)$/.exec(line);
     if (header !== null) {
-      inCore = header[1]!.toLowerCase() === "core";
+      inCore = header[1]!.trim().toLowerCase() === "core";
       line = header[2]!.trim();
     }
     if (!inCore) continue;

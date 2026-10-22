@@ -8,6 +8,7 @@ import {
   buildTemporaryWorktreeBranchName,
   flattenTemporaryWorktreeBranchName,
   isTemporaryWorktreeBranch,
+  isBareGitConfig,
   normalizeGitRemoteUrl,
   parseOriginUrlFromGitConfig,
   resolveAutoFeatureBranchName,
@@ -82,6 +83,25 @@ describe("normalizeGitRemoteUrl", () => {
     expect(normalizeGitRemoteUrl("https://T3Tools.visualstudio.com/Platform/_git/T3Code")).toBe(
       "t3tools.visualstudio.com/platform/_git/t3code",
     );
+  });
+});
+
+describe("isBareGitConfig", () => {
+  it.each([
+    ["[core] bare=true", true],
+    ["[ \tCoRe\t ] bare=on # enabled", true],
+    ["[core]\nbare=yes\nbare=false", false],
+    ["[remote]\nbare=true", false],
+    ["[core.extension]\nbare=true", false],
+    ["[core]\nbare=1\n[remote]\nbare=false", true],
+  ])("reads bare from the core section in %j", (config, expected) => {
+    expect(isBareGitConfig(config)).toBe(expected);
+  });
+
+  it("handles long whitespace runs in valid and unterminated section headers", () => {
+    const whitespace = "\t".repeat(100_000);
+    expect(isBareGitConfig(`[${whitespace}core${whitespace}] bare=true`)).toBe(true);
+    expect(isBareGitConfig(`[${whitespace}x\nbare=true`)).toBe(false);
   });
 });
 

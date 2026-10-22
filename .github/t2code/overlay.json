@@ -424,6 +424,21 @@
       "path": "packages/shared/src/composerTrigger.test.ts",
       "before": "    );\n  });\n});\n",
       "after": "    );\n  });\n});\n\ndescribe(\"isCurrencyAmountQuery\", () => {\n  it.each([\n    [\".99\", true],\n    [\"1,000.50\", true],\n    [\"2e6!?\", true],\n    [\"10k.)\", true],\n    [\"0,._,\", true],\n    [\"1password\", false],\n    [\"2e\", false],\n    [\"2e6.5\", false],\n    [\"10k.m\", false],\n  ])(\"classifies %j as %s\", (query, expected) => {\n    expect(isCurrencyAmountQuery(query)).toBe(expected);\n  });\n\n  it(\"handles long ambiguous separators without changing skill detection\", () => {\n    const separators = \",\".repeat(100_000);\n    expect(isCurrencyAmountQuery(`0${separators}`)).toBe(true);\n    expect(isCurrencyAmountQuery(`0${separators}x`)).toBe(false);\n    expect(isCurrencyAmountQuery(`0${separators}e12!?`)).toBe(true);\n  });\n});\n"
+    },
+    {
+      "path": "packages/shared/src/git.ts",
+      "before": "  for (const rawLine of configText.split(/\\r?\\n/)) {\n    let line = rawLine.trim();\n    // Git accepts the first setting on the section header's own line.\n    const header = /^\\[\\s*([^\\]]*?)\\s*\\](.*)$/.exec(line);\n    if (header !== null) {\n      inCore = header[1]!.toLowerCase() === \"core\";\n      line = header[2]!.trim();\n    }\n    if (!inCore) continue;\n",
+      "after": "  for (const rawLine of configText.split(/\\r?\\n/)) {\n    let line = rawLine.trim();\n    // Git accepts the first setting on the section header's own line.\n    const header = /^\\[([^\\]]*)\\](.*)$/.exec(line);\n    if (header !== null) {\n      inCore = header[1]!.trim().toLowerCase() === \"core\";\n      line = header[2]!.trim();\n    }\n    if (!inCore) continue;\n"
+    },
+    {
+      "path": "packages/shared/src/git.test.ts",
+      "before": "  buildTemporaryWorktreeBranchName,\n  flattenTemporaryWorktreeBranchName,\n  isTemporaryWorktreeBranch,\n  normalizeGitRemoteUrl,\n  parseOriginUrlFromGitConfig,\n  resolveAutoFeatureBranchName,\n",
+      "after": "  buildTemporaryWorktreeBranchName,\n  flattenTemporaryWorktreeBranchName,\n  isTemporaryWorktreeBranch,\n  isBareGitConfig,\n  normalizeGitRemoteUrl,\n  parseOriginUrlFromGitConfig,\n  resolveAutoFeatureBranchName,\n"
+    },
+    {
+      "path": "packages/shared/src/git.test.ts",
+      "before": "    expect(normalizeGitRemoteUrl(\"https://T3Tools.visualstudio.com/Platform/_git/T3Code\")).toBe(\n      \"t3tools.visualstudio.com/platform/_git/t3code\",\n    );\n  });\n});\n\n",
+      "after": "    expect(normalizeGitRemoteUrl(\"https://T3Tools.visualstudio.com/Platform/_git/T3Code\")).toBe(\n      \"t3tools.visualstudio.com/platform/_git/t3code\",\n    );\n  });\n});\n\ndescribe(\"isBareGitConfig\", () => {\n  it.each([\n    [\"[core] bare=true\", true],\n    [\"[ \\tCoRe\\t ] bare=on # enabled\", true],\n    [\"[core]\\nbare=yes\\nbare=false\", false],\n    [\"[remote]\\nbare=true\", false],\n    [\"[core.extension]\\nbare=true\", false],\n    [\"[core]\\nbare=1\\n[remote]\\nbare=false\", true],\n  ])(\"reads bare from the core section in %j\", (config, expected) => {\n    expect(isBareGitConfig(config)).toBe(expected);\n  });\n\n  it(\"handles long whitespace runs in valid and unterminated section headers\", () => {\n    const whitespace = \"\\t\".repeat(100_000);\n    expect(isBareGitConfig(`[${whitespace}core${whitespace}] bare=true`)).toBe(true);\n    expect(isBareGitConfig(`[${whitespace}x\\nbare=true`)).toBe(false);\n  });\n});\n\n"
     }
   ],
   "files": [
