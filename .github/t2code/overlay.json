@@ -374,6 +374,11 @@
       "path": "scripts/release-smoke.ts",
       "before": "  NodeChildProcess.execFileSync(\n    process.execPath,\n    [\"--test\", NodePath.resolve(repoRoot, \".github/scripts/relay-state-output.test.cjs\")],\n    { stdio: \"inherit\" },\n  );",
       "after": "  const releaseWorkflow = NodeFS.readFileSync(\n    NodePath.resolve(repoRoot, \".github/workflows/release.yml\"),\n    \"utf8\",\n  );\n  for (const marker of [\n    \"Read production relay tracing config\",\n    \"T3CODE_RELAY_CLIENT_OTLP_TRACES_\",\n    \"relay-client-tracing-config\",\n    \"relay-client-tracing.env\",\n  ]) {\n    if (releaseWorkflow.includes(marker)) {\n      throw new Error(`Release workflow must not inject external tracing credentials: ${marker}`);\n    }\n  }"
+    },
+    {
+      "path": "knip.jsonc",
+      "before": "        \"knip-schemas.ts\",\n",
+      "after": "        // The fork replaces the upstream workflow that declares this CLI entry.\n        \"resolve-nightly-release.ts\",\n        \"knip-schemas.ts\",\n"
     }
   ],
   "files": [
