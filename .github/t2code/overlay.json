@@ -394,6 +394,11 @@
       "path": "apps/mobile/src/features/settings/environment-maintenance.test.ts",
       "before": "    vi.stubGlobal(\n      \"fetch\",\n      vi.fn(async (url: string) => {\n        if (url === \"https://github.com/pingdotgg/t3code/releases.atom\") return feed(...nightlies);\n        if (url === \"https://api.github.com/repos/pingdotgg/t3code/releases?per_page=100&page=1\") {\n          return Response.json(Array.from({ length: 100 }, () => ({ tag_name: \"v2.0.0\" })));\n        }\n        if (url === \"https://api.github.com/repos/pingdotgg/t3code/releases?per_page=100&page=2\") {\n          return Response.json([\n            { tag_name: \"v1.0.0-preview.20260925.1\", draft: true },\n            { tag_name: \"v1.0.0-preview.20260924.3\" },\n",
       "after": "    vi.stubGlobal(\n      \"fetch\",\n      vi.fn(async (url: string) => {\n        if (url === \"https://github.com/shirubasoft/t2code/releases.atom\")\n          return feed(...nightlies);\n        if (\n          url === \"https://api.github.com/repos/shirubasoft/t2code/releases?per_page=100&page=1\"\n        ) {\n          return Response.json(Array.from({ length: 100 }, () => ({ tag_name: \"v2.0.0\" })));\n        }\n        if (\n          url === \"https://api.github.com/repos/shirubasoft/t2code/releases?per_page=100&page=2\"\n        ) {\n          return Response.json([\n            { tag_name: \"v1.0.0-preview.20260925.1\", draft: true },\n            { tag_name: \"v1.0.0-preview.20260924.3\" },\n"
+    },
+    {
+      "path": "apps/server/src/cli/update.test.ts",
+      "before": "      assert.equal(url.pathname, \"/repos/pingdotgg/t3code/releases\");",
+      "after": "      assert.equal(url.pathname, \"/repos/shirubasoft/t2code/releases\");"
     }
   ],
   "files": [
