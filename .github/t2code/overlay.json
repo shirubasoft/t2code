@@ -399,6 +399,16 @@
       "path": "apps/server/src/cli/update.test.ts",
       "before": "      assert.equal(url.pathname, \"/repos/pingdotgg/t3code/releases\");",
       "after": "      assert.equal(url.pathname, \"/repos/shirubasoft/t2code/releases\");"
+    },
+    {
+      "path": "apps/web/src/lib/runtime.test.ts",
+      "before": "    {\n      surface: \"desktop opt-out\",\n      desktopBridge: { getRelayTelemetryEnabled: () => false },\n      exports: false,\n    },\n    {\n      surface: \"desktop enabled\",\n      desktopBridge: { getRelayTelemetryEnabled: () => true },\n      exports: true,\n    },\n    { surface: \"older desktop bridge\", desktopBridge: {}, exports: true },\n    {\n      surface: \"ordinary browser ignores host opt-out\",\n      desktopBridge: undefined,\n      exports: true,\n    },\n  ])(\"applies $surface before the first relay span\", async ({ desktopBridge, exports }) => {\n    vi.resetModules();\n    vi.stubEnv(\"T3CODE_TELEMETRY_ENABLED\", \"false\");\n    vi.stubEnv(\"T3CODE_OTEL_SDK_DISABLED\", \"true\");\n",
+      "after": "    {\n      surface: \"desktop opt-out\",\n      desktopBridge: { getRelayTelemetryEnabled: () => false },\n    },\n    {\n      surface: \"desktop enabled\",\n      desktopBridge: { getRelayTelemetryEnabled: () => true },\n    },\n    { surface: \"older desktop bridge\", desktopBridge: {} },\n    {\n      surface: \"ordinary browser ignores host opt-out\",\n      desktopBridge: undefined,\n    },\n  ])(\"keeps $surface relay spans local from startup\", async ({ desktopBridge }) => {\n    vi.resetModules();\n    vi.stubEnv(\"T3CODE_TELEMETRY_ENABLED\", \"false\");\n    vi.stubEnv(\"T3CODE_OTEL_SDK_DISABLED\", \"true\");\n"
+    },
+    {
+      "path": "apps/web/src/lib/runtime.test.ts",
+      "before": "      await freshRuntime.dispose();\n    }\n\n    if (exports) {\n      expect(fetchFn).toHaveBeenCalledOnce();\n      expect(String(fetchFn.mock.calls[0]?.[0])).toBe(\"https://telemetry.example.test/v1/traces\");\n      const payload = new TextDecoder().decode(fetchFn.mock.calls[0]?.[1]?.body as Uint8Array);\n      expect(payload).toContain('\"name\":\"relay.first-operation\"');\n    } else {\n      expect(fetchFn).not.toHaveBeenCalled();\n    }\n  });\n});\n",
+      "after": "      await freshRuntime.dispose();\n    }\n\n    expect(fetchFn).not.toHaveBeenCalled();\n  });\n});\n"
     }
   ],
   "files": [
