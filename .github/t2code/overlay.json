@@ -379,6 +379,21 @@
       "path": "knip.jsonc",
       "before": "        \"knip-schemas.ts\",\n",
       "after": "        // The fork replaces the upstream workflow that declares this CLI entry.\n        \"resolve-nightly-release.ts\",\n        \"knip-schemas.ts\",\n"
+    },
+    {
+      "path": "apps/mobile/src/features/settings/environment-maintenance.test.ts",
+      "before": "  const signal = new AbortController().signal;\n  const feed = (...tags: ReadonlyArray<string>) =>\n    new Response(\n      `<feed><id>tag:github.com,2008:https://github.com/pingdotgg/t3code/releases</id>${tags\n        .map((tag) => `<entry><id>tag:github.com,2008:Repository/1/${tag}</id></entry>`)\n        .join(\"\")}</feed>`,\n    );\n",
+      "after": "  const signal = new AbortController().signal;\n  const feed = (...tags: ReadonlyArray<string>) =>\n    new Response(\n      `<feed><id>tag:github.com,2008:https://github.com/shirubasoft/t2code/releases</id>${tags\n        .map((tag) => `<entry><id>tag:github.com,2008:Repository/1/${tag}</id></entry>`)\n        .join(\"\")}</feed>`,\n    );\n"
+    },
+    {
+      "path": "apps/mobile/src/features/settings/environment-maintenance.test.ts",
+      "before": "    vi.stubGlobal(\n      \"fetch\",\n      vi.fn(async (url: string) =>\n        url === \"https://github.com/pingdotgg/t3code/releases.atom\"\n          ? feed(\n              \"desktop-preview\",\n              \"v1.0.0-preview.20260924.3\",\n",
+      "after": "    vi.stubGlobal(\n      \"fetch\",\n      vi.fn(async (url: string) =>\n        url === \"https://github.com/shirubasoft/t2code/releases.atom\"\n          ? feed(\n              \"desktop-preview\",\n              \"v1.0.0-preview.20260924.3\",\n"
+    },
+    {
+      "path": "apps/mobile/src/features/settings/environment-maintenance.test.ts",
+      "before": "    vi.stubGlobal(\n      \"fetch\",\n      vi.fn(async (url: string) => {\n        if (url === \"https://github.com/pingdotgg/t3code/releases.atom\") return feed(...nightlies);\n        if (url === \"https://api.github.com/repos/pingdotgg/t3code/releases?per_page=100&page=1\") {\n          return Response.json(Array.from({ length: 100 }, () => ({ tag_name: \"v2.0.0\" })));\n        }\n        if (url === \"https://api.github.com/repos/pingdotgg/t3code/releases?per_page=100&page=2\") {\n          return Response.json([\n            { tag_name: \"v1.0.0-preview.20260925.1\", draft: true },\n            { tag_name: \"v1.0.0-preview.20260924.3\" },\n",
+      "after": "    vi.stubGlobal(\n      \"fetch\",\n      vi.fn(async (url: string) => {\n        if (url === \"https://github.com/shirubasoft/t2code/releases.atom\") return feed(...nightlies);\n        if (url === \"https://api.github.com/repos/shirubasoft/t2code/releases?per_page=100&page=1\") {\n          return Response.json(Array.from({ length: 100 }, () => ({ tag_name: \"v2.0.0\" })));\n        }\n        if (url === \"https://api.github.com/repos/shirubasoft/t2code/releases?per_page=100&page=2\") {\n          return Response.json([\n            { tag_name: \"v1.0.0-preview.20260925.1\", draft: true },\n            { tag_name: \"v1.0.0-preview.20260924.3\" },\n"
     }
   ],
   "files": [
