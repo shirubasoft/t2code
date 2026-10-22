@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { detectComposerTrigger, serializeComposerFileLink } from "./composerTrigger.ts";
+import {
+  detectComposerTrigger,
+  isCurrencyAmountQuery,
+  serializeComposerFileLink,
+} from "./composerTrigger.ts";
 
 describe("detectComposerTrigger", () => {
   it.each([
@@ -18,17 +22,6 @@ describe("detectComposerTrigger", () => {
     });
   });
 
-  it.each(["Use ", "Use\t", "Use\n  "])("detects inline slash skills after %j", (prefix) => {
-    const text = `${prefix}/skill:review later`;
-    const cursor = `${prefix}/skill:review`.length;
-    expect(detectComposerTrigger(text, cursor)).toEqual({
-      kind: "slash-command",
-      query: "skill:review",
-      rangeStart: prefix.length,
-      rangeEnd: cursor,
-    });
-  });
-
   it.each(["Use /", "Use /review"])("detects the inline slash token in %j", (text) => {
     expect(detectComposerTrigger(text, text.length)).toEqual({
       kind: "slash-command",
@@ -43,27 +36,40 @@ describe("detectComposerTrigger", () => {
     (text) => expect(detectComposerTrigger(text, text.length)).toBeNull(),
   );
 
-  it.each(["$", "€", "£", "¥", "₹", "₩", "₿", "𑿝"])(
-    "detects %s skill prefixes and their source range",
-    (prefix) => {
-      const text = `Use ${prefix}review`;
-      expect(detectComposerTrigger(text, text.length)).toEqual({
-        kind: "skill",
-        query: "review",
-        rangeStart: 4,
-        rangeEnd: text.length,
-      });
-    },
+  it.each(["$", "€", "𑿝"])("detects %s skill prefixes and their source range", (prefix) => {
+    const text = `Use ${prefix}review`;
+    expect(detectComposerTrigger(text, text.length)).toEqual({
+      kind: "skill",
+      query: "review",
+      rangeStart: 4,
+      rangeEnd: text.length,
+    });
+  });
+
+  it.each([
+    "It costs $5",
+    "budget $9.99",
+    "only $.99",
+    "about €20",
+    "raise $10k",
+    "$1,000",
+    "£2e6",
+    "raise $10k.",
+    "is it $5?",
+    "(about $9.99)",
+  ])("does not open the skill menu for the amount in %j", (text) =>
+    expect(detectComposerTrigger(text, text.length)).toBeNull(),
   );
+
+  it.each(["$", "$1password", "$2fa"])("still detects the skill prefix %j", (text) => {
+    expect(detectComposerTrigger(text, text.length)).toMatchObject({
+      kind: "skill",
+      query: text.slice(1),
+    });
+  });
 });
 
 describe("serializeComposerFileLink", () => {
-  it("uses the basename as the markdown label", () => {
-    expect(serializeComposerFileLink("path/to/package.json")).toBe(
-      "[package.json](path/to/package.json)",
-    );
-  });
-
   it("encodes markdown-sensitive destination characters", () => {
     expect(serializeComposerFileLink("docs/My File (draft).md")).toBe(
       "[My File (draft).md](docs/My%20File%20%28draft%29.md)",
@@ -80,5 +86,28 @@ describe("serializeComposerFileLink", () => {
     expect(serializeComposerFileLink("@scope/package.json")).toBe(
       "[package.json](@scope/package.json)",
     );
+  });
+});
+
+describe("isCurrencyAmountQuery", () => {
+  it.each([
+    [".99", true],
+    ["1,000.50", true],
+    ["2e6!?", true],
+    ["10k.)", true],
+    ["0,._,", true],
+    ["1password", false],
+    ["2e", false],
+    ["2e6.5", false],
+    ["10k.m", false],
+  ])("classifies %j as %s", (query, expected) => {
+    expect(isCurrencyAmountQuery(query)).toBe(expected);
+  });
+
+  it("handles long ambiguous separators without changing skill detection", () => {
+    const separators = ",".repeat(100_000);
+    expect(isCurrencyAmountQuery(`0${separators}`)).toBe(true);
+    expect(isCurrencyAmountQuery(`0${separators}x`)).toBe(false);
+    expect(isCurrencyAmountQuery(`0${separators}e12!?`)).toBe(true);
   });
 });

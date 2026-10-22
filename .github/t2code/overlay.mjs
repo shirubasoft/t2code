@@ -19,7 +19,7 @@ export function readJson(path) {
   return JSON.parse(readFileSync(path, "utf8"));
 }
 function safePath(path) {
-  if (path === ".gitmodules") return path;
+  if (path === ".gitmodules" || path === "knip.jsonc") return path;
   if (
     !/^(apps|packages|scripts|infra)\/[A-Za-z0-9_./-]+$/.test(path) ||
     path.split("/").includes("..")

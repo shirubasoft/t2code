@@ -62,6 +62,19 @@ export function isPathWord(
   return text.slice(wordStart + 1, wordEnd).includes("/");
 }
 
+/**
+ * `$5`, `€9.99` and `$10k` are money, not skills. Matches the amounts the inline skill
+ * token regexes already refuse to render as skills, plus the punctuation prose puts after
+ * one (`$10k.`, `($5)`).
+ */
+export function isCurrencyAmountQuery(query: string): boolean {
+  // Consume the number separately so separators cannot backtrack into the prose suffix.
+  const amount = /^\.?[0-9][0-9,._]*/.exec(query);
+  return (
+    amount !== null && /^(?:[kKmMbBtT]|[eE][0-9]+)?[.,;:!?)]*$/.test(query.slice(amount[0].length))
+  );
+}
+
 export function detectComposerTrigger(
   text: string,
   cursorInput: number,
@@ -132,6 +145,7 @@ export function detectComposerTrigger(
     };
   const skillPrefix = /^\p{Sc}/u.exec(token);
   if (skillPrefix) {
+    if (isCurrencyAmountQuery(token.slice(skillPrefix[0].length))) return null;
     return {
       kind: "skill",
       query: token.slice(skillPrefix[0].length),

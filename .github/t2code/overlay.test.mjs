@@ -122,6 +122,7 @@ test("runtime packaging paths, traversal and fork-owned privacy files remain pro
     "apps/web/src/components/desktopUpdate.logic.ts",
     "packages/shared/src/cliRelease.ts",
     "scripts/build-desktop-artifact.ts",
+    "knip.jsonc",
   ]) {
     const replacements = accepted.replacements.map((rule) =>
       rule.path === path ? { ...rule, after: "redirectRelease()" } : rule,
