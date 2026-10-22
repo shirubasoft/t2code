@@ -68,7 +68,11 @@ export function isPathWord(
  * one (`$10k.`, `($5)`).
  */
 export function isCurrencyAmountQuery(query: string): boolean {
-  return /^\.?[0-9][0-9,._]*(?:[kKmMbBtT]|[eE][0-9]+)?[.,;:!?)]*$/.test(query);
+  // Consume the number separately so separators cannot backtrack into the prose suffix.
+  const amount = /^\.?[0-9][0-9,._]*/.exec(query);
+  return (
+    amount !== null && /^(?:[kKmMbBtT]|[eE][0-9]+)?[.,;:!?)]*$/.test(query.slice(amount[0].length))
+  );
 }
 
 export function detectComposerTrigger(

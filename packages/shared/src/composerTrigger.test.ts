@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { detectComposerTrigger, serializeComposerFileLink } from "./composerTrigger.ts";
+import {
+  detectComposerTrigger,
+  isCurrencyAmountQuery,
+  serializeComposerFileLink,
+} from "./composerTrigger.ts";
 
 describe("detectComposerTrigger", () => {
   it.each([
@@ -82,5 +86,28 @@ describe("serializeComposerFileLink", () => {
     expect(serializeComposerFileLink("@scope/package.json")).toBe(
       "[package.json](@scope/package.json)",
     );
+  });
+});
+
+describe("isCurrencyAmountQuery", () => {
+  it.each([
+    [".99", true],
+    ["1,000.50", true],
+    ["2e6!?", true],
+    ["10k.)", true],
+    ["0,._,", true],
+    ["1password", false],
+    ["2e", false],
+    ["2e6.5", false],
+    ["10k.m", false],
+  ])("classifies %j as %s", (query, expected) => {
+    expect(isCurrencyAmountQuery(query)).toBe(expected);
+  });
+
+  it("handles long ambiguous separators without changing skill detection", () => {
+    const separators = ",".repeat(100_000);
+    expect(isCurrencyAmountQuery(`0${separators}`)).toBe(true);
+    expect(isCurrencyAmountQuery(`0${separators}x`)).toBe(false);
+    expect(isCurrencyAmountQuery(`0${separators}e12!?`)).toBe(true);
   });
 });

@@ -409,6 +409,21 @@
       "path": "apps/web/src/lib/runtime.test.ts",
       "before": "      await freshRuntime.dispose();\n    }\n\n    if (exports) {\n      expect(fetchFn).toHaveBeenCalledOnce();\n      expect(String(fetchFn.mock.calls[0]?.[0])).toBe(\"https://telemetry.example.test/v1/traces\");\n      const payload = new TextDecoder().decode(fetchFn.mock.calls[0]?.[1]?.body as Uint8Array);\n      expect(payload).toContain('\"name\":\"relay.first-operation\"');\n    } else {\n      expect(fetchFn).not.toHaveBeenCalled();\n    }\n  });\n});\n",
       "after": "      await freshRuntime.dispose();\n    }\n\n    expect(fetchFn).not.toHaveBeenCalled();\n  });\n});\n"
+    },
+    {
+      "path": "packages/shared/src/composerTrigger.ts",
+      "before": " * one (`$10k.`, `($5)`).\n */\nexport function isCurrencyAmountQuery(query: string): boolean {\n  return /^\\.?[0-9][0-9,._]*(?:[kKmMbBtT]|[eE][0-9]+)?[.,;:!?)]*$/.test(query);\n}\n\nexport function detectComposerTrigger(\n",
+      "after": " * one (`$10k.`, `($5)`).\n */\nexport function isCurrencyAmountQuery(query: string): boolean {\n  // Consume the number separately so separators cannot backtrack into the prose suffix.\n  const amount = /^\\.?[0-9][0-9,._]*/.exec(query);\n  return (\n    amount !== null && /^(?:[kKmMbBtT]|[eE][0-9]+)?[.,;:!?)]*$/.test(query.slice(amount[0].length))\n  );\n}\n\nexport function detectComposerTrigger(\n"
+    },
+    {
+      "path": "packages/shared/src/composerTrigger.test.ts",
+      "before": "import { describe, expect, it } from \"vite-plus/test\";\n\nimport { detectComposerTrigger, serializeComposerFileLink } from \"./composerTrigger.ts\";\n\ndescribe(\"detectComposerTrigger\", () => {\n  it.each([\n",
+      "after": "import { describe, expect, it } from \"vite-plus/test\";\n\nimport {\n  detectComposerTrigger,\n  isCurrencyAmountQuery,\n  serializeComposerFileLink,\n} from \"./composerTrigger.ts\";\n\ndescribe(\"detectComposerTrigger\", () => {\n  it.each([\n"
+    },
+    {
+      "path": "packages/shared/src/composerTrigger.test.ts",
+      "before": "    );\n  });\n});\n",
+      "after": "    );\n  });\n});\n\ndescribe(\"isCurrencyAmountQuery\", () => {\n  it.each([\n    [\".99\", true],\n    [\"1,000.50\", true],\n    [\"2e6!?\", true],\n    [\"10k.)\", true],\n    [\"0,._,\", true],\n    [\"1password\", false],\n    [\"2e\", false],\n    [\"2e6.5\", false],\n    [\"10k.m\", false],\n  ])(\"classifies %j as %s\", (query, expected) => {\n    expect(isCurrencyAmountQuery(query)).toBe(expected);\n  });\n\n  it(\"handles long ambiguous separators without changing skill detection\", () => {\n    const separators = \",\".repeat(100_000);\n    expect(isCurrencyAmountQuery(`0${separators}`)).toBe(true);\n    expect(isCurrencyAmountQuery(`0${separators}x`)).toBe(false);\n    expect(isCurrencyAmountQuery(`0${separators}e12!?`)).toBe(true);\n  });\n});\n"
     }
   ],
   "files": [
