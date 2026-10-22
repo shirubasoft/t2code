@@ -11,6 +11,11 @@
       "after": "        const delegate =\n          !allowAnalyticsExport() || endpoints.traces === undefined\n"
     },
     {
+      "path": "apps/desktop/src/app/DesktopObservability.ts",
+      "before": "    const layerLogger = Logger.layer(\n      endpoints.logs === undefined\n",
+      "after": "    const layerLogger = Logger.layer(\n      !allowAnalyticsExport() || endpoints.logs === undefined\n"
+    },
+    {
       "path": "apps/desktop/src/electron/ElectronUpdater.ts",
       "before": "import * as Layer from \"effect/Layer\";\nimport * as Schema from \"effect/Schema\";\nimport * as Scope from \"effect/Scope\";\n\nimport { autoUpdater } from \"electron-updater\";\n\ntype AutoUpdater = typeof autoUpdater;\n\nexport type ElectronUpdaterFeedUrl = Parameters<AutoUpdater[\"setFeedURL\"]>[0];\n\n",
       "after": "import * as Layer from \"effect/Layer\";\nimport * as Schema from \"effect/Schema\";\nimport * as Scope from \"effect/Scope\";\n\nimport { autoUpdater } from \"electron-updater\";\nimport { disableUpdateTracking } from \"./t2UpdaterPrivacy.ts\";\n\ntype AutoUpdater = typeof autoUpdater;\n\nexport type ElectronUpdaterFeedUrl = Parameters<AutoUpdater[\"setFeedURL\"]>[0];\n\n"
@@ -27,18 +32,38 @@
     },
     {
       "path": "apps/mobile/src/features/observability/tracing.test.ts",
-      "before": "      extra: {},\n    },\n  },\n}));\n\nit.effect(\"exports spans through the scoped mobile OTLP layer\", () => {\n  const fetchFn = vi.fn<typeof fetch>(async () => new Response(null, { status: 202 }));\n  const layerTracing = Tracing.layerFromConfig(\n    {\n      tracesUrl: \"https://api.axiom.test/v1/traces\",\n      tracesDataset: \"mobile-traces\",\n",
-      "after": "      extra: {},\n    },\n  },\n}));\n\nit.effect(\"does not export spans through the configured mobile OTLP layer\", () => {\n  const fetchFn = vi.fn<typeof fetch>(async () => new Response(null, { status: 202 }));\n  const layerTracing = Tracing.layerFromConfig(\n    {\n      tracesUrl: \"https://api.axiom.test/v1/traces\",\n      tracesDataset: \"mobile-traces\",\n"
+      "before": "  },\n}));\n\nit.effect(\"does not let OTLP serialization failures alter application effects\", () => {\n  const fetchFn = vi.fn<typeof fetch>(async () => new Response(null, { status: 202 }));\n  const layerTracing = Tracing.layerFromConfig(\n    {\n",
+      "after": "  },\n}));\n\nit.effect(\"preserves application failures without exporting them\", () => {\n  const fetchFn = vi.fn<typeof fetch>(async () => new Response(null, { status: 202 }));\n  const layerTracing = Tracing.layerFromConfig(\n    {\n"
     },
     {
       "path": "apps/mobile/src/features/observability/tracing.test.ts",
-      "before": "    expect(fetchFn).not.toHaveBeenCalled();\n  }).pipe(\n    Effect.scoped,\n    Effect.andThen(\n      Effect.sync(() => {\n        expect(fetchFn).toHaveBeenCalledOnce();\n        const [url, init] = fetchFn.mock.calls[0]!;\n        expect(String(url)).toBe(\"https://api.axiom.test/v1/traces\");\n        expect(new Headers(init?.headers).get(\"authorization\")).toBe(\"Bearer public-ingest-token\");\n        expect(new Headers(init?.headers).get(\"x-axiom-dataset\")).toBe(\"mobile-traces\");\n        expect(new TextDecoder().decode(init?.body as Uint8Array)).toContain(\"mobile.test.span\");\n      }),\n    ),\n  );\n});\n\nit.effect(\"does not let OTLP serialization failures alter application effects\", () => {\n  const fetchFn = vi.fn<typeof fetch>(async () => new Response(null, { status: 202 }));\n  const layerTracing = Tracing.layerFromConfig(\n    {\n      tracesUrl: \"https://api.axiom.test/v1/traces\",\n      tracesDataset: \"mobile-traces\",\n",
-      "after": "    expect(fetchFn).not.toHaveBeenCalled();\n  }).pipe(\n    Effect.scoped,\n    Effect.andThen(\n      Effect.sync(() => {\n        expect(fetchFn).not.toHaveBeenCalled();\n      }),\n    ),\n  );\n});\n\nit.effect(\"preserves application failures without exporting them\", () => {\n  const fetchFn = vi.fn<typeof fetch>(async () => new Response(null, { status: 202 }));\n  const layerTracing = Tracing.layerFromConfig(\n    {\n      tracesUrl: \"https://api.axiom.test/v1/traces\",\n      tracesDataset: \"mobile-traces\",\n"
+      "before": "    Effect.scoped,\n    Effect.andThen(\n      Effect.sync(() => {\n        expect(fetchFn).toHaveBeenCalledOnce();\n        expect(new TextDecoder().decode(fetchFn.mock.calls[0]?.[1]?.body as Uint8Array)).toContain(\n          \"mobile.test.failed-span\",\n        );\n      }),\n    ),\n  );\n",
+      "after": "    Effect.scoped,\n    Effect.andThen(\n      Effect.sync(() => {\n        expect(fetchFn).not.toHaveBeenCalled();\n      }),\n    ),\n  );\n"
     },
     {
-      "path": "apps/mobile/src/features/observability/tracing.test.ts",
-      "before": "\n  return Layer.build(layerTracedApplication).pipe(\n    Effect.scoped,\n    Effect.andThen(\n      Effect.sync(() => {\n        expect(fetchFn).toHaveBeenCalledOnce();\n        expect(new TextDecoder().decode(fetchFn.mock.calls[0]?.[1]?.body as Uint8Array)).toContain(\n          \"mobile.test.failed-span\",\n        );\n      }),\n    ),\n  );\n});\n",
-      "after": "\n  return Layer.build(layerTracedApplication).pipe(\n    Effect.scoped,\n    Effect.andThen(\n      Effect.sync(() => {\n        expect(fetchFn).not.toHaveBeenCalled();\n      }),\n    ),\n  );\n});\n"
+      "path": "apps/mobile/src/lib/markdownDocument.ts",
+      "before": "      if (!src) return \"\";\n      const alt = (attribute(tag, \"alt\") ?? \"\").replace(/[\\\\[\\]&]/g, \"\\\\$&\");\n      const href = src\n        .replace(/&/g, \"\\\\&\")\n        .replace(/</g, \"%3C\")\n        .replace(/>/g, \"%3E\")\n        .replace(/\\n/g, \"\");\n",
+      "after": "      if (!src) return \"\";\n      const alt = (attribute(tag, \"alt\") ?? \"\").replace(/[\\\\[\\]&]/g, \"\\\\$&\");\n      const href = src\n        .replace(/[\\\\&]/g, \"\\\\$&\")\n        .replace(/</g, \"%3C\")\n        .replace(/>/g, \"%3E\")\n        .replace(/\\n/g, \"\");\n"
+    },
+    {
+      "path": "apps/mobile/src/lib/markdownHtml.test.ts",
+      "before": "import { markdownImageSources } from \"./markdownImageSources\";\n\ndescribe(\"HTML in native Markdown\", () => {\n  it(\"preserves screenshot URLs and captions from GitHub HTML image embeds\", () => {\n    expect(\n      markdownHtmlContent(\n",
+      "after": "import { markdownImageSources } from \"./markdownImageSources\";\n\ndescribe(\"HTML in native Markdown\", () => {\n  it(\"preserves backslashes before entity-shaped query values in image URLs\", () => {\n    const markdown = '<img src=\"https://example.com/path\\\\&amp;lt;&amp;x=1\" alt=\"Example\">';\n    expect(markdownImageSources(markdown)).toEqual([\"https://example.com/path\\\\&lt;&x=1\"]);\n  });\n  it(\"preserves screenshot URLs and captions from GitHub HTML image embeds\", () => {\n    expect(\n      markdownHtmlContent(\n"
+    },
+    {
+      "path": "apps/server/src/http.test.ts",
+      "before": "import * as Path from \"effect/Path\";\nimport * as PlatformError from \"effect/PlatformError\";\nimport * as Queue from \"effect/Queue\";\nimport { HttpClient, HttpClientRequest, HttpRouter, HttpServerResponse } from \"effect/http\";\nimport { openMediaFile } from \"./assets/MediaFile.ts\";\n\nimport {\n",
+      "after": "import * as Path from \"effect/Path\";\nimport * as PlatformError from \"effect/PlatformError\";\nimport * as Queue from \"effect/Queue\";\nimport {\n  FetchHttpClient,\n  HttpClient,\n  HttpClientRequest,\n  HttpRouter,\n  HttpServerResponse,\n} from \"effect/http\";\nimport { openMediaFile } from \"./assets/MediaFile.ts\";\n\nimport {\n"
+    },
+    {
+      "path": "apps/server/src/http.test.ts",
+      "before": "  injectMcpAppThemeBootstrap,\n  MCP_APP_MAX_HTML_BYTES,\n} from \"@t3tools/shared/mcpApp\";\nimport { ORCHESTRATION_PROTOCOL_HEADER } from \"@t3tools/contracts\";\n\nimport * as ServerConfig from \"./config.ts\";\n\n",
+      "after": "  injectMcpAppThemeBootstrap,\n  MCP_APP_MAX_HTML_BYTES,\n} from \"@t3tools/shared/mcpApp\";\nimport {\n  AuthOrchestrationOperateScope,\n  AuthSessionId,\n  ORCHESTRATION_PROTOCOL_HEADER,\n} from \"@t3tools/contracts\";\nimport type { TraceRecord } from \"@t3tools/shared/observability\";\nimport { OtlpSerialization } from \"effect/observability\";\nimport * as EnvironmentAuth from \"./auth/EnvironmentAuth.ts\";\nimport * as BrowserTraceCollector from \"./observability/BrowserTraceCollector.ts\";\n\nimport * as ServerConfig from \"./config.ts\";\n\n"
+    },
+    {
+      "path": "apps/server/src/http.test.ts",
+      "before": "    );\n  });\n});\n",
+      "after": "    );\n  });\n});\n\nit.effect(\"keeps browser traces local with JSON and protobuf collectors configured\", () =>\n  Effect.gen(function* () {\n    const config = yield* ServerConfig.ServerConfig;\n    for (const serializationLayer of [\n      OtlpSerialization.layerJson,\n      OtlpSerialization.layerProtobuf,\n    ]) {\n      const records: Array<TraceRecord> = [];\n      const fetchFn = vi.fn<typeof fetch>(async () => new Response(null, { status: 204 }));\n      const appLayer = ServerHttp.layerOtlpTracesProxyRoute.pipe(\n        Layer.provideMerge(\n          ServerConfig.layer({ ...config, otlpTracesUrl: \"https://collector.invalid/v1/traces\" }),\n        ),\n        Layer.provideMerge(serializationLayer),\n        Layer.provideMerge(\n          Layer.mock(EnvironmentAuth.EnvironmentAuth, {\n            authenticateHttpRequest: () =>\n              Effect.succeed({\n                sessionId: AuthSessionId.make(\"privacy-test\"),\n                subject: \"privacy-test\",\n                method: \"bearer-access-token\",\n                scopes: [AuthOrchestrationOperateScope],\n              }),\n          }),\n        ),\n        Layer.provideMerge(\n          Layer.succeed(BrowserTraceCollector.BrowserTraceCollector, {\n            record: (incoming) =>\n              Effect.sync(() => {\n                records.push(...incoming);\n              }),\n          }),\n        ),\n        Layer.provideMerge(\n          FetchHttpClient.layer.pipe(\n            Layer.provideMerge(Layer.succeed(FetchHttpClient.Fetch, fetchFn)),\n          ),\n        ),\n      );\n      const { handler } = yield* Effect.acquireRelease(\n        Effect.sync(() => HttpRouter.toWebHandler(appLayer, { disableLogger: true })),\n        ({ dispose }) => Effect.promise(dispose),\n      );\n      const payload = {\n        resourceSpans: [\n          {\n            resource: {\n              attributes: [{ key: \"service.name\", value: { stringValue: \"t3code-web\" } }],\n            },\n            scopeSpans: [\n              {\n                scope: { name: \"privacy-test\" },\n                spans: [\n                  {\n                    traceId: \"11111111111111111111111111111111\",\n                    spanId: \"2222222222222222\",\n                    name: \"enterprise-source\",\n                    kind: 1,\n                    startTimeUnixNano: \"1000000\",\n                    endTimeUnixNano: \"2000000\",\n                    attributes: [{ key: \"code\", value: { stringValue: \"company secret\" } }],\n                    events: [],\n                    links: [],\n                    status: { code: 1 },\n                    flags: 1,\n                  },\n                ],\n              },\n            ],\n          },\n        ],\n      };\n      const response = yield* Effect.promise(() =>\n        handler(\n          new Request(\"http://t3.test/api/observability/v1/traces\", {\n            method: \"POST\",\n            headers: { \"content-type\": \"application/json\" },\n            body: JSON.stringify(payload),\n          }),\n        ),\n      );\n      expect(response.status).toBe(204);\n      expect(fetchFn).not.toHaveBeenCalled();\n      expect(records).toHaveLength(1);\n      expect(records[0]?.name).toBe(\"enterprise-source\");\n      expect(records[0]?.attributes).toEqual({ code: \"company secret\" });\n    }\n  }).pipe(\n    Effect.provide(\n      ServerConfig.layerTest(process.cwd(), { prefix: \"t2-browser-traces-\" }).pipe(\n        Layer.provideMerge(NodeServices.layer),\n      ),\n    ),\n    Effect.scoped,\n  ),\n);\n"
     },
     {
       "path": "apps/server/src/http.ts",
@@ -66,6 +91,76 @@
       "after": "      !allowAnalyticsExport() || config.otlpMetricsUrl === undefined"
     },
     {
+      "path": "apps/server/src/resourceTelemetry/ProcessGroupMetrics.test.ts",
+      "before": "import { assert, describe, it } from \"@effect/vitest\";\nimport type { ResourceTelemetryProcess } from \"@t3tools/contracts\";\n\nimport { groupProcesses } from \"./ProcessGroupMetrics.ts\";\n\nconst process = (\n  pid: number,\n",
+      "after": "import { assert, describe, it } from \"@effect/vitest\";\nimport type { ResourceTelemetryProcess } from \"@t3tools/contracts\";\nimport * as Effect from \"effect/Effect\";\nimport * as Layer from \"effect/Layer\";\nimport * as TestClock from \"effect/testing/TestClock\";\n\nimport * as ServerConfig from \"../config.ts\";\nimport * as ResourceTelemetry from \"./ResourceTelemetry.ts\";\nimport { groupProcesses, layer } from \"./ProcessGroupMetrics.ts\";\n\nit.effect(\"does not sample process groups for a configured external metrics collector\", () => {\n  let samples = 0;\n  return Effect.gen(function* () {\n    yield* Layer.build(layer);\n    yield* TestClock.adjust(\"2 minutes\");\n    assert.equal(samples, 0);\n  }).pipe(\n    Effect.provide(\n      Layer.mergeAll(\n        Layer.mock(ServerConfig.ServerConfig)({\n          otlpMetricsUrl: \"https://collector.invalid/v1/metrics\",\n        }),\n        Layer.mock(ResourceTelemetry.ResourceTelemetry)({\n          refresh: Effect.sync(() => {\n            samples += 1;\n          }).pipe(Effect.andThen(Effect.never)),\n        }),\n      ),\n    ),\n    Effect.scoped,\n  );\n});\n\nconst process = (\n  pid: number,\n"
+    },
+    {
+      "path": "apps/server/src/resourceTelemetry/ProcessGroupMetrics.ts",
+      "before": "import type { ResourceTelemetryProcess } from \"@t3tools/contracts\";\nimport * as Effect from \"effect/Effect\";\nimport * as Layer from \"effect/Layer\";\n",
+      "after": "import { allowAnalyticsExport } from \"@t3tools/shared/t2Analytics\";\nimport type { ResourceTelemetryProcess } from \"@t3tools/contracts\";\nimport * as Effect from \"effect/Effect\";\nimport * as Layer from \"effect/Layer\";\n"
+    },
+    {
+      "path": "apps/server/src/resourceTelemetry/ProcessGroupMetrics.ts",
+      "before": "export const layer = Layer.effectDiscard(\n  Effect.gen(function* () {\n    const config = yield* ServerConfig.ServerConfig;\n    if (config.otlpMetricsUrl === undefined) return;\n    const telemetry = yield* ResourceTelemetry.ResourceTelemetry;\n    // A group that empties reads zero rather than holding its last value.\n    const seen = new Set<string>();\n",
+      "after": "export const layer = Layer.effectDiscard(\n  Effect.gen(function* () {\n    const config = yield* ServerConfig.ServerConfig;\n    if (!allowAnalyticsExport() || config.otlpMetricsUrl === undefined) return;\n    const telemetry = yield* ResourceTelemetry.ResourceTelemetry;\n    // A group that empties reads zero rather than holding its last value.\n    const seen = new Set<string>();\n"
+    },
+    {
+      "path": "apps/server/src/serverLogger.test.ts",
+      "before": "      Effect.andThen(logBrowserAutoOpenUnavailable),\n    );\n\n    it.effect(\"prints the full URL but keeps its token out of exported log records\", () =>\n      Effect.gen(function* () {\n        const { requests } = yield* logInSpanThrough(\n          { otlpLogsUrl: \"https://collector.example.com/v1/logs\" },\n          announce,\n        );\n\n        const body = requests.map((request) => request.body).join(\"\\n\");\n        assert.include(body, \"Authentication required\");\n        assert.notInclude(body, pairingToken);\n        const printed = (yield* TestConsole.logLines).map((line) =>\n          Array.isArray(line) ? line.join(\" \") : String(line),\n        );\n",
+      "after": "      Effect.andThen(logBrowserAutoOpenUnavailable),\n    );\n\n    it.effect(\"prints the full pairing URL locally without exporting log records\", () =>\n      Effect.gen(function* () {\n        const { requests } = yield* logInSpanThrough(\n          { otlpLogsUrl: \"https://collector.example.com/v1/logs\" },\n          announce,\n        );\n\n        assert.lengthOf(requests, 0);\n        const printed = (yield* TestConsole.logLines).map((line) =>\n          Array.isArray(line) ? line.join(\" \") : String(line),\n        );\n"
+    },
+    {
+      "path": "apps/server/src/serverLogger.ts",
+      "before": "import * as SharedObservability from \"@t3tools/shared/observability\";",
+      "after": "import * as SharedObservability from \"@t3tools/shared/observability\";\nimport { allowAnalyticsExport } from \"@t3tools/shared/t2Analytics\";"
+    },
+    {
+      "path": "apps/server/src/serverLogger.ts",
+      "before": "  const otlpLogger =\n    config.otlpLogsUrl === undefined\n",
+      "after": "  const otlpLogger =\n    !allowAnalyticsExport() || config.otlpLogsUrl === undefined\n"
+    },
+    {
+      "path": "apps/server/src/serverRuntimeStartup.ts",
+      "before": "import {\n  CommandId,\n  DEFAULT_MODEL,\n",
+      "after": "import { allowAnalyticsExport } from \"@t3tools/shared/t2Analytics\";\nimport {\n  CommandId,\n  DEFAULT_MODEL,\n"
+    },
+    {
+      "path": "apps/server/src/serverRuntimeStartup.ts",
+      "before": "});\n\nconst recordStartupHeartbeat = Effect.gen(function* () {\n  const analytics = yield* AnalyticsService.AnalyticsService;\n  const projects = yield* ProjectService.ProjectService;\n  const threads = yield* ThreadManagement.ThreadManagementService;\n",
+      "after": "});\n\nconst recordStartupHeartbeat = Effect.gen(function* () {\n  if (!allowAnalyticsExport()) return;\n  const analytics = yield* AnalyticsService.AnalyticsService;\n  const projects = yield* ProjectService.ProjectService;\n  const threads = yield* ThreadManagement.ThreadManagementService;\n"
+    },
+    {
+      "path": "apps/server/src/telemetry/AnalyticsService.test.ts",
+      "before": "      };\n    }>;\n  } | null;\n}\n\ninterface RecordedBatchBody {\n  readonly batch: ReadonlyArray<{\n    readonly event?: string;\n    readonly properties?: {\n      readonly index?: number;\n      readonly clientType?: string;\n      readonly serverOs?: string;\n      readonly serverArch?: string;\n      readonly serverAppVersion?: string;\n      readonly serverMode?: string;\n      readonly t3CodeVersion?: string;\n    };\n  }>;\n}\n\nconst SentBatch = Schema.fromJsonString(\n",
+      "after": "      };\n    }>;\n  } | null;\n}\n\nconst SentBatch = Schema.fromJsonString(\n"
+    },
+    {
+      "path": "apps/server/src/telemetry/AnalyticsService.test.ts",
+      "before": "  });\n\nit.layer(NodeServices.layer)(\"AnalyticsService test\", (it) => {\n  it.effect(\"client owner reports cannot use up the server's owner cap\", () =>\n    Effect.gen(function* () {\n      const batches = yield* sendForTenMinutes(\n        respondWithStatus(204),\n",
+      "after": "  });\n\nit.layer(NodeServices.layer)(\"AnalyticsService test\", (it) => {\n  it.effect(\"does not export client or server ownership reports\", () =>\n    Effect.gen(function* () {\n      const batches = yield* sendForTenMinutes(\n        respondWithStatus(204),\n"
+    },
+    {
+      "path": "apps/server/src/telemetry/AnalyticsService.test.ts",
+      "before": "          yield* analytics.recordOwners([{ source: \"connect\", ownerId: \"a\".repeat(64) }], \"server\");\n        }),\n      );\n      const owners = batches.flat().map((event) => event.properties.observedBy);\n\n      assert.equal(owners.filter((observedBy) => observedBy === \"client\").length, 1_000);\n      assert.equal(owners.filter((observedBy) => observedBy === \"server\").length, 1);\n    }),\n  );\n\n  it.effect(\"flush drains all buffered events across multiple batches\", () =>\n    Effect.gen(function* () {\n      const capturedRequests: Array<RecordedBatchRequest> = [];\n      const layerServerConfig = ServerConfig.ServerConfig.layerTest(process.cwd(), {\n",
+      "after": "          yield* analytics.recordOwners([{ source: \"connect\", ownerId: \"a\".repeat(64) }], \"server\");\n        }),\n      );\n      assert.deepEqual(batches, []);\n    }),\n  );\n\n  it.effect(\"does not export buffered events even when telemetry is configured\", () =>\n    Effect.gen(function* () {\n      const capturedRequests: Array<RecordedBatchRequest> = [];\n      const layerServerConfig = ServerConfig.ServerConfig.layerTest(process.cwd(), {\n"
+    },
+    {
+      "path": "apps/server/src/telemetry/AnalyticsService.test.ts",
+      "before": "        const analytics = yield* AnalyticsService.AnalyticsService;\n\n        for (let index = 0; index < 45; index += 1) {\n          yield* analytics.record(\"test.flush.drain\", { index });\n        }\n\n        yield* analytics.flush;\n      }).pipe(Effect.provide(layerRuntime));\n\n      const batchRequests = capturedRequests.filter(\n        (request): request is RecordedBatchRequest & { readonly body: RecordedBatchBody } =>\n          Array.isArray(request.body?.batch),\n      );\n      assert.equal(batchRequests.length, 3);\n      assert.equal(\n        batchRequests.every(\n          (request) => request.path.endsWith(\"/batch/\") || request.path.endsWith(\"/batch\"),\n        ),\n        true,\n      );\n      const deliveredIndexes = batchRequests.flatMap((request) =>\n        request.body.batch\n          .filter((event) => event.event === \"test.flush.drain\")\n          .map((event) => event.properties?.index)\n          .filter((index): index is number => typeof index === \"number\"),\n      );\n\n      const sorted = deliveredIndexes.toSorted((a, b) => a - b);\n      assert.equal(sorted.length, 45);\n      assert.deepEqual(\n        sorted,\n        Array.from({ length: 45 }, (_, index) => index),\n      );\n      assert.equal(\n        batchRequests.every((request) =>\n          request.body.batch.every((event) => event.properties?.clientType === \"cli-web-client\"),\n        ),\n        true,\n      );\n      assert.equal(\n        batchRequests.every((request) =>\n          request.body.batch.every(\n            (event) =>\n              event.properties?.serverOs === \"Linux\" &&\n              event.properties.serverArch === \"arm64\" &&\n              event.properties.serverAppVersion === event.properties.t3CodeVersion &&\n              event.properties.serverMode === \"web\",\n          ),\n        ),\n        true,\n      );\n    }),\n  );\n\n",
+      "after": "        const analytics = yield* AnalyticsService.AnalyticsService;\n\n        for (let index = 0; index < 45; index += 1) {\n          yield* analytics.record(\"test.flush.drain\", { index, sourceCode: \"company secret\" });\n        }\n\n        yield* analytics.flush;\n      }).pipe(Effect.provide(layerRuntime));\n\n      assert.deepEqual(capturedRequests, []);\n    }),\n  );\n\n"
+    },
+    {
+      "path": "apps/server/src/telemetry/AnalyticsService.ts",
+      "before": "import * as HostProcess from \"@t3tools/shared/HostProcess\";\n",
+      "after": "import { allowAnalyticsExport } from \"@t3tools/shared/t2Analytics\";\nimport * as HostProcess from \"@t3tools/shared/HostProcess\";\n"
+    },
+    {
+      "path": "apps/server/src/telemetry/AnalyticsService.ts",
+      "before": "export const make = Effect.gen(function* () {\n",
+      "after": "export const make = Effect.gen(function* () {\n  if (!allowAnalyticsExport()) {\n    return AnalyticsService.of({\n      record: () => Effect.void,\n      flush: Effect.void,\n      recordOwners: () => Effect.void,\n    });\n  }\n"
+    },
+    {
       "path": "apps/web/src/components/clerk/BrowserManagedAuthShell.tsx",
       "before": "}: {\n  readonly publishableKey: string;\n  readonly children: ReactNode;\n}) {\n  return (\n    <ClerkProvider appearance={clerkAppearance} publishableKey={publishableKey}>\n      <ManagedRelayAuthProvider>{children}</ManagedRelayAuthProvider>\n    </ClerkProvider>\n  );\n}\n",
       "after": "}: {\n  readonly publishableKey: string;\n  readonly children: ReactNode;\n}) {\n  return (\n    <ClerkProvider telemetry={false} appearance={clerkAppearance} publishableKey={publishableKey}>\n      <ManagedRelayAuthProvider>{children}</ManagedRelayAuthProvider>\n    </ClerkProvider>\n  );\n}\n"
@@ -76,19 +171,94 @@
       "after": "}: {\n  readonly publishableKey: string;\n  readonly children: ReactNode;\n}) {\n  return (\n    <ClerkProvider\n      telemetry={false}\n      appearance={clerkAppearance}\n      publishableKey={publishableKey}\n      passkeys={passkeys}\n    >\n      <ManagedRelayAuthProvider>{children}</ManagedRelayAuthProvider>\n    </ClerkProvider>\n  );\n}\n"
     },
     {
+      "path": "apps/web/src/components/desktopUpdate.logic.test.ts",
+      "before": "    \"owner/repo?tab=notes\",\n  ])(\"falls back to upstream for an invalid configured repository: %s\", (repository) => {\n    expect(getDesktopUpdateReleaseHistoryUrl(repository)).toBe(\n      \"https://github.com/pingdotgg/t3code/releases\",\n    );\n    expect(getDesktopUpdateReleaseUrl(\"1.2.3\", repository)).toBe(\n      \"https://github.com/pingdotgg/t3code/releases/tag/v1.2.3\",\n    );\n  });\n});\n",
+      "after": "    \"owner/repo?tab=notes\",\n  ])(\"falls back to upstream for an invalid configured repository: %s\", (repository) => {\n    expect(getDesktopUpdateReleaseHistoryUrl(repository)).toBe(\n      \"https://github.com/shirubasoft/t2code/releases\",\n    );\n    expect(getDesktopUpdateReleaseUrl(\"1.2.3\", repository)).toBe(\n      \"https://github.com/shirubasoft/t2code/releases/tag/v1.2.3\",\n    );\n  });\n});\n"
+    },
+    {
+      "path": "apps/web/src/components/desktopUpdate.logic.ts",
+      "before": "const DEFAULT_DESKTOP_RELEASE_REPOSITORY = \"pingdotgg/t3code\";",
+      "after": "const DEFAULT_DESKTOP_RELEASE_REPOSITORY = \"shirubasoft/t2code\";"
+    },
+    {
+      "path": "packages/client-runtime/src/authorization/remote.test.ts",
+      "before": "import { describe, expect, it } from \"@effect/vitest\";\nimport * as Effect from \"effect/Effect\";\nimport * as Option from \"effect/Option\";\nimport * as Schema from \"effect/Schema\";\n\nimport { EnvironmentAuthInvalidError } from \"@t3tools/contracts\";\nimport { hashTelemetryId } from \"@t3tools/shared/telemetryId\";\nimport {\n  bootstrapRemoteBearerSession,\n  exchangeRemoteDpopAccessToken,\n",
+      "after": "import { describe, expect, it } from \"@effect/vitest\";\nimport * as Effect from \"effect/Effect\";\nimport * as Schema from \"effect/Schema\";\n\nimport { EnvironmentAuthInvalidError } from \"@t3tools/contracts\";\nimport {\n  bootstrapRemoteBearerSession,\n  exchangeRemoteDpopAccessToken,\n"
+    },
+    {
+      "path": "packages/client-runtime/src/authorization/remote.test.ts",
+      "before": "    }),\n  );\n\n  it.effect(\"names the signed-in Connect account and this device by hash only\", () =>\n    Effect.gen(function* () {\n      const fetch = recordedFetch(\n        Response.json({ ticket: \"ws-ticket\", expiresAt: \"2026-05-01T12:05:00.000Z\" }),\n",
+      "after": "    }),\n  );\n\n  it.effect(\"omits analytics identities without reading the Connect account or device id\", () =>\n    Effect.gen(function* () {\n      const fetch = recordedFetch(\n        Response.json({ ticket: \"ws-ticket\", expiresAt: \"2026-05-01T12:05:00.000Z\" }),\n"
+    },
+    {
+      "path": "packages/client-runtime/src/authorization/remote.test.ts",
+      "before": "          Effect.provideService(\n            ClientCapabilities.CloudSession,\n            ClientCapabilities.CloudSession.of({\n              identity: Effect.succeed(Option.some({ accountId: \"user_connect\" })),\n              clerkToken: Effect.succeed(\"clerk-token\"),\n            }),\n          ),\n          Effect.provideService(ClientCapabilities.AnalyticsDevice, {\n            id: Effect.succeed(Option.some(\"device-1\")),\n          }),\n        ),\n      );\n\n      expect(url.searchParams.get(\"clientOwner\")).toBe(hashTelemetryId(\"user_connect\"));\n      expect(url.searchParams.get(\"clientDevice\")).toBe(hashTelemetryId(\"device-1\"));\n      expect(url.toString()).not.toContain(\"user_connect\");\n      expect(url.toString()).not.toContain(\"device-1\");\n    }),\n",
+      "after": "          Effect.provideService(\n            ClientCapabilities.CloudSession,\n            ClientCapabilities.CloudSession.of({\n              identity: Effect.die(\"analytics must not read the Connect account\"),\n              clerkToken: Effect.succeed(\"clerk-token\"),\n            }),\n          ),\n          Effect.provideService(ClientCapabilities.AnalyticsDevice, {\n            id: Effect.die(\"analytics must not read the device id\"),\n          }),\n        ),\n      );\n\n      expect(url.searchParams.has(\"clientOwner\")).toBe(false);\n      expect(url.searchParams.has(\"clientDevice\")).toBe(false);\n      expect(url.toString()).not.toContain(\"user_connect\");\n      expect(url.toString()).not.toContain(\"device-1\");\n    }),\n"
+    },
+    {
+      "path": "packages/client-runtime/src/authorization/remote.ts",
+      "before": "import {\n  AuthAccessTokenType,\n  type AuthClientPresentationMetadata,\n",
+      "after": "import { allowAnalyticsExport } from \"@t3tools/shared/t2Analytics\";\nimport {\n  AuthAccessTokenType,\n  type AuthClientPresentationMetadata,\n"
+    },
+    {
+      "path": "packages/client-runtime/src/authorization/remote.ts",
+      "before": " * are connecting, so it can count the environment as theirs.\n */\nexport const readClientOwnerParams = Effect.gen(function* () {\n  const session = yield* Effect.serviceOption(ClientCapabilities.CloudSession);\n  const account = Option.isSome(session) ? yield* session.value.identity : Option.none();\n  const device = yield* (yield* ClientCapabilities.AnalyticsDevice).id;\n",
+      "after": " * are connecting, so it can count the environment as theirs.\n */\nexport const readClientOwnerParams = Effect.gen(function* () {\n  if (!allowAnalyticsExport()) return {};\n  const session = yield* Effect.serviceOption(ClientCapabilities.CloudSession);\n  const account = Option.isSome(session) ? yield* session.value.identity : Option.none();\n  const device = yield* (yield* ClientCapabilities.AnalyticsDevice).id;\n"
+    },
+    {
+      "path": "packages/client-runtime/src/pullRequestMarkdown.test.ts",
+      "before": "import { splitPullRequestBody } from \"./pullRequestMarkdown.ts\";\n\ndescribe(\"pull request body segmentation\", () => {\n  // GitHub writes a dropped image into the body as an `<img>` tag, so a bare attachment link on\n  // its own line is the shape it uses for a video — every one sampled in the wild was one.\n  it(\"lifts a dropped video out and keeps the prose around it\", () => {\n",
+      "after": "import { splitPullRequestBody } from \"./pullRequestMarkdown.ts\";\n\ndescribe(\"pull request body segmentation\", () => {\n  it(\"preserves long interior whitespace and leading code indentation while trimming the end\", () => {\n    const body = `    text${\"\\t\".repeat(20_000)}tail`;\n    expect(splitPullRequestBody(`\\n\\n${body}\\t\\u00a0\\n`)).toEqual([\n      { id: \"markdown:0\", kind: \"markdown\", text: body },\n    ]);\n  });\n  // GitHub writes a dropped image into the body as an `<img>` tag, so a bare attachment link on\n  // its own line is the shape it uses for a video — every one sampled in the wild was one.\n  it(\"lifts a dropped video out and keeps the prose around it\", () => {\n"
+    },
+    {
+      "path": "packages/client-runtime/src/pullRequestMarkdown.ts",
+      "before": "  // Blank lines around a run are dropped, but never leading spaces: four of them open an\n  // indented code block, so trimming a run would silently turn code into prose.\n  const flushMarkdown = () => {\n    const text = markdown.join(\"\\n\").replace(/^\\n+/u, \"\").replace(/\\s+$/u, \"\");\n    markdown.length = 0;\n    if (text.trim().length > 0) {\n      segments.push({ id: `markdown:${segments.length}`, kind: \"markdown\", text });\n",
+      "after": "  // Blank lines around a run are dropped, but never leading spaces: four of them open an\n  // indented code block, so trimming a run would silently turn code into prose.\n  const flushMarkdown = () => {\n    const text = markdown.join(\"\\n\").replace(/^\\n+/u, \"\").trimEnd();\n    markdown.length = 0;\n    if (text.trim().length > 0) {\n      segments.push({ id: `markdown:${segments.length}`, kind: \"markdown\", text });\n"
+    },
+    {
+      "path": "packages/client-runtime/src/state/subagentRuntime.test.ts",
+      "before": "describe(\"resolveWorkflowOpening\", () => {\n",
+      "after": "describe(\"resolveWorkflowOpening\", () => {\n  it(\"recognizes workflow exports only after complete comments without rescanning their contents\", () => {\n    expect(\n      isWorkflowScriptMessage({ role: \"user\", text: \"// comment export const meta = {};\" }),\n    ).toBe(false);\n    expect(isWorkflowScriptMessage({ role: \"user\", text: \"// \".repeat(20_000) })).toBe(false);\n    const comments = \" /* comment */ // comment\\n\".repeat(10_000);\n    expect(\n      isWorkflowScriptMessage({ role: \"user\", text: `${comments}export const meta = {};` }),\n    ).toBe(true);\n    expect(isWorkflowScriptMessage({ role: \"user\", text: \"/* export const meta = {};\" })).toBe(\n      false,\n    );\n    expect(\n      isWorkflowScriptMessage({ role: \"user\", text: \"// comment\\r\\n\\texport const meta = {};\" }),\n    ).toBe(true);\n  });\n"
+    },
+    {
+      "path": "packages/client-runtime/src/state/subagentRuntime.ts",
+      "before": "// Workflow scripts open with their `meta` export, after any leading comments.\nconst WORKFLOW_SCRIPT_START = /^\\s*(?:(?:\\/\\/[^\\n]*|\\/\\*[\\s\\S]*?\\*\\/)\\s*)*export\\s+const\\s+meta\\b/;\n",
+      "after": "// Workflow scripts open with their `meta` export, after any leading comments.\nconst WORKFLOW_SCRIPT_START = /^export\\s+const\\s+meta\\b/;\n\nfunction isWorkflowScriptText(text: string) {\n  let cursor = 0;\n  while (cursor < text.length) {\n    while (cursor < text.length && /\\s/u.test(text[cursor]!)) cursor += 1;\n    if (text.startsWith(\"//\", cursor)) {\n      cursor += 2;\n      while (cursor < text.length && !/[\\r\\n\\u2028\\u2029]/u.test(text[cursor]!)) cursor += 1;\n    } else if (text.startsWith(\"/*\", cursor)) {\n      const end = text.indexOf(\"*/\", cursor + 2);\n      if (end === -1) return false;\n      cursor = end + 2;\n    } else {\n      return WORKFLOW_SCRIPT_START.test(text.slice(cursor));\n    }\n  }\n  return false;\n}\n"
+    },
+    {
+      "path": "packages/client-runtime/src/state/subagentRuntime.ts",
+      "before": "  return (\n    message.role === \"user\" && (message.workflowScript ?? WORKFLOW_SCRIPT_START.test(message.text))\n  );",
+      "after": "  return message.role === \"user\" && (message.workflowScript ?? isWorkflowScriptText(message.text));"
+    },
+    {
       "path": "packages/shared/package.json",
       "before": "  \"exports\": {\n",
       "after": "  \"exports\": {\n    \"./t2Analytics\": {\n      \"types\": \"./src/t2Analytics.ts\",\n      \"import\": \"./src/t2Analytics.ts\"\n    },\n"
     },
     {
-      "path": "packages/shared/src/relayTracing.test.ts",
-      "before": "\n      expect(userSpans).toEqual([\"relay.operation\"]);\n    }),\n  );\n\n  it.effect(\"preserves nested error causes in exported relay spans\", () => {\n    const fetchFn = vi.fn<typeof fetch>(async () => new Response(null, { status: 202 }));\n    const layerHttpClient = FetchHttpClient.layer.pipe(\n      Layer.provide(Layer.succeed(FetchHttpClient.Fetch, fetchFn)),\n    );\n    const layerTracing = RelayTracing.layer(\n",
-      "after": "\n      expect(userSpans).toEqual([\"relay.operation\"]);\n    }),\n  );\n\n  it.effect(\"keeps error causes local even with a configured relay exporter\", () => {\n    const fetchFn = vi.fn<typeof fetch>(async () => new Response(null, { status: 202 }));\n    const layerHttpClient = FetchHttpClient.layer.pipe(\n      Layer.provide(Layer.succeed(FetchHttpClient.Fetch, fetchFn)),\n    );\n    const layerTracing = RelayTracing.layer(\n"
+      "path": "packages/shared/src/cliRelease.ts",
+      "before": "const CLI_RELEASE_REPOSITORY = \"pingdotgg/t3code\";",
+      "after": "const CLI_RELEASE_REPOSITORY = \"shirubasoft/t2code\";"
     },
     {
-      "path": "packages/shared/src/relayTracing.test.ts",
-      "before": "\n    return Layer.build(layerTracedApplication).pipe(\n      Effect.scoped,\n      Effect.andThen(\n        Effect.sync(() => {\n          expect(fetchFn).toHaveBeenCalledOnce();\n          const payload = new TextDecoder().decode(fetchFn.mock.calls[0]?.[1]?.body as Uint8Array);\n          expect(payload).toContain(\"relay request failed\");\n          expect(payload).toContain(\"relay socket closed\");\n          expect(payload).toContain('\"key\":\"service.name\",\"value\":{\"stringValue\":\"relay-test\"}');\n          expect(payload).toContain('\"key\":\"service.namespace\",\"value\":{\"stringValue\":\"t3code\"}');\n        }),\n      ),\n    );\n  });\n});\n",
-      "after": "\n    return Layer.build(layerTracedApplication).pipe(\n      Effect.scoped,\n      Effect.andThen(\n        Effect.sync(() => {\n          expect(fetchFn).not.toHaveBeenCalled();\n        }),\n      ),\n    );\n  });\n});\n"
+      "path": "packages/shared/src/composerContextReferences.test.ts",
+      "before": "describe(\"toComposerContextId\", () => {\n",
+      "after": "describe(\"toComposerContextId\", () => {\n  it(\"preserves context identity while trimming long hyphen runs\", () => {\n    const hyphens = \"-\".repeat(20_000);\n    expect(toComposerContextId(`::prefix${hyphens}tail::`)).toBe(\n      `prefix${\"-\".repeat(42)}-addf8c470ff50102`,\n    );\n    expect(toComposerContextId(`::prefix${hyphens}::`)).toBe(\"prefix-3267e579e13a0bb0\");\n    expect(toComposerContextId(hyphens)).toBe(\"ctx-37635fa5e51522fc\");\n    expect(toComposerContextId(\"---\")).toBe(\"---\");\n    expect(toComposerContextId(\"::--_--::\")).toMatch(/^_-[0-9a-f]{16}$/);\n  });\n"
+    },
+    {
+      "path": "packages/shared/src/composerContextReferences.ts",
+      "before": "export function toComposerContextId(producerId: string): ComposerContextId {\n  if (CONTEXT_ID_PATTERN.test(producerId)) return producerId as ComposerContextId;\n  const slug = producerId\n    .replace(/[^a-z0-9_-]+/gi, \"-\")\n    .replace(/^-+|-+$/g, \"\")\n    .slice(0, 48);\n  return `${slug || \"ctx\"}-${fnv1a64(producerId)}` as ComposerContextId;\n}\n",
+      "after": "export function toComposerContextId(producerId: string): ComposerContextId {\n  if (CONTEXT_ID_PATTERN.test(producerId)) return producerId as ComposerContextId;\n  const normalized = producerId.replace(/[^a-z0-9_-]+/gi, \"-\");\n  let start = 0;\n  let end = normalized.length;\n  while (start < end && normalized[start] === \"-\") start += 1;\n  while (end > start && normalized[end - 1] === \"-\") end -= 1;\n  const slug = normalized.slice(start, Math.min(end, start + 48));\n  return `${slug || \"ctx\"}-${fnv1a64(producerId)}` as ComposerContextId;\n}\n"
+    },
+    {
+      "path": "packages/shared/src/path.test.ts",
+      "before": "} from \"./path.ts\";\n\ndescribe(\"path helpers\", () => {\n  // regression: #17923 literal colons in names are kept, not parsed as positions\n  it.each([\n    [\"report:123\", \"/workspace\", \"/workspace/report:123\"],\n",
+      "after": "} from \"./path.ts\";\n\ndescribe(\"path helpers\", () => {\n  it(\"preserves long separator runs inside a workspace root and trims only its suffix\", () => {\n    const root = `/${\"/\\\\\".repeat(10_000)}repo`;\n    expect(resolveWorkspaceFilePath(\"src/file.ts\", `${root}/\\\\/`)).toBe(`${root}/src/file.ts`);\n    const windowsRoot = `C:\\\\${\"/\\\\\".repeat(10_000)}repo`;\n    expect(resolveWorkspaceFilePath(\"src/file.ts\", `${windowsRoot}/\\\\/`)).toBe(\n      `${windowsRoot}\\\\src\\\\file.ts`,\n    );\n  });\n  // regression: #17923 literal colons in names are kept, not parsed as positions\n  it.each([\n    [\"report:123\", \"/workspace\", \"/workspace/report:123\"],\n"
+    },
+    {
+      "path": "packages/shared/src/path.ts",
+      "before": "export function resolveWorkspaceFilePath(path: string, workspaceRoot: string): string {\n  if (isAbsolutePath(path) || path.startsWith(\"~/\") || path.startsWith(\"~\\\\\")) return path;\n  const base = workspaceRoot.replace(/[/\\\\]+$/, \"\");\n  return isWindowsAbsolutePath(workspaceRoot)\n    ? `${base}\\\\${path.replaceAll(\"/\", \"\\\\\")}`\n    : `${base}/${path}`;\n",
+      "after": "export function resolveWorkspaceFilePath(path: string, workspaceRoot: string): string {\n  if (isAbsolutePath(path) || path.startsWith(\"~/\") || path.startsWith(\"~\\\\\")) return path;\n  let end = workspaceRoot.length;\n  while (end > 0 && (workspaceRoot[end - 1] === \"/\" || workspaceRoot[end - 1] === \"\\\\\")) end -= 1;\n  const base = workspaceRoot.slice(0, end);\n  return isWindowsAbsolutePath(workspaceRoot)\n    ? `${base}\\\\${path.replaceAll(\"/\", \"\\\\\")}`\n    : `${base}/${path}`;\n"
     },
     {
       "path": "packages/shared/src/relayTracing.ts",
@@ -101,29 +271,24 @@
       "after": "  if (!allowAnalyticsExport() || config === null) {\n"
     },
     {
-      "path": "scripts/build-desktop-artifact.test.ts",
-      "before": "    assert.equal(resolveDesktopUpdateChannel(\"0.0.17-nightly.20260413.42\"), \"nightly\");\n    assert.equal(resolveDesktopUpdateChannel(\"0.0.17\"), \"latest\");\n  });\n\n  it(\"switches desktop packaging product names to nightly for nightly builds\", () => {\n    assert.equal(resolveDesktopProductName(\"0.1.0\"), \"T3 Code (Beta)\");\n    assert.equal(resolveDesktopProductName(\"0.0.17-nightly.20260413.42\"), \"T3 Code (Nightly)\");\n  });\n\n  it(\"switches desktop packaging icons to the nightly artwork for nightly versions\", () => {\n    assert.deepStrictEqual(resolveDesktopBuildIconAssets(\"0.0.17\"), {\n      macIconPng: BRAND_ASSET_PATHS.productionMacIconPng,\n",
-      "after": "    assert.equal(resolveDesktopUpdateChannel(\"0.0.17-nightly.20260413.42\"), \"nightly\");\n    assert.equal(resolveDesktopUpdateChannel(\"0.0.17\"), \"latest\");\n  });\n\n  it(\"switches desktop packaging product names to nightly for nightly builds\", () => {\n    assert.equal(resolveDesktopProductName(\"0.1.0\"), \"T2 Code\");\n    assert.equal(resolveDesktopProductName(\"0.0.17-nightly.20260413.42\"), \"T2 Code (Nightly)\");\n  });\n\n  it(\"switches desktop packaging icons to the nightly artwork for nightly versions\", () => {\n    assert.deepStrictEqual(resolveDesktopBuildIconAssets(\"0.0.17\"), {\n      macIconPng: BRAND_ASSET_PATHS.productionMacIconPng,\n"
+      "path": "packages/source-control-gitcafe/src/server/gitCafeHosts.test.ts",
+      "before": "import * as GitCafeHosts from \"./gitCafeHosts.ts\";\n\ndescribe(\"gitCafeHosts\", () => {\n  it(\"knows exactly the production and staging hosts\", () => {\n    assert.deepStrictEqual([...GitCafeHosts.GITCAFE_HOSTS], [\"git.cafe\", \"staging.git.cafe\"]);\n    assert.isTrue(GitCafeHosts.isGitCafeHost(\"Git.Cafe\"));\n",
+      "after": "import * as GitCafeHosts from \"./gitCafeHosts.ts\";\n\ndescribe(\"gitCafeHosts\", () => {\n  it(\"rejects long interior slash runs and accepts trailing slashes after a repository\", () => {\n    const slashes = \"/\".repeat(20_000);\n    assert.isNull(GitCafeHosts.gitCafeRepositoryPath(`team/${slashes}project`));\n    assert.strictEqual(\n      GitCafeHosts.gitCafeRepositoryPath(`team/project.git${slashes}`),\n      \"team/project\",\n    );\n    assert.isNull(GitCafeHosts.gitCafeRepositoryPath(slashes));\n  });\n\n  it(\"knows exactly the production and staging hosts\", () => {\n    assert.deepStrictEqual([...GitCafeHosts.GITCAFE_HOSTS], [\"git.cafe\", \"staging.git.cafe\"]);\n    assert.isTrue(GitCafeHosts.isGitCafeHost(\"Git.Cafe\"));\n"
+    },
+    {
+      "path": "packages/source-control-gitcafe/src/server/gitCafeHosts.ts",
+      "before": "\nexport function gitCafeRepositoryPath(path: string): string | null {\n  const repository = path\n    .trim()\n    .replace(/\\/+$/u, \"\")\n    .replace(/\\.git$/u, \"\");\n  return REPOSITORY.test(repository) ? repository : null;\n}\n\n",
+      "after": "\nexport function gitCafeRepositoryPath(path: string): string | null {\n  const trimmed = path.trim();\n  let end = trimmed.length;\n  while (end > 0 && trimmed[end - 1] === \"/\") end -= 1;\n  const repository = trimmed.slice(0, end).replace(/\\.git$/u, \"\");\n  return REPOSITORY.test(repository) ? repository : null;\n}\n\n"
     },
     {
       "path": "scripts/build-desktop-artifact.test.ts",
-      "before": "        \"**/node_modules/.bin\",\n        \"**/node_modules/.bin/**\",\n        \"**/*.map\",\n      ]);\n      assert.deepStrictEqual(mac.dmg, {\n        title: \"T3 Code (Beta) 1.2.3 Installer\",\n        background: \"dmg/dmg-background-latest.png\",\n        window: { width: 640, height: 432 },\n        contents: [\n          { x: 166, y: 214, type: \"file\" },\n          { x: 474, y: 214, type: \"link\", path: \"/Applications\" },\n",
-      "after": "        \"**/node_modules/.bin\",\n        \"**/node_modules/.bin/**\",\n        \"**/*.map\",\n      ]);\n      assert.deepStrictEqual(mac.dmg, {\n        title: \"T2 Code 1.2.3 Installer\",\n        background: \"dmg/dmg-background-latest.png\",\n        window: { width: 640, height: 432 },\n        contents: [\n          { x: 166, y: 214, type: \"file\" },\n          { x: 474, y: 214, type: \"link\", path: \"/Applications\" },\n"
+      "before": "    });\n\n    assert.deepStrictEqual(configuration, {\n      appId: \"com.t3tools.t3code\",\n      teamId: \"ABC1234567\",\n      rpDomains: [\"example.clerk.accounts.dev\"],\n      provisioningProfilePath: \"/tmp/t3code.provisionprofile\",\n",
+      "after": "    });\n\n    assert.deepStrictEqual(configuration, {\n      appId: \"com.shirubasoft.t2code\",\n      teamId: \"ABC1234567\",\n      rpDomains: [\"example.clerk.accounts.dev\"],\n      provisioningProfilePath: \"/tmp/t3code.provisionprofile\",\n"
     },
     {
       "path": "scripts/build-desktop-artifact.test.ts",
-      "before": "      T3CODE_MACOS_PROVISIONING_PROFILE: \"/tmp/t3code.provisionprofile\",\n      T3CODE_CLERK_PUBLISHABLE_KEY: `pk_test_${btoa(\"example.clerk.accounts.dev$\")}`,\n    });\n\n    assert.deepStrictEqual(configuration, {\n      appId: \"com.t3tools.t3code\",\n      teamId: \"ABC1234567\",\n      rpDomains: [\"example.clerk.accounts.dev\"],\n      provisioningProfilePath: \"/tmp/t3code.provisionprofile\",\n    });\n  });\n",
-      "after": "      T3CODE_MACOS_PROVISIONING_PROFILE: \"/tmp/t3code.provisionprofile\",\n      T3CODE_CLERK_PUBLISHABLE_KEY: `pk_test_${btoa(\"example.clerk.accounts.dev$\")}`,\n    });\n\n    assert.deepStrictEqual(configuration, {\n      appId: \"com.shirubasoft.t2code\",\n      teamId: \"ABC1234567\",\n      rpDomains: [\"example.clerk.accounts.dev\"],\n      provisioningProfilePath: \"/tmp/t3code.provisionprofile\",\n    });\n  });\n"
-    },
-    {
-      "path": "scripts/build-desktop-artifact.test.ts",
-      "before": "    assert.include(entitlements, \"<string>ABC1234567.com.t3tools.t3code</string>\");\n",
-      "after": "    assert.include(entitlements, \"<string>ABC1234567.com.shirubasoft.t2code</string>\");\n"
-    },
-    {
-      "path": "scripts/build-desktop-artifact.test.ts",
-      "before": "        entitlementsPath: \"/tmp/entitlements.mac.plist\",\n        provisioningProfilePath: \"/tmp/t3code.provisionprofile\",\n      });\n\n      const mac = config.mac as Record<string, unknown>;\n      assert.equal(config.appId, \"com.t3tools.t3code\");\n      assert.equal(mac.entitlements, \"/tmp/entitlements.mac.plist\");\n      assert.equal(mac.provisioningProfile, \"/tmp/t3code.provisionprofile\");\n      assert.match(String(mac.sign), /[\\\\/]scripts[\\\\/]sign-macos\\.ts$/);\n      assert.deepStrictEqual(mac.protocols, [\n        { name: \"T3 Code\", schemes: [\"t3code\", \"t3code-dev\"] },\n",
-      "after": "        entitlementsPath: \"/tmp/entitlements.mac.plist\",\n        provisioningProfilePath: \"/tmp/t3code.provisionprofile\",\n      });\n\n      const mac = config.mac as Record<string, unknown>;\n      assert.equal(config.appId, \"com.shirubasoft.t2code\");\n      assert.equal(mac.entitlements, \"/tmp/entitlements.mac.plist\");\n      assert.equal(mac.provisioningProfile, \"/tmp/t3code.provisionprofile\");\n      assert.match(String(mac.sign), /[\\\\/]scripts[\\\\/]sign-macos\\.ts$/);\n      assert.deepStrictEqual(mac.protocols, [\n        { name: \"T3 Code\", schemes: [\"t3code\", \"t3code-dev\"] },\n"
+      "before": "      \"clerk.example.com\",\n      \"example.clerk.accounts.dev\",\n    ]);\n    assert.include(entitlements, \"<string>ABC1234567.com.t3tools.t3code</string>\");\n    assert.include(entitlements, \"<string>webcredentials:clerk.example.com</string>\");\n    assert.include(entitlements, \"<string>webcredentials:example.clerk.accounts.dev</string>\");\n    assert.include(entitlements, \"<key>com.apple.security.cs.allow-jit</key>\");\n",
+      "after": "      \"clerk.example.com\",\n      \"example.clerk.accounts.dev\",\n    ]);\n    assert.include(entitlements, \"<string>ABC1234567.com.shirubasoft.t2code</string>\");\n    assert.include(entitlements, \"<string>webcredentials:clerk.example.com</string>\");\n    assert.include(entitlements, \"<string>webcredentials:example.clerk.accounts.dev</string>\");\n    assert.include(entitlements, \"<key>com.apple.security.cs.allow-jit</key>\");\n"
     },
     {
       "path": "scripts/build-desktop-artifact.ts",
@@ -141,94 +306,9 @@
       "after": "  arch?: typeof BuildArch.Type,\n) {\n  const buildConfig: Record<string, unknown> = {\n    appId: DESKTOP_APP_ID,\n    productName: resolveDesktopProductName(version),\n    artifactName: \"T2-Code-${version}-${arch}.${ext}\",\n    electronLanguages: [...DESKTOP_ELECTRON_LANGUAGES],\n    files: [\n      ...DESKTOP_FILE_EXCLUSIONS,\n      ...(platform === \"mac\"\n        ? resolveMacFileExclusions(arch)\n"
     },
     {
-      "path": "packages/shared/src/cliRelease.ts",
-      "before": "const CLI_RELEASE_REPOSITORY = \"pingdotgg/t3code\";",
-      "after": "const CLI_RELEASE_REPOSITORY = \"shirubasoft/t2code\";"
-    },
-    {
-      "path": "packages/shared/src/cliRelease.test.ts",
-      "before": "\"https://github.com/pingdotgg/t3code/releases/download/v1.2.3\"",
-      "after": "\"https://github.com/shirubasoft/t2code/releases/download/v1.2.3\""
-    },
-    {
-      "path": "packages/shared/src/cliRelease.test.ts",
-      "before": "\"https://api.github.com/repos/pingdotgg/t3code/releases?per_page=100&page=1\"",
-      "after": "\"https://api.github.com/repos/shirubasoft/t2code/releases?per_page=100&page=1\""
-    },
-    {
-      "path": "scripts/install.sh",
-      "before": "repo=\"pingdotgg/t3code\"",
-      "after": "repo=\"shirubasoft/t2code\""
-    },
-    {
       "path": "scripts/install.ps1",
       "before": "$repo = \"pingdotgg/t3code\"",
       "after": "$repo = \"shirubasoft/t2code\""
-    },
-    {
-      "path": "apps/web/src/components/desktopUpdate.logic.ts",
-      "before": "const DEFAULT_DESKTOP_RELEASE_REPOSITORY = \"pingdotgg/t3code\";",
-      "after": "const DEFAULT_DESKTOP_RELEASE_REPOSITORY = \"shirubasoft/t2code\";"
-    },
-    {
-      "path": "apps/web/src/components/desktopUpdate.logic.test.ts",
-      "before": "\"https://github.com/pingdotgg/t3code/releases/tag/v0.0.30\"",
-      "after": "\"https://github.com/shirubasoft/t2code/releases/tag/v0.0.30\""
-    },
-    {
-      "path": "apps/web/src/components/desktopUpdate.logic.test.ts",
-      "before": "\"https://github.com/pingdotgg/t3code/releases/tag/v0.0.30-nightly.20260728.931\"",
-      "after": "\"https://github.com/shirubasoft/t2code/releases/tag/v0.0.30-nightly.20260728.931\""
-    },
-    {
-      "path": "apps/web/src/components/desktopUpdate.logic.test.ts",
-      "before": "    expect(getDesktopUpdateReleaseHistoryUrl(repository)).toBe(\n      \"https://github.com/pingdotgg/t3code/releases\",\n    );",
-      "after": "    expect(getDesktopUpdateReleaseHistoryUrl(repository)).toBe(\n      \"https://github.com/shirubasoft/t2code/releases\",\n    );"
-    },
-    {
-      "path": "packages/ssh/src/tunnel.test.ts",
-      "before": "    assert.include(script, \"T3_NODE_SCRIPT_PATH=''\");\n    assert.include(\n      script,\n      \"T3_RELEASE_BASE_URL='https://github.com/pingdotgg/t3code/releases/download'\",\n    );\n    assert.include(script, 'T3_RUNTIME_DIR=\"$HOME/.t3/runtime/versions/$T3_ARCHIVE_VERSION\"');\n    assert.include(script, 'T3_ARCHIVE=\"t3-$T3_ARCHIVE_VERSION-$T3_PLATFORM-$T3_ARCH.tar.gz\"');\n",
-      "after": "    assert.include(script, \"T3_NODE_SCRIPT_PATH=''\");\n    assert.include(\n      script,\n      \"T3_RELEASE_BASE_URL='https://github.com/shirubasoft/t2code/releases/download'\",\n    );\n    assert.include(script, 'T3_RUNTIME_DIR=\"$HOME/.t3/runtime/versions/$T3_ARCHIVE_VERSION\"');\n    assert.include(script, 'T3_ARCHIVE=\"t3-$T3_ARCHIVE_VERSION-$T3_PLATFORM-$T3_ARCH.tar.gz\"');\n"
-    },
-    {
-      "path": "apps/web/src/components/desktopUpdate.toast.test.tsx",
-      "before": "    link?.props.onClick?.();\n    await vi.waitFor(() => {\n      expect(openExternal).toHaveBeenCalledWith(\n        \"https://github.com/pingdotgg/t3code/releases/tag/v0.0.30\",\n      );\n    });\n    expect(testState.addToast).toHaveBeenCalledTimes(1);\n",
-      "after": "    link?.props.onClick?.();\n    await vi.waitFor(() => {\n      expect(openExternal).toHaveBeenCalledWith(\n        \"https://github.com/shirubasoft/t2code/releases/tag/v0.0.30\",\n      );\n    });\n    expect(testState.addToast).toHaveBeenCalledTimes(1);\n"
-    },
-    {
-      "path": "apps/web/src/components/desktopUpdate.toast.test.tsx",
-      "before": "\n    await vi.waitFor(() => {\n      expect(openExternal).toHaveBeenCalledWith(\n        \"https://github.com/pingdotgg/t3code/releases/tag/v0.0.30\",\n      );\n    });\n  });\n",
-      "after": "\n    await vi.waitFor(() => {\n      expect(openExternal).toHaveBeenCalledWith(\n        \"https://github.com/shirubasoft/t2code/releases/tag/v0.0.30\",\n      );\n    });\n  });\n"
-    },
-    {
-      "path": "apps/web/src/components/sidebar/SidebarUpdateReleaseNotes.test.tsx",
-      "before": "    );\n\n    expect(anchors.map(({ props }) => props.href)).toEqual([\n      \"https://github.com/pingdotgg/t3code/releases/tag/v0.0.36-nightly.3\",\n      \"https://github.com/pingdotgg/t3code/releases/tag/v0.0.36-nightly.2\",\n      \"https://github.com/pingdotgg/t3code/releases/tag/v0.0.36-nightly.1\",\n    ]);\n    expect(anchors.map(({ props }) => textContent(props.children))).toEqual([\n      \"View release on GitHub\",\n",
-      "after": "    );\n\n    expect(anchors.map(({ props }) => props.href)).toEqual([\n      \"https://github.com/shirubasoft/t2code/releases/tag/v0.0.36-nightly.3\",\n      \"https://github.com/shirubasoft/t2code/releases/tag/v0.0.36-nightly.2\",\n      \"https://github.com/shirubasoft/t2code/releases/tag/v0.0.36-nightly.1\",\n    ]);\n    expect(anchors.map(({ props }) => textContent(props.children))).toEqual([\n      \"View release on GitHub\",\n"
-    },
-    {
-      "path": "apps/web/src/components/sidebar/SidebarUpdateReleaseNotes.test.tsx",
-      "before": "      }),\n    );\n\n    expect(anchors.at(-1)?.props.href).toBe(\"https://github.com/pingdotgg/t3code/releases\");\n    expect(textContent(anchors.at(-1)?.props.children)).toBe(\"1 older release on GitHub\");\n  });\n\n",
-      "after": "      }),\n    );\n\n    expect(anchors.at(-1)?.props.href).toBe(\"https://github.com/shirubasoft/t2code/releases\");\n    expect(textContent(anchors.at(-1)?.props.children)).toBe(\"1 older release on GitHub\");\n  });\n\n"
-    },
-    {
-      "path": "apps/web/src/components/sidebar/SidebarUpdateReleaseNotes.test.tsx",
-      "before": "    expect(preventDefault).toHaveBeenCalledOnce();\n    await vi.waitFor(() => {\n      expect(openExternal).toHaveBeenCalledWith(\n        \"https://github.com/pingdotgg/t3code/releases/tag/v0.0.36-nightly.3\",\n      );\n      expect(testState.addToast).toHaveBeenCalledWith({\n        type: \"error\",\n",
-      "after": "    expect(preventDefault).toHaveBeenCalledOnce();\n    await vi.waitFor(() => {\n      expect(openExternal).toHaveBeenCalledWith(\n        \"https://github.com/shirubasoft/t2code/releases/tag/v0.0.36-nightly.3\",\n      );\n      expect(testState.addToast).toHaveBeenCalledWith({\n        type: \"error\",\n"
-    },
-    {
-      "path": "scripts/install.sh",
-      "before": "channel=\"${T3CODE_CHANNEL:-stable}\"",
-      "after": "channel=\"${T3CODE_CHANNEL:-nightly}\""
-    },
-    {
-      "path": "scripts/install.sh",
-      "before": "(default: stable;",
-      "after": "(default: nightly;"
-    },
-    {
-      "path": "scripts/install.sh",
-      "before": "T3CODE_CHANNEL=stable (the default)",
-      "after": "T3CODE_CHANNEL=nightly (the default)"
     },
     {
       "path": "scripts/install.ps1",
@@ -246,174 +326,24 @@
       "after": "T3CODE_CHANNEL=nightly (the default)"
     },
     {
-      "path": "apps/desktop/src/app/DesktopObservability.ts",
-      "before": "    const layerLogger = Logger.layer(\n      endpoints.logs === undefined\n",
-      "after": "    const layerLogger = Logger.layer(\n      !allowAnalyticsExport() || endpoints.logs === undefined\n"
+      "path": "scripts/install.sh",
+      "before": "repo=\"pingdotgg/t3code\"",
+      "after": "repo=\"shirubasoft/t2code\""
     },
     {
-      "path": "apps/server/src/serverLogger.ts",
-      "before": "import * as SharedObservability from \"@t3tools/shared/observability\";",
-      "after": "import * as SharedObservability from \"@t3tools/shared/observability\";\nimport { allowAnalyticsExport } from \"@t3tools/shared/t2Analytics\";"
+      "path": "scripts/install.sh",
+      "before": "channel=\"${T3CODE_CHANNEL:-stable}\"",
+      "after": "channel=\"${T3CODE_CHANNEL:-nightly}\""
     },
     {
-      "path": "apps/server/src/serverLogger.ts",
-      "before": "  const otlpLogger =\n    config.otlpLogsUrl === undefined\n",
-      "after": "  const otlpLogger =\n    !allowAnalyticsExport() || config.otlpLogsUrl === undefined\n"
+      "path": "scripts/install.sh",
+      "before": "(default: stable;",
+      "after": "(default: nightly;"
     },
     {
-      "path": "apps/server/src/serverLogger.test.ts",
-      "before": "\"exports log records to the configured logs endpoint\"",
-      "after": "\"keeps log records local with a configured logs endpoint\""
-    },
-    {
-      "path": "apps/server/src/serverLogger.test.ts",
-      "before": "      assert.lengthOf(requests, 1);\n      const [request] = requests;\n      assert.strictEqual(request?.url, \"https://collector.example.com/v1/logs\");\n      assert.include(request?.body ?? \"\", \"server logger under test\");\n      assert.include(request?.body ?? \"\", \"t3code-server\");\n      assert.include(request?.body ?? \"\", \"service.runtime\");",
-      "after": "      assert.lengthOf(requests, 0);"
-    },
-    {
-      "path": "apps/server/src/serverLogger.test.ts",
-      "before": "\"sends the headers and wire format the log signal asked for\"",
-      "after": "\"does not export logs with protobuf and headers configured\""
-    },
-    {
-      "path": "apps/server/src/serverLogger.test.ts",
-      "before": "      assert.lengthOf(requests, 1);\n      assert.strictEqual(requests[0]?.headers[\"x-scope\"], \"logs\");\n      assert.strictEqual(requests[0]?.headers[\"content-type\"], \"application/x-protobuf\");",
-      "after": "      assert.lengthOf(requests, 0);"
-    },
-    {
-      "path": "apps/server/src/serverLogger.test.ts",
-      "before": "\"stops duplicating messages onto the span once log records are exported\"",
-      "after": "\"preserves local span events with a configured logs endpoint\""
-    },
-    {
-      "path": "apps/server/src/serverLogger.test.ts",
-      "before": "      assert.lengthOf(requests, 1);\n      assert.include(requests[0]?.body ?? \"\", \"server logger under test\");\n      assert.lengthOf(spans, 1);\n      assert.lengthOf(spans[0]?.events ?? [], 0);",
-      "after": "      assert.lengthOf(requests, 0);\n      assert.lengthOf(spans, 1);\n      assert.deepEqual(\n        spans[0]?.events.map(([name]) => name),\n        [\"server logger under test\"],\n      );"
-    },
-    {
-      "path": "apps/desktop/src/app/DesktopObservability.test.ts",
-      "before": "\"exports main process log records to the configured logs endpoint\"",
-      "after": "\"keeps main process logs local with a configured logs endpoint\""
-    },
-    {
-      "path": "apps/desktop/src/app/DesktopObservability.test.ts",
-      "before": "      assert.lengthOf(requests, 1);\n      const [request] = requests;\n      assert.strictEqual(request?.url, \"https://collector.example.com/v1/logs\");\n      assert.include(request?.body ?? \"\", \"desktop log export\");\n      assert.include(request?.body ?? \"\", \"service.runtime\");\n      assert.strictEqual(request?.headers[\"x-scope\"], \"desktop\");",
-      "after": "      assert.lengthOf(requests, 0);\n\n      // Log messages remain in the local trace even with an exporter configured."
-    },
-    {
-      "path": "apps/desktop/src/app/DesktopObservability.test.ts",
-      "before": "      assert.notEqual(record, undefined);\n      assert.lengthOf(record?.events ?? [], 0);",
-      "after": "      assert.notEqual(record, undefined);\n      assert.deepEqual(\n        record?.events.map((event) => event.name),\n        [\"desktop log export\"],\n      );"
-    },
-    {
-      "path": "apps/desktop/src/app/DesktopObservability.test.ts",
-      "before": "\"reads every signal endpoint from Settings when the environment names none\"",
-      "after": "\"does not export any signal when endpoints are configured in Settings\""
-    },
-    {
-      "path": "apps/desktop/src/app/DesktopObservability.test.ts",
-      "before": "      assert.deepEqual(requests.map((request) => request.url).toSorted(), [\n        \"https://settings.example.com/v1/logs\",\n        \"https://settings.example.com/v1/traces\",\n      ]);\n      assert.include(\n        requests.find((request) => request.url.endsWith(\"/v1/logs\"))?.body ?? \"\",\n        \"desktop log export from settings\",\n      );\n      assert.include(\n        requests.find((request) => request.url.endsWith(\"/v1/traces\"))?.body ?? \"\",\n        \"desktop-settings-export-test\",\n      );",
-      "after": "      assert.deepEqual(requests, []);"
-    },
-    {
-      "path": "scripts/release-smoke.ts",
-      "before": "  NodeChildProcess.execFileSync(\n    process.execPath,\n    [\"--test\", NodePath.resolve(repoRoot, \".github/scripts/relay-state-output.test.cjs\")],\n    { stdio: \"inherit\" },\n  );",
-      "after": "  const releaseWorkflow = NodeFS.readFileSync(\n    NodePath.resolve(repoRoot, \".github/workflows/release.yml\"),\n    \"utf8\",\n  );\n  for (const marker of [\n    \"Read production relay tracing config\",\n    \"T3CODE_RELAY_CLIENT_OTLP_TRACES_\",\n    \"relay-client-tracing-config\",\n    \"relay-client-tracing.env\",\n  ]) {\n    if (releaseWorkflow.includes(marker)) {\n      throw new Error(`Release workflow must not inject external tracing credentials: ${marker}`);\n    }\n  }"
-    },
-    {
-      "path": "apps/server/src/serverLogger.test.ts",
-      "before": "\"keeps its service name while OTEL resource attributes add dimensions\"",
-      "after": "\"keeps OTEL resource attributes local with a configured logs exporter\""
-    },
-    {
-      "path": "apps/server/src/serverLogger.test.ts",
-      "before": "      assert.lengthOf(requests, 1);\n      const body = requests[0]?.body ?? \"\";\n      assert.include(body, '\"stringValue\":\"t3code-server\"');\n      assert.include(body, \"deployment.environment.name\");\n      assert.include(body, '\"key\":\"service.namespace\",\"value\":{\"stringValue\":\"t3code\"}');\n      assert.notInclude(body, \"renamed\");",
-      "after": "      assert.lengthOf(requests, 0);"
-    },
-    {
-      "path": "apps/desktop/src/app/DesktopObservability.test.ts",
-      "before": "\"exports to an OTEL endpoint over Settings, with its own headers and protocol\"",
-      "after": "\"keeps logs local with OTEL and Settings configured\""
-    },
-    {
-      "path": "apps/desktop/src/app/DesktopObservability.test.ts",
-      "before": "      assert.lengthOf(requests, 1);\n      const [request] = requests;\n      assert.strictEqual(request?.url, \"https://collector.example.com/v1/logs\");\n      assert.strictEqual(request?.headers[\"x-otel\"], \"desktop\");\n      assert.strictEqual(request?.headers[\"x-scope\"], undefined);\n      assert.strictEqual(request?.headers[\"content-type\"], \"application/json\");",
-      "after": "      assert.lengthOf(requests, 0);"
-    },
-    {
-      "path": "apps/desktop/src/app/DesktopObservability.test.ts",
-      "before": "\"keeps its service name while OTEL resource attributes add dimensions\"",
-      "after": "\"keeps OTEL resource attributes local with a configured logs exporter\""
-    },
-    {
-      "path": "apps/desktop/src/app/DesktopObservability.test.ts",
-      "before": "      assert.lengthOf(requests, 1);\n      const body = requests[0]?.body ?? \"\";\n      assert.include(body, '\"stringValue\":\"t3code-desktop\"');\n      assert.include(body, \"deployment.environment.name\");\n      assert.include(body, '\"key\":\"service.namespace\",\"value\":{\"stringValue\":\"t3code\"}');\n      assert.notInclude(body, \"renamed\");",
-      "after": "      assert.lengthOf(requests, 0);"
-    },
-    {
-      "path": "apps/desktop/src/app/DesktopObservability.test.ts",
-      "before": "\"exports kill switch warnings through the configured logger\"",
-      "after": "\"keeps kill switch warnings local with a configured logger\""
-    },
-    {
-      "path": "apps/desktop/src/app/DesktopObservability.test.ts",
-      "before": "      assert.include(requests[0]?.body ?? \"\", \"OTEL_SDK_DISABLED=1 was read as false\");",
-      "after": "      assert.lengthOf(requests, 0);"
-    },
-    {
-      "path": "apps/server/src/telemetry/AnalyticsService.ts",
-      "before": "import * as HostProcess from \"@t3tools/shared/HostProcess\";\n",
-      "after": "import { allowAnalyticsExport } from \"@t3tools/shared/t2Analytics\";\nimport * as HostProcess from \"@t3tools/shared/HostProcess\";\n"
-    },
-    {
-      "path": "apps/server/src/telemetry/AnalyticsService.ts",
-      "before": "export const make = Effect.gen(function* () {\n",
-      "after": "export const make = Effect.gen(function* () {\n  if (!allowAnalyticsExport()) {\n    return AnalyticsService.of({ record: () => Effect.void, flush: Effect.void });\n  }\n"
-    },
-    {
-      "path": "apps/server/src/telemetry/AnalyticsService.test.ts",
-      "before": "interface RecordedBatchBody {\n  readonly batch: ReadonlyArray<{\n    readonly event?: string;\n    readonly properties?: {\n      readonly index?: number;\n      readonly clientType?: string;\n      readonly serverOs?: string;\n      readonly serverArch?: string;\n      readonly serverAppVersion?: string;\n      readonly serverMode?: string;\n      readonly t3CodeVersion?: string;\n    };\n  }>;\n}\n\n",
-      "after": ""
-    },
-    {
-      "path": "apps/server/src/telemetry/AnalyticsService.test.ts",
-      "before": "a batch that keeps failing is retried with the same uuids, then dropped",
-      "after": "does not export or retry batches even when analytics is enabled"
-    },
-    {
-      "path": "apps/server/src/telemetry/AnalyticsService.test.ts",
-      "before": "        assert.equal(batches.length, 5, failure);\n        const uuids = batches.map((batch) => batch.map((event) => event.uuid).join(\",\"));\n        assert.equal(new Set(uuids).size, 1, `${failure}: every retry carries the same uuids`);\n        assert.equal(new Set(batches[0]?.map((event) => event.uuid)).size, 20, failure);",
-      "after": "        assert.deepEqual(batches, [], failure);"
-    },
-    {
-      "path": "apps/server/src/telemetry/AnalyticsService.test.ts",
-      "before": "flush drains all buffered events across multiple batches",
-      "after": "ignores attempts to enable analytics and flush sensitive event properties"
-    },
-    {
-      "path": "apps/server/src/telemetry/AnalyticsService.test.ts",
-      "before": "yield* analytics.record(\"test.flush.drain\", { index });",
-      "after": "yield* analytics.record(\"test.flush.drain\", { index, sourceCode: \"company secret\" });"
-    },
-    {
-      "path": "apps/server/src/telemetry/AnalyticsService.test.ts",
-      "before": "      const batchRequests = capturedRequests.filter(\n        (request): request is RecordedBatchRequest & { readonly body: RecordedBatchBody } =>\n          Array.isArray(request.body?.batch),\n      );\n      assert.equal(batchRequests.length, 3);\n      assert.equal(\n        batchRequests.every(\n          (request) => request.path.endsWith(\"/batch/\") || request.path.endsWith(\"/batch\"),\n        ),\n        true,\n      );\n      const deliveredIndexes = batchRequests.flatMap((request) =>\n        request.body.batch\n          .filter((event) => event.event === \"test.flush.drain\")\n          .map((event) => event.properties?.index)\n          .filter((index): index is number => typeof index === \"number\"),\n      );\n\n      const sorted = deliveredIndexes.toSorted((a, b) => a - b);\n      assert.equal(sorted.length, 45);\n      assert.deepEqual(\n        sorted,\n        Array.from({ length: 45 }, (_, index) => index),\n      );\n      assert.equal(\n        batchRequests.every((request) =>\n          request.body.batch.every((event) => event.properties?.clientType === \"cli-web-client\"),\n        ),\n        true,\n      );\n      assert.equal(\n        batchRequests.every((request) =>\n          request.body.batch.every(\n            (event) =>\n              event.properties?.serverOs === \"Linux\" &&\n              event.properties.serverArch === \"arm64\" &&\n              event.properties.serverAppVersion === event.properties.t3CodeVersion &&\n              event.properties.serverMode === \"web\",\n          ),\n        ),\n        true,\n      );",
-      "after": "      assert.deepEqual(capturedRequests, []);"
-    },
-    {
-      "path": "apps/server/src/http.test.ts",
-      "before": "import { HttpClient, HttpClientRequest, HttpRouter, HttpServerResponse } from \"effect/http\";",
-      "after": "import {\n  FetchHttpClient,\n  HttpClient,\n  HttpClientRequest,\n  HttpRouter,\n  HttpServerResponse,\n} from \"effect/http\";"
-    },
-    {
-      "path": "apps/server/src/http.test.ts",
-      "before": "import { ORCHESTRATION_PROTOCOL_HEADER } from \"@t3tools/contracts\";",
-      "after": "import {\n  AuthOrchestrationOperateScope,\n  AuthSessionId,\n  ORCHESTRATION_PROTOCOL_HEADER,\n} from \"@t3tools/contracts\";\nimport type { TraceRecord } from \"@t3tools/shared/observability\";\nimport { OtlpSerialization } from \"effect/observability\";\nimport * as EnvironmentAuth from \"./auth/EnvironmentAuth.ts\";\nimport * as BrowserTraceCollector from \"./observability/BrowserTraceCollector.ts\";"
-    },
-    {
-      "path": "apps/server/src/http.test.ts",
-      "before": "describe(\"untraced requests\", () => {",
-      "after": "it.effect(\"keeps browser traces local with JSON and protobuf collectors configured\", () =>\n  Effect.gen(function* () {\n    const config = yield* ServerConfig.ServerConfig;\n    for (const serializationLayer of [\n      OtlpSerialization.layerJson,\n      OtlpSerialization.layerProtobuf,\n    ]) {\n      const records: Array<TraceRecord> = [];\n      const fetchFn = vi.fn<typeof fetch>(async () => new Response(null, { status: 204 }));\n      const appLayer = ServerHttp.layerOtlpTracesProxyRoute.pipe(\n        Layer.provideMerge(\n          ServerConfig.layer({ ...config, otlpTracesUrl: \"https://collector.invalid/v1/traces\" }),\n        ),\n        Layer.provideMerge(serializationLayer),\n        Layer.provideMerge(\n          Layer.mock(EnvironmentAuth.EnvironmentAuth, {\n            authenticateHttpRequest: () =>\n              Effect.succeed({\n                sessionId: AuthSessionId.make(\"privacy-test\"),\n                subject: \"privacy-test\",\n                method: \"bearer-access-token\",\n                scopes: [AuthOrchestrationOperateScope],\n              }),\n          }),\n        ),\n        Layer.provideMerge(\n          Layer.succeed(BrowserTraceCollector.BrowserTraceCollector, {\n            record: (incoming) =>\n              Effect.sync(() => {\n                records.push(...incoming);\n              }),\n          }),\n        ),\n        Layer.provideMerge(\n          FetchHttpClient.layer.pipe(\n            Layer.provideMerge(Layer.succeed(FetchHttpClient.Fetch, fetchFn)),\n          ),\n        ),\n      );\n      const { handler } = yield* Effect.acquireRelease(\n        Effect.sync(() => HttpRouter.toWebHandler(appLayer, { disableLogger: true })),\n        ({ dispose }) => Effect.promise(dispose),\n      );\n      const payload = {\n        resourceSpans: [\n          {\n            resource: {\n              attributes: [{ key: \"service.name\", value: { stringValue: \"t3code-web\" } }],\n            },\n            scopeSpans: [\n              {\n                scope: { name: \"privacy-test\" },\n                spans: [\n                  {\n                    traceId: \"11111111111111111111111111111111\",\n                    spanId: \"2222222222222222\",\n                    name: \"enterprise-source\",\n                    kind: 1,\n                    startTimeUnixNano: \"1000000\",\n                    endTimeUnixNano: \"2000000\",\n                    attributes: [{ key: \"code\", value: { stringValue: \"company secret\" } }],\n                    events: [],\n                    links: [],\n                    status: { code: 1 },\n                    flags: 1,\n                  },\n                ],\n              },\n            ],\n          },\n        ],\n      };\n      const response = yield* Effect.promise(() =>\n        handler(\n          new Request(\"http://t3.test/api/observability/v1/traces\", {\n            method: \"POST\",\n            headers: { \"content-type\": \"application/json\" },\n            body: JSON.stringify(payload),\n          }),\n        ),\n      );\n      expect(response.status).toBe(204);\n      expect(fetchFn).not.toHaveBeenCalled();\n      expect(records).toHaveLength(1);\n      expect(records[0]?.name).toBe(\"enterprise-source\");\n      expect(records[0]?.attributes).toEqual({ code: \"company secret\" });\n    }\n  }).pipe(\n    Effect.provide(\n      ServerConfig.layerTest(process.cwd(), { prefix: \"t2-browser-traces-\" }).pipe(\n        Layer.provideMerge(NodeServices.layer),\n      ),\n    ),\n    Effect.scoped,\n  ),\n);\n\ndescribe(\"untraced requests\", () => {"
+      "path": "scripts/install.sh",
+      "before": "T3CODE_CHANNEL=stable (the default)",
+      "after": "T3CODE_CHANNEL=nightly (the default)"
     },
     {
       "path": "scripts/notify-discord-release.test.ts",
@@ -441,119 +371,9 @@
       "after": "\"Discord release CLI\""
     },
     {
-      "path": "packages/shared/src/path.ts",
-      "before": "export function resolveWorkspaceFilePath(path: string, workspaceRoot: string): string {\n  if (isAbsolutePath(path) || path.startsWith(\"~/\") || path.startsWith(\"~\\\\\")) return path;\n  const base = workspaceRoot.replace(/[/\\\\]+$/, \"\");\n  return isWindowsAbsolutePath(workspaceRoot)\n    ? `${base}\\\\${path.replaceAll(\"/\", \"\\\\\")}`\n    : `${base}/${path}`;\n",
-      "after": "export function resolveWorkspaceFilePath(path: string, workspaceRoot: string): string {\n  if (isAbsolutePath(path) || path.startsWith(\"~/\") || path.startsWith(\"~\\\\\")) return path;\n  let end = workspaceRoot.length;\n  while (end > 0 && (workspaceRoot[end - 1] === \"/\" || workspaceRoot[end - 1] === \"\\\\\")) end -= 1;\n  const base = workspaceRoot.slice(0, end);\n  return isWindowsAbsolutePath(workspaceRoot)\n    ? `${base}\\\\${path.replaceAll(\"/\", \"\\\\\")}`\n    : `${base}/${path}`;\n"
-    },
-    {
-      "path": "packages/shared/src/path.test.ts",
-      "before": "} from \"./path.ts\";\n\ndescribe(\"path helpers\", () => {\n  it.each([\n    [\"report:123\", \"/workspace\", \"/workspace/report:123\"],\n    [\"/workspace/report:12:3\", \"/other\", \"/workspace/report:12:3\"],\n",
-      "after": "} from \"./path.ts\";\n\ndescribe(\"path helpers\", () => {\n  it(\"preserves long separator runs inside a workspace root and trims only its suffix\", () => {\n    const root = `/${\"/\\\\\".repeat(10_000)}repo`;\n    expect(resolveWorkspaceFilePath(\"src/file.ts\", `${root}/\\\\/`)).toBe(`${root}/src/file.ts`);\n    const windowsRoot = `C:\\\\${\"/\\\\\".repeat(10_000)}repo`;\n    expect(resolveWorkspaceFilePath(\"src/file.ts\", `${windowsRoot}/\\\\/`)).toBe(\n      `${windowsRoot}\\\\src\\\\file.ts`,\n    );\n  });\n\n  it.each([\n    [\"report:123\", \"/workspace\", \"/workspace/report:123\"],\n    [\"/workspace/report:12:3\", \"/other\", \"/workspace/report:12:3\"],\n"
-    },
-    {
-      "path": "packages/source-control-gitcafe/src/server/gitCafeHosts.ts",
-      "before": "\nexport function gitCafeRepositoryPath(path: string): string | null {\n  const repository = path\n    .trim()\n    .replace(/\\/+$/u, \"\")\n    .replace(/\\.git$/u, \"\");\n  return REPOSITORY.test(repository) ? repository : null;\n}\n\n",
-      "after": "\nexport function gitCafeRepositoryPath(path: string): string | null {\n  const trimmed = path.trim();\n  let end = trimmed.length;\n  while (end > 0 && trimmed[end - 1] === \"/\") end -= 1;\n  const repository = trimmed.slice(0, end).replace(/\\.git$/u, \"\");\n  return REPOSITORY.test(repository) ? repository : null;\n}\n\n"
-    },
-    {
-      "path": "packages/source-control-gitcafe/src/server/gitCafeHosts.test.ts",
-      "before": "import * as GitCafeHosts from \"./gitCafeHosts.ts\";\n\ndescribe(\"gitCafeHosts\", () => {\n  it(\"knows exactly the production and staging hosts\", () => {\n    assert.deepStrictEqual([...GitCafeHosts.GITCAFE_HOSTS], [\"git.cafe\", \"staging.git.cafe\"]);\n    assert.isTrue(GitCafeHosts.isGitCafeHost(\"Git.Cafe\"));\n",
-      "after": "import * as GitCafeHosts from \"./gitCafeHosts.ts\";\n\ndescribe(\"gitCafeHosts\", () => {\n  it(\"rejects long interior slash runs and accepts trailing slashes after a repository\", () => {\n    const slashes = \"/\".repeat(20_000);\n    assert.isNull(GitCafeHosts.gitCafeRepositoryPath(`team/${slashes}project`));\n    assert.strictEqual(\n      GitCafeHosts.gitCafeRepositoryPath(`team/project.git${slashes}`),\n      \"team/project\",\n    );\n    assert.isNull(GitCafeHosts.gitCafeRepositoryPath(slashes));\n  });\n\n  it(\"knows exactly the production and staging hosts\", () => {\n    assert.deepStrictEqual([...GitCafeHosts.GITCAFE_HOSTS], [\"git.cafe\", \"staging.git.cafe\"]);\n    assert.isTrue(GitCafeHosts.isGitCafeHost(\"Git.Cafe\"));\n"
-    },
-    {
-      "path": "packages/client-runtime/src/pullRequestMarkdown.ts",
-      "before": "  // Blank lines around a run are dropped, but never leading spaces: four of them open an\n  // indented code block, so trimming a run would silently turn code into prose.\n  const flushMarkdown = () => {\n    const text = markdown.join(\"\\n\").replace(/^\\n+/u, \"\").replace(/\\s+$/u, \"\");\n    markdown.length = 0;\n    if (text.trim().length > 0) {\n      segments.push({ id: `markdown:${segments.length}`, kind: \"markdown\", text });\n",
-      "after": "  // Blank lines around a run are dropped, but never leading spaces: four of them open an\n  // indented code block, so trimming a run would silently turn code into prose.\n  const flushMarkdown = () => {\n    const text = markdown.join(\"\\n\").replace(/^\\n+/u, \"\").trimEnd();\n    markdown.length = 0;\n    if (text.trim().length > 0) {\n      segments.push({ id: `markdown:${segments.length}`, kind: \"markdown\", text });\n"
-    },
-    {
-      "path": "packages/client-runtime/src/pullRequestMarkdown.test.ts",
-      "before": "import { splitPullRequestBody } from \"./pullRequestMarkdown.ts\";\n\ndescribe(\"pull request body segmentation\", () => {\n  it(\"keeps a plain body as a single markdown run\", () => {\n    expect(splitPullRequestBody(\"## What changed\\n\\nSome prose.\")).toEqual([\n      { id: \"markdown:0\", kind: \"markdown\", text: \"## What changed\\n\\nSome prose.\" },\n",
-      "after": "import { splitPullRequestBody } from \"./pullRequestMarkdown.ts\";\n\ndescribe(\"pull request body segmentation\", () => {\n  it(\"preserves long interior whitespace and leading code indentation while trimming the end\", () => {\n    const body = `    text${\"\\t\".repeat(20_000)}tail`;\n    expect(splitPullRequestBody(`\\n\\n${body}\\t\\u00a0\\n`)).toEqual([\n      { id: \"markdown:0\", kind: \"markdown\", text: body },\n    ]);\n  });\n\n  it(\"keeps a plain body as a single markdown run\", () => {\n    expect(splitPullRequestBody(\"## What changed\\n\\nSome prose.\")).toEqual([\n      { id: \"markdown:0\", kind: \"markdown\", text: \"## What changed\\n\\nSome prose.\" },\n"
-    },
-    {
-      "path": "apps/mobile/src/lib/markdownDocument.ts",
-      "before": "      if (!src) return \"\";\n      const alt = (attribute(tag, \"alt\") ?? \"\").replace(/[\\\\[\\]&]/g, \"\\\\$&\");\n      const href = src\n        .replace(/&/g, \"\\\\&\")\n        .replace(/</g, \"%3C\")\n        .replace(/>/g, \"%3E\")\n        .replace(/\\n/g, \"\");\n",
-      "after": "      if (!src) return \"\";\n      const alt = (attribute(tag, \"alt\") ?? \"\").replace(/[\\\\[\\]&]/g, \"\\\\$&\");\n      const href = src\n        .replace(/[\\\\&]/g, \"\\\\$&\")\n        .replace(/</g, \"%3C\")\n        .replace(/>/g, \"%3E\")\n        .replace(/\\n/g, \"\");\n"
-    },
-    {
-      "path": "apps/mobile/src/lib/markdownHtml.test.ts",
-      "before": "import { markdownImageSources } from \"./markdownImageSources\";\n\ndescribe(\"HTML in native Markdown\", () => {\n  it(\"leaves code inside an HTML details block literal\", () => {\n    const content =\n      '<details>\\n<summary>Example</summary>\\n\\n```html\\n<img src=\"literal.png\">\\n```\\n\\nUse `<img>` here.\\n</details>';\n",
-      "after": "import { markdownImageSources } from \"./markdownImageSources\";\n\ndescribe(\"HTML in native Markdown\", () => {\n  it(\"preserves backslashes before entity-shaped query values in image URLs\", () => {\n    const markdown = '<img src=\"https://example.com/path\\\\&amp;lt;&amp;x=1\" alt=\"Example\">';\n    expect(markdownImageSources(markdown)).toEqual([\"https://example.com/path\\\\&lt;&x=1\"]);\n  });\n\n  it(\"leaves code inside an HTML details block literal\", () => {\n    const content =\n      '<details>\\n<summary>Example</summary>\\n\\n```html\\n<img src=\"literal.png\">\\n```\\n\\nUse `<img>` here.\\n</details>';\n"
-    },
-    {
-      "path": "packages/shared/src/composerContextReferences.ts",
-      "before": "export function toComposerContextId(producerId: string): ComposerContextId {\n  if (CONTEXT_ID_PATTERN.test(producerId)) return producerId as ComposerContextId;\n  const slug = producerId\n    .replace(/[^a-z0-9_-]+/gi, \"-\")\n    .replace(/^-+|-+$/g, \"\")\n    .slice(0, 48);\n  return `${slug || \"ctx\"}-${fnv1a64(producerId)}` as ComposerContextId;\n}\n",
-      "after": "export function toComposerContextId(producerId: string): ComposerContextId {\n  if (CONTEXT_ID_PATTERN.test(producerId)) return producerId as ComposerContextId;\n  const normalized = producerId.replace(/[^a-z0-9_-]+/gi, \"-\");\n  let start = 0;\n  let end = normalized.length;\n  while (start < end && normalized[start] === \"-\") start += 1;\n  while (end > start && normalized[end - 1] === \"-\") end -= 1;\n  const slug = normalized.slice(start, Math.min(end, start + 48));\n  return `${slug || \"ctx\"}-${fnv1a64(producerId)}` as ComposerContextId;\n}\n"
-    },
-    {
-      "path": "packages/shared/src/composerContextReferences.test.ts",
-      "before": "describe(\"toComposerContextId\", () => {\n",
-      "after": "describe(\"toComposerContextId\", () => {\n  it(\"preserves context identity while trimming long hyphen runs\", () => {\n    const hyphens = \"-\".repeat(20_000);\n    expect(toComposerContextId(`::prefix${hyphens}tail::`)).toBe(\n      `prefix${\"-\".repeat(42)}-addf8c470ff50102`,\n    );\n    expect(toComposerContextId(`::prefix${hyphens}::`)).toBe(\"prefix-3267e579e13a0bb0\");\n    expect(toComposerContextId(hyphens)).toBe(\"ctx-37635fa5e51522fc\");\n    expect(toComposerContextId(\"---\")).toBe(\"---\");\n    expect(toComposerContextId(\"::--_--::\")).toMatch(/^_-[0-9a-f]{16}$/);\n  });\n"
-    },
-    {
-      "path": "apps/server/src/telemetry/AnalyticsService.test.ts",
-      "before": "a batch the endpoint rejects is dropped without a retry",
-      "after": "does not send batches even to rejecting endpoints"
-    },
-    {
-      "path": "apps/server/src/telemetry/AnalyticsService.test.ts",
-      "before": "        assert.equal(batches.length, 1, `status ${status}`);",
-      "after": "        assert.deepEqual(batches, [], `status ${status}`);"
-    },
-    {
-      "path": "apps/server/src/telemetry/AnalyticsService.test.ts",
-      "before": "  it.effect(\"events carry the build's telemetry channel, or dev when none is set\", () =>\n    Effect.gen(function* () {\n      const channels = (batches: ReadonlyArray<ReadonlyArray<SentEvent>>) => [\n        ...new Set(batches.flat().map((event) => event.properties.telemetryChannel)),\n      ];\n      assert.deepEqual(channels(yield* sendForTenMinutes(respondWithStatus(204))), [\"dev\"]);\n\n      // Stands in for the value the bundler writes in at build time.\n      vi.stubGlobal(\"__T3CODE_TELEMETRY_CHANNEL__\", \"nightly\");\n      assert.deepEqual(channels(yield* sendForTenMinutes(respondWithStatus(204))), [\"nightly\"]);\n    }).pipe(Effect.ensuring(Effect.sync(() => vi.unstubAllGlobals()))),\n  );",
-      "after": "  it.effect(\"keeps default and nightly telemetry channels disabled\", () =>\n    Effect.gen(function* () {\n      assert.deepEqual(yield* sendForTenMinutes(respondWithStatus(204)), []);\n\n      vi.stubGlobal(\"__T3CODE_TELEMETRY_CHANNEL__\", \"nightly\");\n      assert.deepEqual(yield* sendForTenMinutes(respondWithStatus(204)), []);\n    }).pipe(Effect.ensuring(Effect.sync(() => vi.unstubAllGlobals()))),\n  );"
-    },
-    {
-      "path": "apps/web/src/components/desktopUpdate.logic.test.ts",
-      "before": "\"https://github.com/pingdotgg/t3code/releases/tag/v1.2.3\"",
-      "after": "\"https://github.com/shirubasoft/t2code/releases/tag/v1.2.3\""
-    },
-    {
-      "path": "apps/web/src/components/desktopUpdate.logic.test.ts",
-      "before": "    expect(getDesktopUpdateReleaseHistoryUrl(\"pingdotgg/t3code\")).toBe(\n      \"https://github.com/pingdotgg/t3code/releases\",\n    );",
-      "after": "    expect(getDesktopUpdateReleaseHistoryUrl(\"pingdotgg/t3code\")).toBe(\n      \"https://github.com/shirubasoft/t2code/releases\",\n    );"
-    },
-    {
-      "path": "apps/web/src/components/desktopUpdate.logic.test.ts",
-      "before": "getDesktopUpdateReleaseUrl(\"0.0.30\", \"pingdotgg/t3code\")",
-      "after": "getDesktopUpdateReleaseUrl(\"0.0.30\", \"shirubasoft/t2code\")"
-    },
-    {
-      "path": "apps/web/src/components/desktopUpdate.logic.test.ts",
-      "before": "getDesktopUpdateReleaseUrl(\"0.0.30-nightly.20260728.931\", \"pingdotgg/t3code\")",
-      "after": "getDesktopUpdateReleaseUrl(\"0.0.30-nightly.20260728.931\", \"shirubasoft/t2code\")"
-    },
-    {
-      "path": "apps/web/src/components/desktopUpdate.logic.test.ts",
-      "before": "getDesktopUpdateReleaseHistoryUrl(\"pingdotgg/t3code\")",
-      "after": "getDesktopUpdateReleaseHistoryUrl(\"shirubasoft/t2code\")"
-    },
-    {
-      "path": "apps/server/src/serverLogger.test.ts",
-      "before": "prints the full URL but keeps its token out of exported log records",
-      "after": "prints the full pairing URL locally without exporting log records"
-    },
-    {
-      "path": "apps/server/src/serverLogger.test.ts",
-      "before": "        const body = requests.map((request) => request.body).join(\"\\n\");\n        assert.include(body, \"Authentication required\");\n        assert.notInclude(body, pairingToken);",
-      "after": "        assert.lengthOf(requests, 0);"
-    },
-    {
-      "path": "packages/client-runtime/src/state/subagentRuntime.ts",
-      "before": "// Workflow scripts open with their `meta` export, after any leading comments.\nconst WORKFLOW_SCRIPT_START = /^\\s*(?:(?:\\/\\/[^\\n]*|\\/\\*[\\s\\S]*?\\*\\/)\\s*)*export\\s+const\\s+meta\\b/;\n",
-      "after": "// Workflow scripts open with their `meta` export, after any leading comments.\nconst WORKFLOW_SCRIPT_START = /^export\\s+const\\s+meta\\b/;\n\nfunction isWorkflowScriptText(text: string) {\n  let cursor = 0;\n  while (cursor < text.length) {\n    while (cursor < text.length && /\\s/u.test(text[cursor]!)) cursor += 1;\n    if (text.startsWith(\"//\", cursor)) {\n      cursor += 2;\n      while (cursor < text.length && !/[\\r\\n\\u2028\\u2029]/u.test(text[cursor]!)) cursor += 1;\n    } else if (text.startsWith(\"/*\", cursor)) {\n      const end = text.indexOf(\"*/\", cursor + 2);\n      if (end === -1) return false;\n      cursor = end + 2;\n    } else {\n      return WORKFLOW_SCRIPT_START.test(text.slice(cursor));\n    }\n  }\n  return false;\n}\n"
-    },
-    {
-      "path": "packages/client-runtime/src/state/subagentRuntime.ts",
-      "before": "  return (\n    message.role === \"user\" && (message.workflowScript ?? WORKFLOW_SCRIPT_START.test(message.text))\n  );",
-      "after": "  return message.role === \"user\" && (message.workflowScript ?? isWorkflowScriptText(message.text));"
-    },
-    {
-      "path": "packages/client-runtime/src/state/subagentRuntime.test.ts",
-      "before": "describe(\"resolveWorkflowOpening\", () => {\n",
-      "after": "describe(\"resolveWorkflowOpening\", () => {\n  it(\"recognizes workflow exports only after complete comments without rescanning their contents\", () => {\n    expect(\n      isWorkflowScriptMessage({ role: \"user\", text: \"// comment export const meta = {};\" }),\n    ).toBe(false);\n    expect(isWorkflowScriptMessage({ role: \"user\", text: \"// \".repeat(20_000) })).toBe(false);\n    const comments = \" /* comment */ // comment\\n\".repeat(10_000);\n    expect(\n      isWorkflowScriptMessage({ role: \"user\", text: `${comments}export const meta = {};` }),\n    ).toBe(true);\n    expect(isWorkflowScriptMessage({ role: \"user\", text: \"/* export const meta = {};\" })).toBe(\n      false,\n    );\n    expect(\n      isWorkflowScriptMessage({ role: \"user\", text: \"// comment\\r\\n\\texport const meta = {};\" }),\n    ).toBe(true);\n  });\n"
+      "path": "scripts/release-smoke.ts",
+      "before": "  NodeChildProcess.execFileSync(\n    process.execPath,\n    [\"--test\", NodePath.resolve(repoRoot, \".github/scripts/relay-state-output.test.cjs\")],\n    { stdio: \"inherit\" },\n  );",
+      "after": "  const releaseWorkflow = NodeFS.readFileSync(\n    NodePath.resolve(repoRoot, \".github/workflows/release.yml\"),\n    \"utf8\",\n  );\n  for (const marker of [\n    \"Read production relay tracing config\",\n    \"T3CODE_RELAY_CLIENT_OTLP_TRACES_\",\n    \"relay-client-tracing-config\",\n    \"relay-client-tracing.env\",\n  ]) {\n    if (releaseWorkflow.includes(marker)) {\n      throw new Error(`Release workflow must not inject external tracing credentials: ${marker}`);\n    }\n  }"
     }
   ],
   "files": [

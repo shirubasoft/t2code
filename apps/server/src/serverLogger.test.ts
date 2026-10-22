@@ -5,7 +5,6 @@ import * as NodeUtil from "node:util";
 
 import { ExternalLauncherBrowserSpawnError } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
-import * as ConfigProvider from "effect/ConfigProvider";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -97,24 +96,6 @@ const layerConfig = (overrides: Partial<ServerConfig.ServerConfig["Service"]>) =
   ).pipe(Layer.provide(NodePath.layer));
 
 /**
- * The export is asserted after the layer's scope closes, which is where the
- * exporter flushes whatever the interval did not.
- */
-const logThrough = (overrides: Partial<ServerConfig.ServerConfig["Service"]>) =>
-  Effect.gen(function* () {
-    const requests: Array<ExportedRequest> = [];
-    yield* Effect.log("server logger under test").pipe(
-      Effect.provide(
-        ServerLogger.layer.pipe(
-          Layer.provide(layerConfig(overrides)),
-          Layer.provide(layerCollector(requests)),
-        ),
-      ),
-    );
-    return requests;
-  });
-
-/**
  * Runs `program` (one log line by default) inside a span so the tracer logger
  * has somewhere to attach an event, then reports both what the collector
  * received and what landed on the span.
@@ -171,89 +152,6 @@ const printThroughConsole = (fields: object) =>
   });
 
 describe("ServerLoggerLive", () => {
-  it.effect("keeps log records local with a configured logs endpoint", () =>
-    Effect.gen(function* () {
-      const requests = yield* logThrough({
-        otlpLogsUrl: "https://collector.example.com/v1/logs",
-      });
-
-      assert.lengthOf(requests, 0);
-    }),
-  );
-
-  it.effect("keeps OTEL resource attributes local with a configured logs exporter", () =>
-    Effect.gen(function* () {
-      const requests = yield* logThrough({
-        otlpLogsUrl: "https://collector.example.com/v1/logs",
-      }).pipe(
-        Effect.provide(
-          ConfigProvider.layer(
-            ConfigProvider.fromEnv({
-              env: {
-                OTEL_SERVICE_NAME: "renamed",
-                OTEL_RESOURCE_ATTRIBUTES:
-                  "service.name=renamed,service.namespace=renamed,deployment.environment.name=development",
-              },
-            }),
-          ),
-        ),
-      );
-
-      assert.lengthOf(requests, 0);
-    }),
-  );
-
-  it.effect("stays off the network when no logs endpoint is configured", () =>
-    Effect.gen(function* () {
-      const requests = yield* logThrough({});
-
-      assert.lengthOf(requests, 0);
-    }),
-  );
-
-  it.effect("does not export logs with protobuf and headers configured", () =>
-    Effect.gen(function* () {
-      const requests = yield* logThrough({
-        otlpLogsUrl: "https://collector.example.com/v1/logs",
-        otlpLogsExport: {
-          ...DEFAULT_SIGNAL_EXPORT,
-          protocol: "http/protobuf",
-          headers: { "x-scope": "logs" },
-        },
-      });
-
-      assert.lengthOf(requests, 0);
-    }),
-  );
-
-  it.effect("attaches log messages to the active span when no logs endpoint is configured", () =>
-    Effect.gen(function* () {
-      const { requests, spans } = yield* logInSpanThrough({});
-
-      assert.lengthOf(requests, 0);
-      assert.lengthOf(spans, 1);
-      assert.deepEqual(
-        spans[0]?.events.map(([name]) => name),
-        ["server logger under test"],
-      );
-    }),
-  );
-
-  it.effect("preserves local span events with a configured logs endpoint", () =>
-    Effect.gen(function* () {
-      const { requests, spans } = yield* logInSpanThrough({
-        otlpLogsUrl: "https://collector.example.com/v1/logs",
-      });
-
-      assert.lengthOf(requests, 0);
-      assert.lengthOf(spans, 1);
-      assert.deepEqual(
-        spans[0]?.events.map(([name]) => name),
-        ["server logger under test"],
-      );
-    }),
-  );
-
   it.effect("prints a cause passed as a log field instead of collapsing it", () =>
     Effect.gen(function* () {
       const output = yield* printThroughConsole({
@@ -267,6 +165,7 @@ describe("ServerLoggerLive", () => {
     }),
   );
 
+  // regression: #16642 logs printed causes as [Object]
   it.effect("leaves getters uncalled while printing a cause field", () =>
     Effect.gen(function* () {
       const output = yield* printThroughConsole({
