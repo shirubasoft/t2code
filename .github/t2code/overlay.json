@@ -172,8 +172,8 @@
     },
     {
       "path": "apps/web/src/components/desktopUpdate.logic.test.ts",
-      "before": "    \"owner/repo?tab=notes\",\n  ])(\"falls back to upstream for an invalid configured repository: %s\", (repository) => {\n    expect(getDesktopUpdateReleaseHistoryUrl(repository)).toBe(\n      \"https://github.com/pingdotgg/t3code/releases\",\n    );\n    expect(getDesktopUpdateReleaseUrl(\"1.2.3\", repository)).toBe(\n      \"https://github.com/pingdotgg/t3code/releases/tag/v1.2.3\",\n    );\n  });\n});\n",
-      "after": "    \"owner/repo?tab=notes\",\n  ])(\"falls back to upstream for an invalid configured repository: %s\", (repository) => {\n    expect(getDesktopUpdateReleaseHistoryUrl(repository)).toBe(\n      \"https://github.com/shirubasoft/t2code/releases\",\n    );\n    expect(getDesktopUpdateReleaseUrl(\"1.2.3\", repository)).toBe(\n      \"https://github.com/shirubasoft/t2code/releases/tag/v1.2.3\",\n    );\n  });\n});\n"
+      "before": "  it.each([\"owner/repo/extra\", \"owner#notes/repo\", \"owner/repo?tab=notes\"])(\n    \"falls back to upstream for an invalid configured repository: %s\",\n    (repository) => {\n      expect(getDesktopUpdateReleaseHistoryUrl(repository)).toBe(\n        \"https://github.com/pingdotgg/t3code/releases\",\n      );\n      expect(getDesktopUpdateReleaseUrl(\"1.2.3\", repository)).toBe(\n        \"https://github.com/pingdotgg/t3code/releases/tag/v1.2.3\",\n      );\n    },\n  );\n",
+      "after": "  it.each([\"owner/repo/extra\", \"owner#notes/repo\", \"owner/repo?tab=notes\"])(\n    \"falls back to upstream for an invalid configured repository: %s\",\n    (repository) => {\n      expect(getDesktopUpdateReleaseHistoryUrl(repository)).toBe(\n        \"https://github.com/shirubasoft/t2code/releases\",\n      );\n      expect(getDesktopUpdateReleaseUrl(\"1.2.3\", repository)).toBe(\n        \"https://github.com/shirubasoft/t2code/releases/tag/v1.2.3\",\n      );\n    },\n  );\n"
     },
     {
       "path": "apps/web/src/components/desktopUpdate.logic.ts",
