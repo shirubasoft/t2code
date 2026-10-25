@@ -245,3 +245,20 @@ NodeTest.test("release assembly rejects non-Linux installers, archives and updat
     NodeAssert.ok(result.stderr.includes(`Unexpected Linux release asset: ${name}`), result.stderr);
   }
 });
+
+NodeTest.test("native CLI release builds follow the repository Node pin", () => {
+  const workflow = NodeFS.readFileSync(
+    new URL("../workflows/release-desktop.yml", import.meta.url),
+    "utf8",
+  );
+  NodeAssert.match(workflow, /node-version-file: package\.json/);
+  const cliStep = workflow
+    .split("      - name: Build CLI single-executable\n")[1]
+    ?.split("\n      - name: ")[0];
+  NodeAssert.ok(cliStep, "Missing native CLI build step");
+  const nodeVersion = JSON.parse(
+    NodeFS.readFileSync(new URL("../../package.json", import.meta.url), "utf8"),
+  ).engines.node;
+  const override = cliStep.match(/VP_NODE_VERSION:\s*["']?([0-9.]+)/)?.[1];
+  NodeAssert.equal(override ?? nodeVersion, nodeVersion);
+});
