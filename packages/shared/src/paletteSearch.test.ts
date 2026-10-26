@@ -3,6 +3,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   findSearchTokenRanges,
   foldSearchQuery,
+  messageSearchTokens,
   pickedQuery,
   rankMessageMatches,
   rankSearchGroups,
@@ -19,6 +20,22 @@ import {
 const NOW = Date.UTC(2026, 9, 23);
 const scoreMessageMatch = (text: string, query: string) => messageMatcher(query)(text);
 const DAY = 24 * 60 * 60 * 1000;
+
+describe("wrapping query quotes", () => {
+  it("keeps long interior quote runs and removes only the wrapping quotes", () => {
+    const interior = `alpha${'"'.repeat(8_000)}omega`;
+    expect(foldSearchQuery(`  \"'${interior}’\"  `)).toBe(interior);
+    expect(messageSearchTokens(`  \"'${interior}’\"  `).words).toEqual([interior]);
+    expect(foldSearchQuery('"'.repeat(8_000))).toBe("");
+    expect(messageSearchTokens('"'.repeat(8_000)).words).toEqual([]);
+  });
+
+  it("preserves quote-separated words and leading or trailing unquoted space", () => {
+    expect(foldSearchQuery("  alpha ' beta  ")).toBe("alpha ' beta");
+    expect(messageSearchTokens("  alpha ' beta  ").words).toEqual(["alpha", "'", "beta"]);
+    expect(foldSearchQuery("  ‘Alpha’   beta  ")).toBe("alpha' beta");
+  });
+});
 
 function thread(title: string, overrides: Partial<ThreadSearchSubject> = {}): ThreadSearchSubject {
   return { title, activityAt: NOW - 30 * DAY, ...overrides };

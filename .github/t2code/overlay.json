@@ -549,6 +549,26 @@
       "path": "scripts/install.test.ts",
       "before": "    const server = NodeHttp.createServer((request, response) => {\n      const url = new URL(request.url ?? \"/\", \"http://fixture\");\n      const body =\n        url.pathname === \"/pingdotgg/t3code/releases/latest\" &&\n        request.headers.accept === \"application/json\"\n          ? { tag_name: \"v1.2.3\" }\n          : url.pathname === \"/repos/pingdotgg/t3code/releases\"\n            ? { \"1\": nightlies, \"2\": [{ tag_name: `v${version}` }, { tag_name: \"v1.2.3\" }] }[\n                url.searchParams.get(\"page\") ?? \"\"\n              ]\n",
       "after": "    const server = NodeHttp.createServer((request, response) => {\n      const url = new URL(request.url ?? \"/\", \"http://fixture\");\n      const body =\n        url.pathname === \"/shirubasoft/t2code/releases/latest\" &&\n        request.headers.accept === \"application/json\"\n          ? { tag_name: \"v1.2.3\" }\n          : url.pathname === \"/repos/shirubasoft/t2code/releases\"\n            ? { \"1\": nightlies, \"2\": [{ tag_name: `v${version}` }, { tag_name: \"v1.2.3\" }] }[\n                url.searchParams.get(\"page\") ?? \"\"\n              ]\n"
+    },
+    {
+      "path": "packages/shared/src/paletteSearch.test.ts",
+      "before": "import {\n  findSearchTokenRanges,\n  foldSearchQuery,\n  pickedQuery,\n  rankMessageMatches,\n  rankSearchGroups,\n",
+      "after": "import {\n  findSearchTokenRanges,\n  foldSearchQuery,\n  messageSearchTokens,\n  pickedQuery,\n  rankMessageMatches,\n  rankSearchGroups,\n"
+    },
+    {
+      "path": "packages/shared/src/paletteSearch.test.ts",
+      "before": "const NOW = Date.UTC(2026, 9, 23);\nconst scoreMessageMatch = (text: string, query: string) => messageMatcher(query)(text);\nconst DAY = 24 * 60 * 60 * 1000;\n\nfunction thread(title: string, overrides: Partial<ThreadSearchSubject> = {}): ThreadSearchSubject {\n  return { title, activityAt: NOW - 30 * DAY, ...overrides };\n",
+      "after": "const NOW = Date.UTC(2026, 9, 23);\nconst scoreMessageMatch = (text: string, query: string) => messageMatcher(query)(text);\nconst DAY = 24 * 60 * 60 * 1000;\n\ndescribe(\"wrapping query quotes\", () => {\n  it(\"keeps long interior quote runs and removes only the wrapping quotes\", () => {\n    const interior = `alpha${'\"'.repeat(8_000)}omega`;\n    expect(foldSearchQuery(`  \\\"'${interior}’\\\"  `)).toBe(interior);\n    expect(messageSearchTokens(`  \\\"'${interior}’\\\"  `).words).toEqual([interior]);\n    expect(foldSearchQuery('\"'.repeat(8_000))).toBe(\"\");\n    expect(messageSearchTokens('\"'.repeat(8_000)).words).toEqual([]);\n  });\n\n  it(\"preserves quote-separated words and leading or trailing unquoted space\", () => {\n    expect(foldSearchQuery(\"  alpha ' beta  \")).toBe(\"alpha ' beta\");\n    expect(messageSearchTokens(\"  alpha ' beta  \").words).toEqual([\"alpha\", \"'\", \"beta\"]);\n    expect(foldSearchQuery(\"  ‘Alpha’   beta  \")).toBe(\"alpha' beta\");\n  });\n});\n\nfunction thread(title: string, overrides: Partial<ThreadSearchSubject> = {}): ThreadSearchSubject {\n  return { title, activityAt: NOW - 30 * DAY, ...overrides };\n"
+    },
+    {
+      "path": "packages/shared/src/paletteSearch.ts",
+      "before": "}\n\n// Quotes around a pasted query: \"fix sidebar\".\nconst WRAPPING_QUOTES = /^\\s*[\"'`“”‘’]+|[\"'`“”‘’]+\\s*$/g;\n\n/** Folded, whitespace-collapsed query; empty when there is nothing to match. */\nexport function foldSearchQuery(query: string): string {\n  return foldInPlace(query.replace(WRAPPING_QUOTES, \"\").normalize(\"NFC\"))\n    .split(/\\s+/)\n    .filter((token) => token.length > 0)\n    .join(\" \");\n",
+      "after": "}\n\n// Quotes around a pasted query: \"fix sidebar\".\nconst WRAPPING_QUOTES = \"\\\"'`“”‘’\";\n\nfunction stripWrappingQuotes(query: string): string {\n  const quoteStart = query.length - query.trimStart().length;\n  let start = quoteStart;\n  while (start < query.length && WRAPPING_QUOTES.includes(query[start]!)) start++;\n  if (start === quoteStart) start = 0;\n  const quoteEnd = query.trimEnd().length;\n  let end = quoteEnd;\n  while (end > start && WRAPPING_QUOTES.includes(query[end - 1]!)) end--;\n  if (end === quoteEnd) end = query.length;\n  return query.slice(start, end);\n}\n\n/** Folded, whitespace-collapsed query; empty when there is nothing to match. */\nexport function foldSearchQuery(query: string): string {\n  return foldInPlace(stripWrappingQuotes(query).normalize(\"NFC\"))\n    .split(/\\s+/)\n    .filter((token) => token.length > 0)\n    .join(\" \");\n"
+    },
+    {
+      "path": "packages/shared/src/paletteSearch.ts",
+      "before": "  /** Every token, in the order typed. */\n  readonly words: ReadonlyArray<string>;\n} {\n  const tokens = query\n    .replace(WRAPPING_QUOTES, \"\")\n    // The index stores apostrophes straight, as `indexedMessageText` writes them.\n    .replace(CURLY_APOSTROPHES, \"'\")\n    .normalize(\"NFC\")\n",
+      "after": "  /** Every token, in the order typed. */\n  readonly words: ReadonlyArray<string>;\n} {\n  const tokens = stripWrappingQuotes(query)\n    // The index stores apostrophes straight, as `indexedMessageText` writes them.\n    .replace(CURLY_APOSTROPHES, \"'\")\n    .normalize(\"NFC\")\n"
     }
   ],
   "files": [

@@ -132,11 +132,23 @@ function prepareSearchField(source: string): SearchField {
 }
 
 // Quotes around a pasted query: "fix sidebar".
-const WRAPPING_QUOTES = /^\s*["'`“”‘’]+|["'`“”‘’]+\s*$/g;
+const WRAPPING_QUOTES = "\"'`“”‘’";
+
+function stripWrappingQuotes(query: string): string {
+  const quoteStart = query.length - query.trimStart().length;
+  let start = quoteStart;
+  while (start < query.length && WRAPPING_QUOTES.includes(query[start]!)) start++;
+  if (start === quoteStart) start = 0;
+  const quoteEnd = query.trimEnd().length;
+  let end = quoteEnd;
+  while (end > start && WRAPPING_QUOTES.includes(query[end - 1]!)) end--;
+  if (end === quoteEnd) end = query.length;
+  return query.slice(start, end);
+}
 
 /** Folded, whitespace-collapsed query; empty when there is nothing to match. */
 export function foldSearchQuery(query: string): string {
-  return foldInPlace(query.replace(WRAPPING_QUOTES, "").normalize("NFC"))
+  return foldInPlace(stripWrappingQuotes(query).normalize("NFC"))
     .split(/\s+/)
     .filter((token) => token.length > 0)
     .join(" ");
@@ -439,8 +451,7 @@ export function messageSearchTokens(query: string): {
   /** Every token, in the order typed. */
   readonly words: ReadonlyArray<string>;
 } {
-  const tokens = query
-    .replace(WRAPPING_QUOTES, "")
+  const tokens = stripWrappingQuotes(query)
     // The index stores apostrophes straight, as `indexedMessageText` writes them.
     .replace(CURLY_APOSTROPHES, "'")
     .normalize("NFC")
