@@ -6,35 +6,10 @@ import * as Layer from "effect/Layer";
 import * as TestClock from "effect/testing/TestClock";
 
 import * as ServerConfig from "../config.ts";
+import * as ProcessGroupMetrics from "./ProcessGroupMetrics.ts";
 import * as ResourceTelemetry from "./ResourceTelemetry.ts";
-import { groupProcesses, layer } from "./ProcessGroupMetrics.ts";
 
-it.effect("does not sample process groups for a configured external metrics collector", () => {
-  let samples = 0;
-  return Effect.gen(function* () {
-    yield* Layer.build(layer);
-    yield* TestClock.adjust("2 minutes");
-    assert.equal(samples, 0);
-  }).pipe(
-    Effect.provide(
-      Layer.mock(ResourceTelemetry.ResourceTelemetry)({
-        refresh: Effect.sync(() => {
-          samples += 1;
-        }).pipe(Effect.andThen(Effect.never)),
-      }),
-    ),
-    Effect.updateService(ServerConfig.ServerConfig, (config) => ({
-      ...config,
-      otlpMetricsUrl: "https://collector.invalid/v1/metrics",
-    })),
-    Effect.provide(
-      ServerConfig.layerTest(import.meta.dirname, { prefix: "t2-process-group-metrics-" }).pipe(
-        Layer.provide(NodeServices.layer),
-      ),
-    ),
-    Effect.scoped,
-  );
-});
+const { groupProcesses } = ProcessGroupMetrics;
 
 const process = (
   pid: number,
@@ -89,4 +64,31 @@ describe("groupProcesses", () => {
       other: { residentBytes: 220_000, cpuPercent: 220, count: 3 },
     });
   });
+});
+
+it.effect("does not sample process groups for a configured external metrics collector", () => {
+  let samples = 0;
+  return Effect.gen(function* () {
+    yield* Layer.build(ProcessGroupMetrics.layer);
+    yield* TestClock.adjust("2 minutes");
+    assert.equal(samples, 0);
+  }).pipe(
+    Effect.provide(
+      Layer.mock(ResourceTelemetry.ResourceTelemetry)({
+        refresh: Effect.sync(() => {
+          samples += 1;
+        }).pipe(Effect.andThen(Effect.never)),
+      }),
+    ),
+    Effect.updateService(ServerConfig.ServerConfig, (config) => ({
+      ...config,
+      otlpMetricsUrl: "https://collector.invalid/v1/metrics",
+    })),
+    Effect.provide(
+      ServerConfig.layerTest(import.meta.dirname, { prefix: "t2-process-group-metrics-" }).pipe(
+        Layer.provide(NodeServices.layer),
+      ),
+    ),
+    Effect.scoped,
+  );
 });
