@@ -12,6 +12,13 @@ const codex = ProviderDriverKind.make("codex");
 const acpRegistry = ProviderDriverKind.make("acpRegistry");
 
 describe("providerInstanceInitials", () => {
+  it("removes long quoting apostrophes while retaining interior apostrophes", () => {
+    const quotes = "’".repeat(8_000);
+    expect(providerInstanceInitials(`${quotes}Codex${quotes} ${quotes}hub${quotes}`)).toBe("CH");
+    expect(providerInstanceInitials(`C${quotes}odex hub`)).toBe("CH");
+    expect(providerInstanceInitials(quotes)).toBe("");
+  });
+
   it("treats punctuation as a word break but keeps apostrophes between letters", () => {
     expect(providerInstanceInitials("Codex (hub)")).toBe("CH");
     expect(providerInstanceInitials("work_codex")).toBe("WC");

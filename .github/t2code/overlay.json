@@ -569,6 +569,21 @@
       "path": "packages/shared/src/paletteSearch.ts",
       "before": "  /** Every token, in the order typed. */\n  readonly words: ReadonlyArray<string>;\n} {\n  const tokens = query\n    .replace(WRAPPING_QUOTES, \"\")\n    // The index stores apostrophes straight, as `indexedMessageText` writes them.\n    .replace(CURLY_APOSTROPHES, \"'\")\n    .normalize(\"NFC\")\n",
       "after": "  /** Every token, in the order typed. */\n  readonly words: ReadonlyArray<string>;\n} {\n  const tokens = stripWrappingQuotes(query)\n    // The index stores apostrophes straight, as `indexedMessageText` writes them.\n    .replace(CURLY_APOSTROPHES, \"'\")\n    .normalize(\"NFC\")\n"
+    },
+    {
+      "path": "packages/client-runtime/src/state/providerInstanceDisplay.test.ts",
+      "before": "const acpRegistry = ProviderDriverKind.make(\"acpRegistry\");\n\ndescribe(\"providerInstanceInitials\", () => {\n  it(\"treats punctuation as a word break but keeps apostrophes between letters\", () => {\n    expect(providerInstanceInitials(\"Codex (hub)\")).toBe(\"CH\");\n    expect(providerInstanceInitials(\"work_codex\")).toBe(\"WC\");\n",
+      "after": "const acpRegistry = ProviderDriverKind.make(\"acpRegistry\");\n\ndescribe(\"providerInstanceInitials\", () => {\n  it(\"removes long quoting apostrophes while retaining interior apostrophes\", () => {\n    const quotes = \"’\".repeat(8_000);\n    expect(providerInstanceInitials(`${quotes}Codex${quotes} ${quotes}hub${quotes}`)).toBe(\"CH\");\n    expect(providerInstanceInitials(`C${quotes}odex hub`)).toBe(\"CH\");\n    expect(providerInstanceInitials(quotes)).toBe(\"\");\n  });\n\n  it(\"treats punctuation as a word break but keeps apostrophes between letters\", () => {\n    expect(providerInstanceInitials(\"Codex (hub)\")).toBe(\"CH\");\n    expect(providerInstanceInitials(\"work_codex\")).toBe(\"WC\");\n"
+    },
+    {
+      "path": "packages/client-runtime/src/state/providerInstanceDisplay.ts",
+      "before": "  return trimmedSnapshotName || kindLabel;\n}\n\nexport function providerInstanceInitials(label: string): string {\n  // Punctuation separates words so \"Codex (hub)\" reads CH, not C(. An apostrophe\n  // inside a word stays (\"Theo's Codex\" is TC); a quoting one does not\n",
+      "after": "  return trimmedSnapshotName || kindLabel;\n}\n\nfunction trimQuotingApostrophes(word: string): string {\n  let start = 0;\n  let end = word.length;\n  while (start < end && (word[start] === \"'\" || word[start] === \"’\")) start++;\n  while (end > start && (word[end - 1] === \"'\" || word[end - 1] === \"’\")) end--;\n  return word.slice(start, end);\n}\n\nexport function providerInstanceInitials(label: string): string {\n  // Punctuation separates words so \"Codex (hub)\" reads CH, not C(. An apostrophe\n  // inside a word stays (\"Theo's Codex\" is TC); a quoting one does not\n"
+    },
+    {
+      "path": "packages/client-runtime/src/state/providerInstanceDisplay.ts",
+      "before": "  const words = label\n    .replace(/[^\\P{P}'’]+/gu, \" \")\n    .split(/\\s+/u)\n    .map((word) => word.replace(/^['’]+|['’]+$/gu, \"\"))\n    .filter(Boolean);\n  if (words.length === 0) return \"\";\n  if (words.length === 1) return Array.from(words[0]!).slice(0, 2).join(\"\").toUpperCase();\n",
+      "after": "  const words = label\n    .replace(/[^\\P{P}'’]+/gu, \" \")\n    .split(/\\s+/u)\n    .map(trimQuotingApostrophes)\n    .filter(Boolean);\n  if (words.length === 0) return \"\";\n  if (words.length === 1) return Array.from(words[0]!).slice(0, 2).join(\"\").toUpperCase();\n"
     }
   ],
   "files": [
