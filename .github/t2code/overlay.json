@@ -584,6 +584,16 @@
       "path": "packages/client-runtime/src/state/providerInstanceDisplay.ts",
       "before": "  const words = label\n    .replace(/[^\\P{P}'’]+/gu, \" \")\n    .split(/\\s+/u)\n    .map((word) => word.replace(/^['’]+|['’]+$/gu, \"\"))\n    .filter(Boolean);\n  if (words.length === 0) return \"\";\n  if (words.length === 1) return Array.from(words[0]!).slice(0, 2).join(\"\").toUpperCase();\n",
       "after": "  const words = label\n    .replace(/[^\\P{P}'’]+/gu, \" \")\n    .split(/\\s+/u)\n    .map(trimQuotingApostrophes)\n    .filter(Boolean);\n  if (words.length === 0) return \"\";\n  if (words.length === 1) return Array.from(words[0]!).slice(0, 2).join(\"\").toUpperCase();\n"
+    },
+    {
+      "path": "packages/source-control-core/src/shared/definition.ts",
+      "before": "}\n\nexport function changeRequestUrlBelow(webUrl: string, route: string): string {\n  return `${webUrl.replace(/\\/+$/u, \"\")}/${route}`;\n}\n\n/** An HTTP remote on `host` names the server's web origin, port included; SSH remotes do not. */\n",
+      "after": "}\n\nexport function changeRequestUrlBelow(webUrl: string, route: string): string {\n  let end = webUrl.length;\n  while (end > 0 && webUrl[end - 1] === \"/\") end--;\n  return `${webUrl.slice(0, end)}/${route}`;\n}\n\n/** An HTTP remote on `host` names the server's web origin, port included; SSH remotes do not. */\n"
+    },
+    {
+      "path": "packages/source-control-gitlab/src/shared/definition.test.ts",
+      "before": "      }),\n    ).toBe(\"https://gitlab.com/group/sub/project/-/merge_requests/4\");\n  });\n});\n\ndescribe(\"GitLab remotes\", () => {\n",
+      "after": "      }),\n    ).toBe(\"https://gitlab.com/group/sub/project/-/merge_requests/4\");\n  });\n\n  it(\"removes trailing slashes without changing long interior slash runs\", () => {\n    const repositoryUrl = `https://gitlab.example/group/${\"/\".repeat(8_000)}repo`;\n    expect(\n      definition.changeRequestUrl({\n        host: \"gitlab.example\",\n        repository: \"group/repo\",\n        number: 4,\n        webUrl: `${repositoryUrl}///`,\n      }),\n    ).toBe(`${repositoryUrl}/-/merge_requests/4`);\n  });\n});\n\ndescribe(\"GitLab remotes\", () => {\n"
     }
   ],
   "files": [

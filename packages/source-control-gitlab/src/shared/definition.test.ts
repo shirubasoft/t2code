@@ -48,6 +48,18 @@ describe("GitLab change request URLs", () => {
       }),
     ).toBe("https://gitlab.com/group/sub/project/-/merge_requests/4");
   });
+
+  it("removes trailing slashes without changing long interior slash runs", () => {
+    const repositoryUrl = `https://gitlab.example/group/${"/".repeat(8_000)}repo`;
+    expect(
+      definition.changeRequestUrl({
+        host: "gitlab.example",
+        repository: "group/repo",
+        number: 4,
+        webUrl: `${repositoryUrl}///`,
+      }),
+    ).toBe(`${repositoryUrl}/-/merge_requests/4`);
+  });
 });
 
 describe("GitLab remotes", () => {

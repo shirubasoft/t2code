@@ -332,7 +332,9 @@ export function parseChangeRequestPath(url: URL, route: RegExp): ParsedChangeReq
 }
 
 export function changeRequestUrlBelow(webUrl: string, route: string): string {
-  return `${webUrl.replace(/\/+$/u, "")}/${route}`;
+  let end = webUrl.length;
+  while (end > 0 && webUrl[end - 1] === "/") end--;
+  return `${webUrl.slice(0, end)}/${route}`;
 }
 
 /** An HTTP remote on `host` names the server's web origin, port included; SSH remotes do not. */
