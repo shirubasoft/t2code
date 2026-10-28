@@ -60,8 +60,30 @@ function withoutFamily(name: string, nativeFamilies: ReadonlyArray<string>): str
 }
 
 function nonVersionWords(text: string): ReadonlyArray<string> {
-  return text
-    .replace(/\(.*?\)/g, " ")
+  const parts: string[] = [];
+  let start = 0;
+  let opening = -1;
+  // Unmatched opening parentheses must not restart a regexp at every position.
+  for (let index = 0; index < text.length; index++) {
+    const character = text[index];
+    if (character === "(" && opening === -1) {
+      opening = index;
+    } else if (character === ")" && opening !== -1) {
+      parts.push(text.slice(start, opening), " ");
+      start = index + 1;
+      opening = -1;
+    } else if (
+      character === "\r" ||
+      character === "\n" ||
+      character === "\u2028" ||
+      character === "\u2029"
+    ) {
+      opening = -1;
+    }
+  }
+  parts.push(text.slice(start));
+  return parts
+    .join("")
     .split(/[\s-]+/)
     .filter((word) => word.length > 0 && !VERSION.test(word));
 }

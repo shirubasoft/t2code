@@ -669,6 +669,16 @@
       "path": "apps/web/src/components/files/office/worker-rpc.ts",
       "before": "\n      if (!request) break;\n\n      const handler = handlers[request.method];\n      const controller = new AbortController();\n\n      state.current = { id: request.id, controller };\n\n      if (!handler) {\n        reply({\n          id: request.id,\n          ok: false,\n",
       "after": "\n      if (!request) break;\n\n      const handler = Object.hasOwn(handlers, request.method)\n        ? handlers[request.method]\n        : undefined;\n      const controller = new AbortController();\n\n      state.current = { id: request.id, controller };\n\n      if (typeof handler !== \"function\") {\n        reply({\n          id: request.id,\n          ok: false,\n"
+    },
+    {
+      "path": "packages/provider-core/src/modelShortName.test.ts",
+      "before": "  ] as const)(\"gives %s on families %j the short name %s\", (name, families, expected) => {\n    expect(modelShortName(name, families)).toBe(expected);\n  });\n});\n",
+      "after": "  ] as const)(\"gives %s on families %j the short name %s\", (name, families, expected) => {\n    expect(modelShortName(name, families)).toBe(expected);\n  });\n\n  it.each([\n    [\"3.1 (thinking)\", undefined],\n    [\"3.1 (thinking) Pro\", \"3.1 (thinking) Pro\"],\n    [\"3.1 (Pro (preview))\", \"3.1 (Pro (preview))\"],\n    [\"3.1 (Pro\\n)\", \"3.1 (Pro\\n)\"],\n    [\"3.1 (Pro\\r)\", \"3.1 (Pro\\r)\"],\n    [\"3.1 (Pro\\u2028)\", \"3.1 (Pro\\u2028)\"],\n    [\"3.1 (Pro\\u2029)\", \"3.1 (Pro\\u2029)\"],\n  ])(\"preserves parenthetical label behavior for %j\", (suffix, expected) => {\n    expect(modelShortName(`Gemini ${suffix}`, [\"Gemini \"])).toBe(expected);\n  });\n\n  it(\"retains long unmatched annotations\", () => {\n    const suffix = `3.1 ${\"(\".repeat(8_000)}`;\n    expect(modelShortName(`Gemini ${suffix}`, [\"Gemini \"])).toBe(suffix);\n  });\n});\n"
+    },
+    {
+      "path": "packages/provider-core/src/modelShortName.ts",
+      "before": "}\n\nfunction nonVersionWords(text: string): ReadonlyArray<string> {\n  return text\n    .replace(/\\(.*?\\)/g, \" \")\n    .split(/[\\s-]+/)\n    .filter((word) => word.length > 0 && !VERSION.test(word));\n}\n",
+      "after": "}\n\nfunction nonVersionWords(text: string): ReadonlyArray<string> {\n  const parts: string[] = [];\n  let start = 0;\n  let opening = -1;\n  // Unmatched opening parentheses must not restart a regexp at every position.\n  for (let index = 0; index < text.length; index++) {\n    const character = text[index];\n    if (character === \"(\" && opening === -1) {\n      opening = index;\n    } else if (character === \")\" && opening !== -1) {\n      parts.push(text.slice(start, opening), \" \");\n      start = index + 1;\n      opening = -1;\n    } else if (\n      character === \"\\r\" ||\n      character === \"\\n\" ||\n      character === \"\\u2028\" ||\n      character === \"\\u2029\"\n    ) {\n      opening = -1;\n    }\n  }\n  parts.push(text.slice(start));\n  return parts\n    .join(\"\")\n    .split(/[\\s-]+/)\n    .filter((word) => word.length > 0 && !VERSION.test(word));\n}\n"
     }
   ],
   "files": [
