@@ -95,6 +95,10 @@ jobs:
           node .github/t2code/overlay.mjs verify
           node scripts/update-release-package-versions.ts "$RELEASE_VERSION"
           vp run build:desktop
+      - name: Boot the built web client
+        run: |
+          node apps/web/node_modules/playwright/cli.js install --with-deps --only-shell chromium
+          node apps/web/scripts/verify-built-boot.ts
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: js-bundle

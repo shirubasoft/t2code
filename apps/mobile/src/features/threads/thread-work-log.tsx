@@ -33,9 +33,7 @@ import {
   type ReactNode,
 } from "react";
 import {
-  AccessibilityInfo,
   Animated as NativeAnimated,
-  AppState,
   type ColorValue,
   Easing,
   Pressable,
@@ -63,6 +61,7 @@ import { useMarkdownCodeHighlight } from "./markdownCodeHighlightState";
 import { AppText as Text } from "../../components/ui/AppText";
 import { T3Wordmark } from "../../components/T3Wordmark";
 import { BrowserAppIcon } from "./BrowserAppIcon";
+import { useAppActive, useReduceMotionEnabled } from "../../lib/appState";
 import { cn } from "../../lib/cn";
 import { THREAD_WORK_ROW_MIN_HEIGHT, type deriveThreadWorkLogSizing } from "../../lib/layout";
 import {
@@ -171,11 +170,14 @@ export function ThreadDisclosureChevron(props: {
   const expandedAngle = props.collapsedDirection === "right" ? 90 : 180;
   const rotation = useSharedValue(props.expanded ? expandedAngle : 0);
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- drives the chevron's Reanimated rotation value when the expanded state changes
   useLayoutEffect(() => {
-    rotation.value = withTiming(props.expanded ? expandedAngle : 0, {
-      duration: THREAD_DISCLOSURE_TRANSITION_MS,
-      reduceMotion: ReduceMotion.System,
-    });
+    rotation.set(
+      withTiming(props.expanded ? expandedAngle : 0, {
+        duration: THREAD_DISCLOSURE_TRANSITION_MS,
+        reduceMotion: ReduceMotion.System,
+      }),
+    );
   }, [expandedAngle, props.expanded, rotation]);
 
   const rotationStyle = useAnimatedStyle(() => ({
@@ -264,8 +266,8 @@ export function ShimmeringWorkContent(props: {
 }) {
   const [availableWidth, setAvailableWidth] = useState(0);
   const [textWidth, setTextWidth] = useState(0);
-  const [appIsActive, setAppIsActive] = useState(AppState.currentState === "active");
-  const [reducedMotion, setReducedMotion] = useState(true);
+  const appIsActive = useAppActive();
+  const reducedMotion = useReduceMotionEnabled();
   const screenIsFocused = useIsFocused();
   const progress = useAnimatedValue(0);
   const gradientId = `work-shimmer-${useId().replaceAll(":", "")}`;
@@ -274,25 +276,10 @@ export function ShimmeringWorkContent(props: {
     (props.showIcon ? SHIMMER_ICON_AND_GAP_WIDTH : 0) + Math.ceil(textWidth),
   );
 
-  useEffect(() => {
-    const subscription = AppState.addEventListener("change", (state) => {
-      setAppIsActive(state === "active");
-    });
-    return () => subscription.remove();
-  }, []);
-
-  useEffect(() => {
-    void AccessibilityInfo.isReduceMotionEnabled().then(setReducedMotion);
-    const subscription = AccessibilityInfo.addEventListener(
-      "reduceMotionChanged",
-      setReducedMotion,
-    );
-    return () => subscription.remove();
-  }, []);
-
   // Runs on React Native's native driver instead of Reanimated, whose
   // per-frame commits starve React's while commit pausing is disabled
   // (package.json). See docs/internals/performance-regressions.md.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- starts the native-driver shimmer loop while visible and active, and stops it on cleanup
   useEffect(() => {
     progress.setValue(0);
     if (contentWidth <= 0 || reducedMotion || !appIsActive || !screenIsFocused) return;
@@ -422,6 +409,8 @@ function workRowSymbolName(icon: ThreadFeedActivity["icon"]): WorkContentIcon {
       return { ios: "globe", android: "public" };
     case "search":
       return "magnifyingglass";
+    case "stop":
+      return "stop.fill";
     case "hammer":
       return { ios: "hammer", android: "construction" };
     case "lock":
@@ -685,6 +674,7 @@ function ThreadWorkGroupList(props: {
   });
   // Native ScrollView reports size after LegendList lays out rows. Use LegendList's JS size
   // so group height and row measurements settle in the same commit.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- subscribes to LegendList's totalSize state to report content height in the same commit
   useLayoutEffect(() => {
     const list = listRef.current;
     if (!list) return;
@@ -1231,18 +1221,20 @@ const ThreadWorkLogRow = function ThreadWorkLogRow(
                 call.argsText,
               ]
                 .filter((line) => Boolean(line))
-                .map((line, index) =>
-                  typeof line === "string" ? (
-                    <Text
-                      key={`${index}:${line}`}
-                      selectable
-                      className="font-mono text-2xs leading-normal text-foreground"
-                    >
-                      {line}
-                    </Text>
-                  ) : (
-                    line
-                  ),
+                .map(
+                  (line, index) =>
+                    /* oxlint-disable react/no-array-index-key -- Log lines are stateless positions within this output. */ typeof line ===
+                    "string" ? (
+                      <Text
+                        key={`${index}:${line}`}
+                        selectable
+                        className="font-mono text-2xs leading-normal text-foreground"
+                      >
+                        {line}
+                      </Text>
+                    ) : (
+                      line
+                    ) /* oxlint-enable react/no-array-index-key */,
                 )
             ) : fullDetail ? (
               <Text selectable className="font-mono text-2xs leading-normal text-foreground-muted">

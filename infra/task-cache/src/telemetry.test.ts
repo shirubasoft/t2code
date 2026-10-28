@@ -5,6 +5,11 @@ import * as NodePath from "node:path";
 import { expect, it, vi } from "vite-plus/test";
 import { flushTelemetry, observeSummaries, summarize } from "./telemetry.ts";
 
+vi.mock("node:fs", async (importOriginal) => {
+  const fs = await importOriginal<typeof import("node:fs")>();
+  return { ...fs, rmdirSync: vi.fn(fs.rmdirSync) };
+});
+
 const task = (result: unknown) => ({
   package_name: "@team/server",
   task_name: "typecheck",
@@ -79,4 +84,30 @@ it("excludes tasks that explicitly disable caching from the hit-rate denominator
       ],
     }),
   ).toEqual([{ package: "@team/server", task: "typecheck", source: "executed", savedMs: 0 }]);
+});
+
+it("leaves existing diagnostic events local across competing flush attempts", async () => {
+  const home = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "cache-handoff-"));
+  const endpoint = "https://cache.example/projects/t3code";
+  try {
+    const queue = NodePath.join(home, ".cache/t3-task-cache/telemetry");
+    const state = NodePath.join(home, ".config/t3-task-cache");
+    NodeFS.mkdirSync(queue, { recursive: true });
+    NodeFS.mkdirSync(state, { recursive: true });
+    NodeFS.writeFileSync(
+      NodePath.join(state, "credentials.json"),
+      JSON.stringify({ [endpoint]: { name: "alice", token: "secret-token" } }),
+    );
+    const file = NodePath.join(queue, "late.json");
+    const record = JSON.stringify({ endpoint, event: { id: "late" } });
+    NodeFS.writeFileSync(file, record);
+    using request = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(null, { status: 204 }));
+    await Promise.all([flushTelemetry(home, {}), flushTelemetry(home, {})]);
+    expect(request).not.toHaveBeenCalled();
+    expect(NodeFS.readFileSync(file, "utf8")).toBe(record);
+  } finally {
+    NodeFS.rmSync(home, { recursive: true, force: true });
+  }
 });
