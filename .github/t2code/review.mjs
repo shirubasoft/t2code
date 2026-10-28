@@ -16,7 +16,9 @@ const packagingPaths = new Set([
 function analyticsPath(path) {
   return (
     typeof path === "string" &&
-    /^(apps|packages|infra|scripts)\/[A-Za-z0-9_./-]+\.(?:ts|tsx|js|jsx|mjs|cjs)$/.test(path) &&
+    /^(apps|packages|infra|scripts)\/[A-Za-z0-9_./-]+\.(?:ts|tsx|mts|cts|js|jsx|mjs|cjs)$/.test(
+      path,
+    ) &&
     !path.split("/").some((part) => part === ".." || part === ".") &&
     !packagingPaths.has(path)
   );

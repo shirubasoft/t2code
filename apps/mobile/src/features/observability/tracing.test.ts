@@ -12,10 +12,37 @@ import * as Tracing from "./tracing";
 vi.mock("expo-constants", () => ({
   default: {
     expoConfig: {
-      extra: {},
+      extra: { relay: { url: "https://relay.example.test" }, appVariant: "production" },
     },
   },
 }));
+
+vi.mock("expo-observe", () => ({
+  Observe: {
+    configure: vi.fn(),
+    dispatchEvents: vi.fn().mockResolvedValue(undefined),
+    reportError: vi.fn(),
+  },
+}));
+vi.mock("../../persistence/imperative", () => ({
+  loadPreferences: vi.fn().mockResolvedValue({ crashReportsEnabled: false }),
+}));
+
+it("cannot enable crash delivery through the user preference", async () => {
+  vi.stubGlobal("__DEV__", false);
+  try {
+    const { Observe } = await import("expo-observe");
+    const { crashReportingAvailable, setCrashReportsEnabled } = await import("./observe");
+    await setCrashReportsEnabled(true);
+    expect(crashReportingAvailable).toBe(false);
+    expect(Observe.configure).toHaveBeenLastCalledWith(
+      expect.objectContaining({ dispatchingEnabled: false }),
+    );
+    expect(Observe.dispatchEvents).not.toHaveBeenCalled();
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
 
 it.effect("preserves application failures without exporting them", () => {
   const fetchFn = vi.fn<typeof fetch>(async () => new Response(null, { status: 202 }));
@@ -27,6 +54,7 @@ it.effect("preserves application failures without exporting them", () => {
     },
     {
       appVariant: "test",
+      serviceInstanceId: "test-instance",
       serviceVersion: "1.2.3",
     },
   ).pipe(Layer.provide(layerRemoteHttpClient(fetchFn)));

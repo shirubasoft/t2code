@@ -1,6 +1,7 @@
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
+import * as Clock from "effect/Clock";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -65,6 +66,24 @@ const respondWithStatus =
   (request) =>
     Effect.succeed(HttpClientResponse.fromWeb(request, new Response(null, { status })));
 
+/**
+ * Answers 503 for `minutes` after the first send, then 204. `answers` holds each
+ * answer with its time in ms after the first send (the test clock runs on across tests).
+ */
+const failingFor = (minutes: number) => {
+  const answers: Array<{ readonly at: number; readonly status: number }> = [];
+  let firstSend: number | undefined;
+  const respond: Respond = (request) =>
+    Effect.flatMap(Clock.currentTimeMillis, (now) => {
+      firstSend ??= now;
+      const at = now - firstSend;
+      const status = at < minutes * 60_000 ? 503 : 204;
+      answers.push({ at, status });
+      return respondWithStatus(status)(request);
+    });
+  return { respond, answers };
+};
+
 const recordTwentyEvents = Effect.gen(function* () {
   const analytics = yield* AnalyticsService.AnalyticsService;
   for (let index = 0; index < 20; index += 1) {
@@ -73,11 +92,12 @@ const recordTwentyEvents = Effect.gen(function* () {
 });
 
 /**
- * Runs `record` (20 events by default), then lets ten minutes of background
+ * Runs `record` (20 events by default), then lets `minutes` of background
  * flushes run against a client that answers every send with `respond`.
  * Returns the sent batches.
  */
-const sendForTenMinutes = (
+const sendFor = (
+  minutes: number,
   respond: Respond,
   record: Effect.Effect<
     void,
@@ -122,7 +142,7 @@ const sendForTenMinutes = (
 
     yield* Effect.gen(function* () {
       yield* record;
-      for (let second = 0; second < 600; second += 1) {
+      for (let second = 0; second < minutes * 60; second += 1) {
         yield* TestClock.adjust("1 second");
       }
     }).pipe(Effect.provide(runtimeLayer));
@@ -132,7 +152,8 @@ const sendForTenMinutes = (
 it.layer(NodeServices.layer)("AnalyticsService test", (it) => {
   it.effect("does not export client or server ownership reports", () =>
     Effect.gen(function* () {
-      const batches = yield* sendForTenMinutes(
+      const batches = yield* sendFor(
+        10,
         respondWithStatus(204),
         Effect.gen(function* () {
           const analytics = yield* AnalyticsService.AnalyticsService;
@@ -148,6 +169,31 @@ it.layer(NodeServices.layer)("AnalyticsService test", (it) => {
           yield* analytics.recordOwners([{ source: "connect", ownerId: "a".repeat(64) }], "server");
         }),
       );
+      assert.deepEqual(batches, []);
+    }),
+  );
+
+  it.effect("never sends through an outage or after recovery", () =>
+    Effect.gen(function* () {
+      const ingest = failingFor(20);
+      const batches = yield* sendFor(40, ingest.respond);
+      const statuses = ingest.answers.map(({ status }) => status);
+      assert.deepEqual(statuses, []);
+      assert.deepEqual(batches, []);
+    }),
+  );
+
+  it.effect("never sends while a collector remains unavailable", () =>
+    Effect.gen(function* () {
+      const ingest = failingFor(Infinity);
+      yield* sendFor(60, ingest.respond);
+      assert.deepEqual(ingest.answers, []);
+    }),
+  );
+
+  it.effect("never contacts a rejecting collector", () =>
+    Effect.gen(function* () {
+      const batches = yield* sendFor(10, respondWithStatus(400));
       assert.deepEqual(batches, []);
     }),
   );
