@@ -202,12 +202,14 @@ export function serveWorker<M extends Methods>(handlers: {
 
       if (!request) break;
 
-      const handler = handlers[request.method];
+      const handler = Object.hasOwn(handlers, request.method)
+        ? handlers[request.method]
+        : undefined;
       const controller = new AbortController();
 
       state.current = { id: request.id, controller };
 
-      if (!handler) {
+      if (typeof handler !== "function") {
         reply({
           id: request.id,
           ok: false,

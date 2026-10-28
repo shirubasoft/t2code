@@ -6,6 +6,7 @@ import * as Schema from "effect/Schema";
 import { describe, expect, it, vi } from "vite-plus/test";
 
 import { remapFileCommentAnnotations } from "./fileCommentAnnotations";
+import { type Method, serveWorker } from "./office/worker-rpc";
 import {
   filePreviewReadErrorMessage,
   isMarkdownPreviewFile,
@@ -16,6 +17,37 @@ import {
 } from "./filePreviewMode";
 
 const decodeReadError = Schema.decodeSync(ProjectReadFileError);
+
+describe("office worker methods", () => {
+  it.each(["constructor", "toString", "__proto__", "hasOwnProperty"])(
+    "rejects inherited method %s and continues serving registered methods",
+    async (method) => {
+      vi.useFakeTimers();
+      const postMessage = vi.fn();
+      const worker = Object.assign(new EventTarget(), { postMessage });
+      vi.stubGlobal("self", worker);
+      try {
+        const echo = vi.fn((input: string) => input);
+        serveWorker<{ echo: Method<string, string> }>({ echo });
+        worker.dispatchEvent(
+          new MessageEvent("message", { data: { id: 1, method, input: "unexpected" } }),
+        );
+        worker.dispatchEvent(
+          new MessageEvent("message", { data: { id: 2, method: "echo", input: "document" } }),
+        );
+        await vi.runAllTimersAsync();
+        expect(postMessage.mock.calls.map(([response]) => response)).toEqual([
+          { id: 1, ok: false, superseded: false, message: `Unknown method ${method}` },
+          { id: 2, ok: true, value: "document", transferred: [] },
+        ]);
+        expect(echo).toHaveBeenCalledExactlyOnceWith("document", expect.any(AbortSignal));
+      } finally {
+        vi.unstubAllGlobals();
+        vi.useRealTimers();
+      }
+    },
+  );
+});
 
 describe("file preview read errors", () => {
   // regression: #15628 read errors from servers without attempted paths keep their own message

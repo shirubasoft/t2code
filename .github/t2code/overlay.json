@@ -654,6 +654,21 @@
       "path": "apps/server/src/telemetry/AnalyticsService.ts",
       "before": "/** @public */\n/** @public */\nexport const make = Effect.gen(function* () {\n  const telemetryConfig = yield* TelemetryEnvConfig;\n  const httpClient = yield* HttpClient.HttpClient;\n  const serverConfig = yield* ServerConfig.ServerConfig;\n",
       "after": "/** @public */\n/** @public */\nexport const make = Effect.gen(function* () {\n  if (!allowAnalyticsExport()) {\n    return AnalyticsService.of({\n      // Disabled analytics preserve the no-op path without recording local spans.\n      record: Effect.fnUntraced(function* () {}),\n      flush: Effect.void,\n      recordOwners: Effect.fnUntraced(function* () {}),\n    });\n  }\n  const telemetryConfig = yield* TelemetryEnvConfig;\n  const httpClient = yield* HttpClient.HttpClient;\n  const serverConfig = yield* ServerConfig.ServerConfig;\n"
+    },
+    {
+      "path": "apps/web/src/components/files/FilePreviewPanel.test.ts",
+      "before": "import { describe, expect, it, vi } from \"vite-plus/test\";\n\nimport { remapFileCommentAnnotations } from \"./fileCommentAnnotations\";\nimport {\n  filePreviewReadErrorMessage,\n  isMarkdownPreviewFile,\n",
+      "after": "import { describe, expect, it, vi } from \"vite-plus/test\";\n\nimport { remapFileCommentAnnotations } from \"./fileCommentAnnotations\";\nimport { type Method, serveWorker } from \"./office/worker-rpc\";\nimport {\n  filePreviewReadErrorMessage,\n  isMarkdownPreviewFile,\n"
+    },
+    {
+      "path": "apps/web/src/components/files/FilePreviewPanel.test.ts",
+      "before": "} from \"./filePreviewMode\";\n\nconst decodeReadError = Schema.decodeSync(ProjectReadFileError);\n\ndescribe(\"file preview read errors\", () => {\n  // regression: #15628 read errors from servers without attempted paths keep their own message\n",
+      "after": "} from \"./filePreviewMode\";\n\nconst decodeReadError = Schema.decodeSync(ProjectReadFileError);\n\ndescribe(\"office worker methods\", () => {\n  it.each([\"constructor\", \"toString\", \"__proto__\", \"hasOwnProperty\"])(\n    \"rejects inherited method %s and continues serving registered methods\",\n    async (method) => {\n      vi.useFakeTimers();\n      const postMessage = vi.fn();\n      const worker = Object.assign(new EventTarget(), { postMessage });\n      vi.stubGlobal(\"self\", worker);\n      try {\n        const echo = vi.fn((input: string) => input);\n        serveWorker<{ echo: Method<string, string> }>({ echo });\n        worker.dispatchEvent(\n          new MessageEvent(\"message\", { data: { id: 1, method, input: \"unexpected\" } }),\n        );\n        worker.dispatchEvent(\n          new MessageEvent(\"message\", { data: { id: 2, method: \"echo\", input: \"document\" } }),\n        );\n        await vi.runAllTimersAsync();\n        expect(postMessage.mock.calls.map(([response]) => response)).toEqual([\n          { id: 1, ok: false, superseded: false, message: `Unknown method ${method}` },\n          { id: 2, ok: true, value: \"document\", transferred: [] },\n        ]);\n        expect(echo).toHaveBeenCalledExactlyOnceWith(\"document\", expect.any(AbortSignal));\n      } finally {\n        vi.unstubAllGlobals();\n        vi.useRealTimers();\n      }\n    },\n  );\n});\n\ndescribe(\"file preview read errors\", () => {\n  // regression: #15628 read errors from servers without attempted paths keep their own message\n"
+    },
+    {
+      "path": "apps/web/src/components/files/office/worker-rpc.ts",
+      "before": "\n      if (!request) break;\n\n      const handler = handlers[request.method];\n      const controller = new AbortController();\n\n      state.current = { id: request.id, controller };\n\n      if (!handler) {\n        reply({\n          id: request.id,\n          ok: false,\n",
+      "after": "\n      if (!request) break;\n\n      const handler = Object.hasOwn(handlers, request.method)\n        ? handlers[request.method]\n        : undefined;\n      const controller = new AbortController();\n\n      state.current = { id: request.id, controller };\n\n      if (typeof handler !== \"function\") {\n        reply({\n          id: request.id,\n          ok: false,\n"
     }
   ],
   "files": [
