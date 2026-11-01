@@ -312,4 +312,54 @@ describe("DesktopObservability", () => {
       ),
     );
   });
+
+  it.effect("keeps unpackaged desktop version attributes out of external collectors", () => {
+    const requests: Array<ExportedRequest> = [];
+    return Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const baseDir = yield* fileSystem.makeTempDirectoryScoped({
+        prefix: "t3-desktop-observability-test-",
+      });
+      const layerEnvironment = layerEnvironmentFor(baseDir);
+      yield* writeObservabilitySettings(layerEnvironment, {
+        otlpLogsUrl: "https://settings.example.com/v1/logs",
+      });
+
+      yield* Effect.scoped(
+        Effect.logInfo("desktop resource under test").pipe(
+          Effect.provide(DesktopObservability.layer.pipe(Layer.provideMerge(layerEnvironment))),
+        ),
+      );
+
+      assert.lengthOf(requests, 0);
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(Layer.mergeAll(NodeServices.layer, layerCollector(requests), layerEmptyEnv)),
+    );
+  });
+
+  it.effect("keeps Node runtime and desktop mode attributes local", () => {
+    const requests: Array<ExportedRequest> = [];
+    return Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const baseDir = yield* fileSystem.makeTempDirectoryScoped({
+        prefix: "t3-desktop-observability-test-",
+      });
+      const layerEnvironment = layerEnvironmentFor(baseDir);
+      yield* writeObservabilitySettings(layerEnvironment, {
+        otlpLogsUrl: "https://settings.example.com/v1/logs",
+      });
+
+      yield* Effect.scoped(
+        Effect.logInfo("desktop resource under test").pipe(
+          Effect.provide(DesktopObservability.layer.pipe(Layer.provideMerge(layerEnvironment))),
+        ),
+      );
+
+      assert.lengthOf(requests, 0);
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(Layer.mergeAll(NodeServices.layer, layerCollector(requests), layerEmptyEnv)),
+    );
+  });
 });

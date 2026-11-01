@@ -68,9 +68,9 @@ function plan() {
   const pin = readJson(".github/t2code/upstream.json");
   const from = assertSha(pin.commit);
   if (pin.tag) {
-    verifyNightly(pin);
     const released = forkRelease(pin.tag);
     if (!released || released.draft) {
+      verifyNightly(pin);
       const releaseSha = assertSha(
         git([
           "log",
@@ -154,6 +154,14 @@ function propose() {
   if (result.decision !== "ready") throw new Error(`Analytics review blocked: ${result.summary}`);
   if (api("git/ref/heads/main").object.sha !== base)
     throw new Error("Main advanced; retry against its new state");
+  const existing = api(`pulls?state=open&head=shirubasoft:${branch}`)[0];
+  const parent = existing ? assertSha(existing.head.sha) : base;
+  if (existing) {
+    if (existing.base.ref !== "main" || existing.head.repo.full_name !== repository)
+      throw new Error("Existing source PR has an unexpected repository or base");
+    git(["fetch", "origin", `refs/heads/${branch}`]);
+    git(["merge-base", "--is-ancestor", base, parent]);
+  }
   verifyNightly(state.nightly);
   if (state.nightly.commit !== upstream) throw new Error("Nightly source mismatch");
   const accepted = readJson(resolve(controlRoot, ".github/t2code/overlay.json"));
@@ -172,7 +180,7 @@ function propose() {
     validateOverlay(overlay, accepted);
   }
   git(["fetch", "--no-tags", "https://github.com/pingdotgg/t3code.git", upstream]);
-  git(["switch", "-C", branch, base]);
+  git(["switch", "-C", branch, parent]);
   git(["read-tree", "--reset", "-u", upstream]);
   for (const path of forkControlPaths) {
     rmSync(path, { recursive: true, force: true });
@@ -199,16 +207,14 @@ function propose() {
     "commit-tree",
     tree,
     "-p",
-    base,
+    parent,
     "-p",
     upstream,
     "-m",
     message,
   ]).trim();
   git(["update-ref", `refs/heads/${branch}`, sha]);
-  // The branch is dedicated to generated snapshots; never rewrite main or a human branch.
-  git(["push", "--force-with-lease", "origin", `${sha}:refs/heads/${branch}`]);
-  const existing = api(`pulls?state=open&head=shirubasoft:${branch}`)[0];
+  git(["push", "origin", `${sha}:refs/heads/${branch}`]);
   const body = `Follow upstream nightly https://github.com/pingdotgg/t3code/releases/tag/${state.nightly.tag}, source ${upstream}.\n\n${result.summary}\n\nApplication changes are limited to the recorded analytics patches and installer metadata. Full CI must pass before merging.\n\nModel: GPT-6. Harness: local Codex task.`;
   const pr = existing
     ? api(

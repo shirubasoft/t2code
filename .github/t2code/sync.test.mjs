@@ -145,12 +145,17 @@ const path = args[1];
 if (path.endsWith("git/ref/heads/main")) console.log(JSON.stringify({object:{sha:state.base}}));
 else if (path.includes("/actions/artifacts?name=sync-feedback-")) console.log(JSON.stringify({artifacts:state.feedback ? [{id:1,expired:false,workflow_run:{id:17,head_branch:"main",head_sha:state.base}}] : []}));
 else if (path.endsWith("/actions/runs/17")) console.log(JSON.stringify({id:17,path:".github/workflows/upstream-sync.yml",event:"schedule",status:"completed"}));
-else if (path.includes("pingdotgg/t3code/releases/tags/")) console.log(JSON.stringify(state.release));
+else if (path.includes("pingdotgg/t3code/releases/tags/")) {
+  if (state.releaseRemoved) { console.error("gh: Not Found (HTTP 404)"); process.exit(1); }
+  console.log(JSON.stringify(state.release));
+}
 else if (path.includes("pingdotgg/t3code/releases?")) console.log(JSON.stringify(state.releases ?? [state.release]));
 else if (path.includes("shirubasoft/t2code/releases/tags/")) {
   if (state.fork) console.log(JSON.stringify(state.fork));
   else { console.error("gh: Not Found (HTTP 404)"); process.exit(1); }
 } else if (path.includes("release.yml/runs")) console.log(JSON.stringify({workflow_runs:state.runs}));
+else if (path.includes("/pulls?state=open&head=")) console.log(JSON.stringify(state.pr ? [state.pr] : []));
+else if (path.endsWith("/pulls") || path.endsWith("/pulls/62")) console.log(JSON.stringify({number:62}));
 else throw new Error("Unexpected endpoint: " + path);
 `,
     { mode: 0o755 },
@@ -175,7 +180,13 @@ process.exit(result.status ?? 1);
     commit,
     run: (
       command = "plan",
-      { tag: requestedTag, context, consoleOutput = false, now = planningNow } = {},
+      {
+        tag: requestedTag,
+        context,
+        consoleOutput = false,
+        now = planningNow,
+        scriptRoot = controlRoot,
+      } = {},
     ) => {
       const clockModule = join(root, "clock.mjs");
       writeFileSync(
@@ -191,7 +202,7 @@ mock.timers.enable({ apis: ["Date"], now: ${JSON.stringify(now)} });
         [
           "--import",
           clockModule,
-          join(controlRoot, ".github/t2code/sync.mjs"),
+          join(scriptRoot, ".github/t2code/sync.mjs"),
           command,
           ...(requestedTag ? [requestedTag] : []),
         ],
@@ -289,6 +300,10 @@ test("local planning does not rebuild an already published accepted nightly", ()
     assert.equal(result.status, 0, result.stderr);
     assert.equal(result.output, "ready=false\n");
     assert.equal(NodeFS.existsSync(join(f.checkout, "review")), false);
+    f.state.releaseRemoved = true;
+    const pruned = f.run("plan", { tag: f.tag });
+    assert.equal(pruned.status, 0, pruned.stderr);
+    assert.equal(pruned.output, "ready=false\n");
   } finally {
     rmSync(f.root, { recursive: true, force: true });
   }
@@ -317,6 +332,54 @@ test("review receives the accepted controls that replace upstream workflows", ()
       JSON.parse(readFileSync(join(controls, ".github/t2code/upstream.json"))).commit,
       f.mainSha,
     );
+  } finally {
+    rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+test("proposing again extends the existing PR history without rewriting its head", () => {
+  const f = nightlyFixture();
+  const control = join(f.root, "control");
+  const context = join(f.root, "review");
+  const git = (...args) => spawnSync("git", args, { cwd: f.checkout, encoding: "utf8" });
+  try {
+    for (const entry of NodeFS.readdirSync(join(controlRoot, ".github/t2code"))) {
+      if (entry.endsWith(".mjs"))
+        NodeFS.copyFileSync(
+          join(controlRoot, ".github/t2code", entry),
+          join(f.checkout, ".github/t2code", entry),
+        );
+    }
+    writeFileSync(
+      join(f.checkout, ".github/t2code/release-manifest.patch"),
+      "diff --git a/scripts/lib/update-manifest.ts b/scripts/lib/update-manifest.ts\nnew file mode 100644\n--- /dev/null\n+++ b/scripts/lib/update-manifest.ts\n@@ -0,0 +1 @@\n+export const fixture = true;\n",
+    );
+    f.state.base = f.commit(f.checkout, "Prepare fixture controls");
+    NodeFS.mkdirSync(control);
+    NodeFS.cpSync(join(f.checkout, ".github"), join(control, ".github"), { recursive: true });
+    const planned = f.run("plan", { tag: f.tag, context, scriptRoot: control });
+    assert.equal(planned.status, 0, planned.stderr);
+    writeFileSync(
+      join(context, "agent-output.json"),
+      JSON.stringify({ decision: "ready", summary: "Reviewed fixture.", edits: [] }),
+    );
+    const first = f.run("propose", { context, scriptRoot: control });
+    assert.equal(first.status, 0, first.stderr);
+    const head = git("rev-parse", "HEAD").stdout.trim();
+    f.state.pr = {
+      number: 62,
+      head: { sha: head, repo: { full_name: "shirubasoft/t2code" } },
+      base: { ref: "main" },
+    };
+    const second = f.run("propose", { context, scriptRoot: control });
+    assert.equal(second.status, 0, second.stderr);
+    assert.equal(git("rev-parse", "HEAD^1").stdout.trim(), head);
+    assert.equal(git("merge-base", "--is-ancestor", head, "HEAD").status, 0);
+    assert.equal(
+      git("ls-remote", "origin", "refs/heads/codex/analytics-sync").stdout.split("\t")[0],
+      git("rev-parse", "HEAD").stdout.trim(),
+    );
+    assert.match(second.output, /pr=62/);
   } finally {
     rmSync(f.root, { recursive: true, force: true });
   }

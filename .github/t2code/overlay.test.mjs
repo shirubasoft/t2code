@@ -104,6 +104,23 @@ test("upstream beta branding can replace alpha test inputs without changing fork
   }
 });
 
+test("analytics review accepts explicit TypeScript module exporters", () => {
+  const accepted = { files: [], replacements: [] };
+  validateOverlay(
+    {
+      files: [],
+      replacements: [
+        {
+          path: "apps/mobile/scripts/sourcemap-upload.mts",
+          before: "upload();",
+          after: "return;",
+        },
+      ],
+    },
+    accepted,
+  );
+});
+
 test("analytics review can retire a deleted relay test and carry protection to moved source", () => {
   const accepted = readJson(join(controlRoot, ".github/t2code/overlay.json"));
   const replacements = accepted.replacements.filter(
