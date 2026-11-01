@@ -679,6 +679,26 @@
       "path": "packages/provider-core/src/modelShortName.ts",
       "before": "}\n\nfunction nonVersionWords(text: string): ReadonlyArray<string> {\n  return text\n    .replace(/\\(.*?\\)/g, \" \")\n    .split(/[\\s-]+/)\n    .filter((word) => word.length > 0 && !VERSION.test(word));\n}\n",
       "after": "}\n\nfunction nonVersionWords(text: string): ReadonlyArray<string> {\n  const parts: string[] = [];\n  let start = 0;\n  let opening = -1;\n  // Unmatched opening parentheses must not restart a regexp at every position.\n  for (let index = 0; index < text.length; index++) {\n    const character = text[index];\n    if (character === \"(\" && opening === -1) {\n      opening = index;\n    } else if (character === \")\" && opening !== -1) {\n      parts.push(text.slice(start, opening), \" \");\n      start = index + 1;\n      opening = -1;\n    } else if (\n      character === \"\\r\" ||\n      character === \"\\n\" ||\n      character === \"\\u2028\" ||\n      character === \"\\u2029\"\n    ) {\n      opening = -1;\n    }\n  }\n  parts.push(text.slice(start));\n  return parts\n    .join(\"\")\n    .split(/[\\s-]+/)\n    .filter((word) => word.length > 0 && !VERSION.test(word));\n}\n"
+    },
+    {
+      "path": "apps/server/src/usage/UsageService.test.ts",
+      "before": "  it.live(\"reports saved usage of a removed directory only for windows it reaches\", () =>\n    Effect.gen(function* () {\n      const { transcript, settings, home } = yield* setup;\n",
+      "after": "  it.live(\"reports saved usage of a removed directory only for windows it reaches\", () =>\n    Effect.gen(function* () {\n      const { transcript, settings, home } = yield* setup;\n      // Saved usage is pruned after the retention window, so pin \"now\" near the write.\n      yield* TestClock.setTime(Date.parse(\"2026-08-15T00:00:00Z\"));\n"
+    },
+    {
+      "path": "apps/server/src/usage/UsageService.test.ts",
+      "before": "    }).pipe(Effect.scoped),\n  );\n\n  it.live(\"does not share an in-flight scan after custom prices change\", () =>\n",
+      "after": "    }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),\n  );\n\n  it.live(\"does not share an in-flight scan after custom prices change\", () =>\n"
+    },
+    {
+      "path": "apps/server/src/storageCleanup.ts",
+      "before": "      if (result.stderr.toLowerCase().includes(\"not a git repository\")) return null;\n",
+      "after": "      const stderr = result.stderr.toLowerCase();\n      // Git 2.56 reports a deleted worktree gitdir as an invalid gitfile, not a missing repository.\n      if (\n        stderr.includes(\"not a git repository\") ||\n        stderr.includes(\"gitfile does not point to a valid repository\")\n      )\n        return null;\n"
+    },
+    {
+      "path": "scripts/smoke-desktop-app.ts",
+      "before": "NodeFS.copyFileSync(FIXTURE_DB, NodePath.join(t3Home, \"userdata/statev2.sqlite\"));\n",
+      "after": "NodeFS.copyFileSync(FIXTURE_DB, NodePath.join(t3Home, \"userdata/statev2.sqlite\"));\n// The fixture's threads age past the auto-settle window into the collapsed Settled shelf.\nNodeFS.writeFileSync(\n  NodePath.join(t3Home, \"userdata/settings.json\"),\n  JSON.stringify({ sidebarAutoSettleAfterDays: null }),\n);\n"
     }
   ],
   "files": [
