@@ -689,6 +689,11 @@
       "path": "apps/server/src/usage/UsageService.test.ts",
       "before": "    }).pipe(Effect.scoped),\n  );\n\n  it.live(\"does not share an in-flight scan after custom prices change\", () =>\n",
       "after": "    }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),\n  );\n\n  it.live(\"does not share an in-flight scan after custom prices change\", () =>\n"
+    },
+    {
+      "path": "apps/server/src/storageCleanup.ts",
+      "before": "      if (result.stderr.toLowerCase().includes(\"not a git repository\")) return null;\n",
+      "after": "      const stderr = result.stderr.toLowerCase();\n      // Git 2.56 reports a deleted worktree gitdir as an invalid gitfile, not a missing repository.\n      if (\n        stderr.includes(\"not a git repository\") ||\n        stderr.includes(\"gitfile does not point to a valid repository\")\n      )\n        return null;\n"
     }
   ],
   "files": [
