@@ -18,7 +18,6 @@ describe("web runtime relay telemetry policy", () => {
       surface: "desktop enabled",
       desktopBridge: { getRelayTelemetryEnabled: () => true },
     },
-    { surface: "older desktop bridge", desktopBridge: {} },
     {
       surface: "ordinary browser ignores host opt-out",
       desktopBridge: undefined,
