@@ -176,6 +176,21 @@ describe("ServerLoggerLive", () => {
     }),
   );
 
+  it.effect("keeps logged request failures and their connection tickets local", () =>
+    Effect.gen(function* () {
+      const { requests } = yield* logInSpanThrough(
+        { otlpLogsUrl: "https://collector.example.com/v1/logs" },
+        Effect.logError(
+          Cause.die(
+            new Error("RequestParseError (GET /ws?wsTicket=ticket-secret&dpop=proof-secret)"),
+          ),
+        ),
+      );
+
+      assert.lengthOf(requests, 0);
+    }),
+  );
+
   it.effect("prints a cause passed as a log field instead of collapsing it", () =>
     Effect.gen(function* () {
       const output = yield* printThroughConsole({

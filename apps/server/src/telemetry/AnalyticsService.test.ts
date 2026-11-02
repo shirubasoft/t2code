@@ -16,7 +16,10 @@ import * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 
+import type { ManagedPolicyDocument } from "@t3tools/contracts";
+
 import * as ServerConfig from "../config.ts";
+import * as ManagedPolicy from "../policy/ManagedPolicy.ts";
 import { getTelemetryIdentity } from "./Identify.ts";
 import * as AnalyticsService from "./AnalyticsService.ts";
 
@@ -104,6 +107,7 @@ const sendFor = (
     never,
     AnalyticsService.AnalyticsService | Effect.Services<typeof getTelemetryIdentity>
   > = recordTwentyEvents,
+  policy?: ManagedPolicyDocument,
 ) =>
   Effect.gen(function* () {
     const batches: Array<ReadonlyArray<SentEvent>> = [];
@@ -136,6 +140,7 @@ const sendFor = (
           Layer.succeed(HostProcess.Platform, "win32"),
           Layer.succeed(HostProcess.Architecture, "x64"),
           Layer.succeed(HttpClient.HttpClient, client),
+          ManagedPolicy.layerTest(policy),
         ),
       ),
     );
@@ -150,6 +155,29 @@ const sendFor = (
   });
 
 it.layer(NodeServices.layer)("AnalyticsService test", (it) => {
+  it.effect("never exports across desktop shell consent or a late opt-in", () =>
+    Effect.gen(function* () {
+      const env: NodeJS.ProcessEnv = { T3CODE_DESKTOP_SHELL_DISCOVERY_PENDING: "1" };
+      const batches = yield* sendFor(
+        0,
+        respondWithStatus(204),
+        Effect.gen(function* () {
+          const analytics = yield* AnalyticsService.AnalyticsService;
+          yield* analytics.record("test.before-discovery");
+          yield* analytics.flush;
+          env.T3CODE_TELEMETRY_ENABLED = "false";
+          delete env.T3CODE_DESKTOP_SHELL_DISCOVERY_PENDING;
+          yield* analytics.record("test.opted-out");
+          yield* analytics.flush;
+          env.T3CODE_TELEMETRY_ENABLED = "true";
+          yield* analytics.record("test.allowed");
+          yield* analytics.flush;
+        }),
+      ).pipe(Effect.provideService(HostProcess.Environment, env));
+      assert.deepEqual(batches, []);
+    }),
+  );
+
   it.effect("does not export client or server ownership reports", () =>
     Effect.gen(function* () {
       const batches = yield* sendFor(
@@ -188,6 +216,19 @@ it.layer(NodeServices.layer)("AnalyticsService test", (it) => {
       const ingest = failingFor(Infinity);
       yield* sendFor(60, ingest.respond);
       assert.deepEqual(ingest.answers, []);
+    }),
+  );
+
+  it.effect("sends nothing whether a managed policy allows or denies telemetry", () =>
+    Effect.gen(function* () {
+      const policy = { schemaVersion: 1, organization: "Example Corp" } as const;
+      for (const telemetry of [true, false]) {
+        const batches = yield* sendFor(1, respondWithStatus(204), recordTwentyEvents, {
+          ...policy,
+          limits: { telemetry },
+        });
+        assert.deepEqual(batches, []);
+      }
     }),
   );
 
@@ -237,6 +278,7 @@ it.layer(NodeServices.layer)("AnalyticsService test", (it) => {
           Layer.mergeAll(
             Layer.succeed(HostProcess.Platform, "linux"),
             Layer.succeed(HostProcess.Architecture, "arm64"),
+            ManagedPolicy.layerTest(),
           ),
         ),
         Layer.provideMerge(NodeHttpServer.layerTest),
@@ -286,6 +328,7 @@ it.layer(NodeServices.layer)("AnalyticsService test", (it) => {
           Layer.mergeAll(
             Layer.succeed(HostProcess.Platform, "linux"),
             Layer.succeed(HostProcess.Architecture, "arm64"),
+            ManagedPolicy.layerTest(),
           ),
         ),
         Layer.provideMerge(NodeHttpServer.layerTest),
