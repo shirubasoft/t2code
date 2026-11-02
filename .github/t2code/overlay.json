@@ -704,6 +704,16 @@
       "path": "apps/server/src/cloud/relayTracing.test.ts",
       "before": "it.effect(\"a policy with telemetry off stops relay tracing to T3 Connect\", () =>\n  Effect.gen(function* () {\n    assert.isTrue(yield* tracesTo());\n",
       "after": "it.effect(\"relay tracing to T3 Connect stays off with or without a managed policy\", () =>\n  Effect.gen(function* () {\n    assert.isFalse(yield* tracesTo());\n"
+    },
+    {
+      "path": "packages/ssh/src/auth.ts",
+      "before": "// A local agent signing failure cannot be remedied by the remote account password.\nexport function isSshAgentSigningFailure(error: unknown): boolean {\n  const message = error instanceof Error ? error.message : String(error);\n  return /sign_and_send_pubkey: signing failed(?: for [^\\n]* from agent:|: (?:agent refused operation|communication with agent failed))/u.test(\n    message,\n  );\n}\n",
+      "after": "const AGENT_SIGNING_FAILED = \"sign_and_send_pubkey: signing failed\";\n\n// A local agent signing failure cannot be remedied by the remote account password.\nexport function isSshAgentSigningFailure(error: unknown): boolean {\n  const message = error instanceof Error ? error.message : String(error);\n  if (\n    message.includes(`${AGENT_SIGNING_FAILED}: agent refused operation`) ||\n    message.includes(`${AGENT_SIGNING_FAILED}: communication with agent failed`)\n  ) {\n    return true;\n  }\n  // One scan per line: a regex retried at every repeated prefix is quadratic in the line length.\n  return message.split(\"\\n\").some((line) => {\n    const start = line.indexOf(`${AGENT_SIGNING_FAILED} for `);\n    return (\n      start !== -1 &&\n      line.includes(\" from agent:\", start + AGENT_SIGNING_FAILED.length + \" for \".length)\n    );\n  });\n}\n"
+    },
+    {
+      "path": "packages/ssh/src/auth.test.ts",
+      "before": "      assert.isFalse(isSshAgentSigningFailure(new Error(denied)));\n    }),\n  );\n",
+      "after": "      assert.isFalse(isSshAgentSigningFailure(new Error(denied)));\n    }),\n  );\n\n  it.effect(\"checks a long line of repeated signing-failure prefixes in one pass\", () =>\n    Effect.sync(() => {\n      const repeated = \"sign_and_send_pubkey: signing failed for \".repeat(40_000);\n      assert.isFalse(isSshAgentSigningFailure(new Error(repeated)));\n      assert.isTrue(isSshAgentSigningFailure(new Error(`${repeated} from agent: refused`)));\n    }),\n  );\n"
     }
   ],
   "files": [

@@ -247,10 +247,23 @@ export function isSshAuthFailure(error: unknown): boolean {
   );
 }
 
+const AGENT_SIGNING_FAILED = "sign_and_send_pubkey: signing failed";
+
 // A local agent signing failure cannot be remedied by the remote account password.
 export function isSshAgentSigningFailure(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
-  return /sign_and_send_pubkey: signing failed(?: for [^\n]* from agent:|: (?:agent refused operation|communication with agent failed))/u.test(
-    message,
-  );
+  if (
+    message.includes(`${AGENT_SIGNING_FAILED}: agent refused operation`) ||
+    message.includes(`${AGENT_SIGNING_FAILED}: communication with agent failed`)
+  ) {
+    return true;
+  }
+  // One scan per line: a regex retried at every repeated prefix is quadratic in the line length.
+  return message.split("\n").some((line) => {
+    const start = line.indexOf(`${AGENT_SIGNING_FAILED} for `);
+    return (
+      start !== -1 &&
+      line.includes(" from agent:", start + AGENT_SIGNING_FAILED.length + " for ".length)
+    );
+  });
 }

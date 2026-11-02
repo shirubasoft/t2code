@@ -63,6 +63,14 @@ describe("ssh auth", () => {
     }),
   );
 
+  it.effect("checks a long line of repeated signing-failure prefixes in one pass", () =>
+    Effect.sync(() => {
+      const repeated = "sign_and_send_pubkey: signing failed for ".repeat(40_000);
+      assert.isFalse(isSshAgentSigningFailure(new Error(repeated)));
+      assert.isTrue(isSshAgentSigningFailure(new Error(`${repeated} from agent: refused`)));
+    }),
+  );
+
   it.effect("creates askpass env for cached password prompts", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
