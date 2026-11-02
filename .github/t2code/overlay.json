@@ -396,6 +396,11 @@
       "after": "      Effect.andThen(logBrowserAutoOpenUnavailable),\n    );\n\n    it.effect(\"prints the full pairing URL locally without exporting log records\", () =>\n      Effect.gen(function* () {\n        const { requests } = yield* logInSpanThrough(\n          { otlpLogsUrl: \"https://collector.example.com/v1/logs\" },\n          announce,\n        );\n\n        assert.lengthOf(requests, 0);\n        const printed = (yield* TestConsole.logLines).map((line) =>\n          Array.isArray(line) ? line.join(\" \") : String(line),\n        );\n"
     },
     {
+      "path": "apps/server/src/serverLogger.test.ts",
+      "before": "  it.effect(\"exports logged request failures without their connection tickets\", () =>\n    Effect.gen(function* () {\n      const { requests } = yield* logInSpanThrough(\n        { otlpLogsUrl: \"https://collector.example.com/v1/logs\" },\n        Effect.logError(\n          Cause.die(\n            new Error(\"RequestParseError (GET /ws?wsTicket=ticket-secret&dpop=proof-secret)\"),\n          ),\n        ),\n      );\n\n      const body = requests.map((request) => request.body).join(\"\\n\");\n      assert.include(body, \"wsTicket=<redacted>&dpop=<redacted>\");\n      assert.notInclude(body, \"ticket-secret\");\n      assert.notInclude(body, \"proof-secret\");\n",
+      "after": "  it.effect(\"keeps logged request failures and their connection tickets local\", () =>\n    Effect.gen(function* () {\n      const { requests } = yield* logInSpanThrough(\n        { otlpLogsUrl: \"https://collector.example.com/v1/logs\" },\n        Effect.logError(\n          Cause.die(\n            new Error(\"RequestParseError (GET /ws?wsTicket=ticket-secret&dpop=proof-secret)\"),\n          ),\n        ),\n      );\n\n      assert.lengthOf(requests, 0);\n"
+    },
+    {
       "path": "scripts/install.test.ts",
       "before": "    const server = NodeHttp.createServer((request, response) => {\n      const url = new URL(request.url ?? \"/\", \"http://fixture\");\n      const body =\n        url.pathname === \"/pingdotgg/t3code/releases/latest\" &&\n        request.headers.accept === \"application/json\"\n          ? { tag_name: \"v1.2.3\" }\n          : url.pathname === \"/repos/pingdotgg/t3code/releases\"\n            ? { \"1\": nightlies, \"2\": [{ tag_name: `v${version}` }, { tag_name: \"v1.2.3\" }] }[\n                url.searchParams.get(\"page\") ?? \"\"\n              ]\n",
       "after": "    const server = NodeHttp.createServer((request, response) => {\n      const url = new URL(request.url ?? \"/\", \"http://fixture\");\n      const body =\n        url.pathname === \"/shirubasoft/t2code/releases/latest\" &&\n        request.headers.accept === \"application/json\"\n          ? { tag_name: \"v1.2.3\" }\n          : url.pathname === \"/repos/shirubasoft/t2code/releases\"\n            ? { \"1\": nightlies, \"2\": [{ tag_name: `v${version}` }, { tag_name: \"v1.2.3\" }] }[\n                url.searchParams.get(\"page\") ?? \"\"\n              ]\n"
@@ -694,6 +699,11 @@
       "path": "apps/server/src/storageCleanup.ts",
       "before": "      if (result.stderr.toLowerCase().includes(\"not a git repository\")) return null;\n",
       "after": "      const stderr = result.stderr.toLowerCase();\n      // Git 2.56 reports a deleted worktree gitdir as an invalid gitfile, not a missing repository.\n      if (\n        stderr.includes(\"not a git repository\") ||\n        stderr.includes(\"gitfile does not point to a valid repository\")\n      )\n        return null;\n"
+    },
+    {
+      "path": "apps/server/src/cloud/relayTracing.test.ts",
+      "before": "it.effect(\"a policy with telemetry off stops relay tracing to T3 Connect\", () =>\n  Effect.gen(function* () {\n    assert.isTrue(yield* tracesTo());\n",
+      "after": "it.effect(\"relay tracing to T3 Connect stays off with or without a managed policy\", () =>\n  Effect.gen(function* () {\n    assert.isFalse(yield* tracesTo());\n"
     }
   ],
   "files": [

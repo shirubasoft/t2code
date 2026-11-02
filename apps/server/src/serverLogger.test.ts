@@ -176,7 +176,7 @@ describe("ServerLoggerLive", () => {
     }),
   );
 
-  it.effect("exports logged request failures without their connection tickets", () =>
+  it.effect("keeps logged request failures and their connection tickets local", () =>
     Effect.gen(function* () {
       const { requests } = yield* logInSpanThrough(
         { otlpLogsUrl: "https://collector.example.com/v1/logs" },
@@ -187,10 +187,7 @@ describe("ServerLoggerLive", () => {
         ),
       );
 
-      const body = requests.map((request) => request.body).join("\n");
-      assert.include(body, "wsTicket=<redacted>&dpop=<redacted>");
-      assert.notInclude(body, "ticket-secret");
-      assert.notInclude(body, "proof-secret");
+      assert.lengthOf(requests, 0);
     }),
   );
 
