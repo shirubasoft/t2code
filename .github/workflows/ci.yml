@@ -169,7 +169,11 @@ jobs:
         run: node apps/web/node_modules/playwright/cli.js install --with-deps --only-shell chromium
 
       - name: Test
-        run: vp run --parallel --concurrency-limit 1 --filter '!t3' --filter '!@t3tools/monorepo' test
+        run: vp run --parallel --concurrency-limit 1 --filter '!t3' --filter '!@t3tools/monorepo' --filter '!@t3tools/web' test
+
+      # Upstream sizes its 15 s web test limit for 8-vCPU runners; standard runners need longer.
+      - name: Test web
+        run: vp run --filter @t3tools/web test --testTimeout=30000
 
   # apps/server sets `fileParallelism: false`, so its 239 files run strictly
   # one at a time. Sharding spreads them over separate runners instead of
